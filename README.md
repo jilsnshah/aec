@@ -756,20 +756,18 @@ multi-warehouse or batch/serial tracking.
 
 ## Deploying to Render
 
-`render.yaml` is a Render Blueprint: one Docker web service that runs the API
-and serves the built web app on the same address, plus a PostgreSQL database.
-`Dockerfile` builds the app and starts the server; every deploy runs
-`alembic upgrade head` first, so the schema is always current.
+`render.yaml` describes one Docker web service on Render that runs the API and
+serves the built web app on the same address. `Dockerfile` builds the app and
+starts the server; every deploy runs `alembic upgrade head` first, so the
+schema is always current.
 
-1. Push this repository to GitHub.
-2. In Render: **New → Blueprint**, pick the repository, confirm.
-3. Render creates the database and the service and wires `DATABASE_URL`.
-   Open the service URL; `/api/health` should report the database as `ok`.
+The database is **Neon** PostgreSQL. Set its connection string as the
+service's `DATABASE_URL` secret. Use Neon's **direct** endpoint, not the
+`-pooler` one: the app sets statement and lock timeouts per connection, which
+the pooler does not accept. A `postgres://` or `postgresql://` URL is fine; the
+app picks the psycopg driver itself.
 
-The blueprint uses free plans. The free service sleeps after 15 minutes idle,
-and the free database is deleted after 30 days. For real data switch to the
-`starter` web plan and the `basic-256mb` database. A `postgres://` or
-`postgresql://` URL from any host is accepted; the app picks the psycopg
-driver itself.
+The service uses Render's free plan, which sleeps after 15 minutes idle (the
+first request then takes about a minute). Switch to `starter` for real use.
 
 There is no login yet: anyone with the URL can use the app.

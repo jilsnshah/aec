@@ -1,17 +1,10 @@
-# Render Blueprint: one web service (API + web app) and its PostgreSQL database.
-# Deploy with "New > Blueprint" in the Render dashboard, pointing at this repo.
+# Render Blueprint: one web service that runs the API and serves the web app.
+# The database is on Neon (PostgreSQL); its connection string is a secret set
+# in the Render dashboard as DATABASE_URL -- use Neon's direct (non-pooled)
+# endpoint, because the app sets per-connection timeouts.
 #
-# Free plans, for trying it out: the service sleeps after 15 minutes idle and
-# the free database expires after 30 days. For real use switch the web plan to
-# "starter" and the database to "basic-256mb".
-databases:
-  - name: aec-db
-    databaseName: aec
-    user: aec
-    plan: free
-    region: singapore
-    postgresMajorVersion: "16"
-
+# Free plan, for trying it out: the service sleeps after 15 minutes idle.
+# For real use switch the plan to "starter".
 services:
   - type: web
     name: aec
@@ -24,9 +17,7 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: aec-db
-          property: connectionString
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: BUSINESS_TIMEZONE
@@ -36,7 +27,7 @@ services:
       # The web app is served from the same origin, so no other origins.
       - key: CORS_ORIGINS
         value: ""
-      # Small Postgres plans allow few connections; one process needs few.
+      # Neon's free tier allows few direct connections; one process needs few.
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_MAX_OVERFLOW
