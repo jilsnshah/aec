@@ -25,7 +25,7 @@ It is built around one non-negotiable rule:
   guarantee.
 - **Frontend** — React 18, Vite, TypeScript, with its own design system
   (light and dark themes, no UI framework) and lucide icons.
-- **Tests** — pytest, 182 tests covering the business rules, reservation and
+- **Tests** — pytest, 195 tests covering the business rules, reservation and
   delivery, purchasing, pricing, costing, the API, migrations and concurrency.
 
 ---
@@ -363,7 +363,7 @@ The app is then on <http://localhost:5173>.
 ### 4. Tests and checks
 
 ```bash
-cd backend  && pytest                 # 182 backend tests
+cd backend  && pytest                 # 195 backend tests
 cd frontend && npm run typecheck      # TypeScript, no emit
 cd frontend && npm run build          # production build
 ```
@@ -753,6 +753,46 @@ multi-warehouse or batch/serial tracking.
   history; the API exposes it as `quantity_fulfilled` with
   `quantity_reserved` and `quantity_unallocated` beside it.
 
+
+## Integrations: AI, WhatsApp and email
+
+**Settings → Integrations** turns customer messages into sales enquiries.
+
+- **AI**: on/off, the Claude model (Opus 5.5 by default, Sonnet 5.5, Haiku 5.5)
+  and an Anthropic API key, with a connection test.
+- **WhatsApp**: on/off, phone number ID, business account ID, verify token and
+  an optional app secret (when set, only requests signed by Meta are accepted).
+  Copy the webhook URL into Meta for Developers → WhatsApp → Configuration and
+  subscribe to `messages`.
+- **Email**: on/off, IMAP server, port, address, password (an app password for
+  Gmail/Outlook), folder and how often to check, plus **Check inbox now**.
+
+Every message is recorded once (`inbound_messages`, keyed by the WhatsApp
+message id or the email Message-ID) and handed to the **enquiry agent**: a
+LangChain ReAct agent (`langchain.agents.create_agent`) on Claude. Its only job
+is to decide whether a message is a sales enquiry and, if so, record it. It
+never replies to the customer and never asks questions. Its four tools wrap
+the existing services, so no business logic is duplicated:
+
+| Tool | Wraps |
+| --- | --- |
+| `search_products` | `products.list_products` |
+| `find_customers` | `customers.list_customers` |
+| `create_customer` | `customers.create_customer` |
+| `create_enquiry` | `enquiries.create_enquiry` (with `source` = channel) |
+
+Each message ends as **Enquiry** (linked), **Not an enquiry**, **No matching
+products**, **Failed** (with the error; can be retried) or **AI was off**
+(can be retried once AI is on). Captured enquiries are marked WhatsApp or Email
+in the Enquiries list.
+
+Credentials are encrypted at rest with `SECRET_KEY` and never returned by the
+API. **Set `SECRET_KEY` to a long random value in production and keep it**;
+changing it makes saved credentials unreadable (they must be entered again).
+
+Code: `app/services/ai_agent.py` (agent and tools), `whatsapp.py` (webhook),
+`email_inbox.py` (IMAP and the background poller), `inbound.py` (the shared
+pipeline), `integration_settings.py`; API in `app/api/integrations.py`.
 
 ## Deploying to Render
 

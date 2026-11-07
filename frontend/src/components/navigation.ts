@@ -4,6 +4,7 @@ import {
   EnquiryIcon,
   FulfilmentIcon,
   GoodsReceiptIcon,
+  IntegrationsIcon,
   OverviewIcon,
   ProductsIcon,
   PurchaseOrderIcon,
@@ -72,6 +73,17 @@ export const NAV: NavSection[] = [
     items: [
       { to: '/products', label: 'Products', icon: ProductsIcon, keywords: 'sku item stock' },
       { to: '/stock-in', label: 'Stock In', icon: StockInIcon, keywords: 'adhoc receipt grn' },
+    ],
+  },
+  {
+    heading: 'Settings',
+    items: [
+      {
+        to: '/integrations',
+        label: 'Integrations',
+        icon: IntegrationsIcon,
+        keywords: 'ai whatsapp email claude webhook imap automation',
+      },
     ],
   },
 ]

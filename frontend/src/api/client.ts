@@ -1,4 +1,8 @@
 import type {
+  InboundMessage,
+  Integration,
+  IntegrationName,
+  Integrations,
   Customer,
   CustomerListRow,
   CustomerDetail,
@@ -225,6 +229,23 @@ export const api = {
     summary: () => request<InventorySummary>('/api/inventory/summary'),
     receiveStock: (body: unknown) =>
       request<StockReceiptResult>('/api/stock-receipts', { method: 'POST', body }),
+  },
+  integrations: {
+    get: () => request<Integrations>('/api/integrations'),
+    update: (
+      name: IntegrationName,
+      body: {
+        enabled?: boolean
+        config?: Record<string, string | number>
+        /** Omit a credential to keep it; send '' to remove it. */
+        credentials?: Record<string, string>
+      },
+    ) => request<Integration>(`/api/integrations/${name}`, { method: 'PUT', body }),
+    testAi: () => request<{ ok: boolean; model: string; reply: string }>('/api/integrations/ai/test', { method: 'POST' }),
+    checkEmail: () => request<{ new_messages: number }>('/api/integrations/email/check', { method: 'POST' }),
+    messages: (query?: Query) => request<Page<InboundMessage>>('/api/integrations/messages', { query }),
+    retry: (id: string) =>
+      request<InboundMessage>(`/api/integrations/messages/${id}/retry`, { method: 'POST' }),
   },
 }
 

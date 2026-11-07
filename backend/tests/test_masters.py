@@ -172,3 +172,10 @@ def test_customer_outstanding_spans_products(db, make_product, make_customer, ma
         "P-1": D(4),
         "P-2": D(7),
     }
+
+
+def test_a_phone_number_matches_however_it_is_written(client):
+    client.post("/api/customers", json={"name": "Format Test", "phone": "+91 98765-43210"})
+    for query in ("919876543210", "9876543210", "+91 98765 43210", "98765"):
+        found = client.get("/api/customers", params={"search": query}).json()["items"]
+        assert [row["name"] for row in found] == ["Format Test"], query

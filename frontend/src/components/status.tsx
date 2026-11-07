@@ -98,6 +98,17 @@ export function FulfilmentMix({
   )
 }
 
+/** Marks an enquiry the AI captured from a message. Typed-in ones show nothing. */
+export function EnquirySourceBadge({ source, detail }: { source: string; detail?: string | null }) {
+  if (source === 'whatsapp') {
+    return <Badge tone="green" title={detail ? `From ${detail} on WhatsApp` : undefined}>WhatsApp</Badge>
+  }
+  if (source === 'email') {
+    return <Badge tone="blue" title={detail ? `From ${detail}` : undefined}>Email</Badge>
+  }
+  return null
+}
+
 export function ArchivedBadge() {
   return <Badge tone="gray">Archived</Badge>
 }

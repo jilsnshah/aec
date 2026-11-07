@@ -204,6 +204,12 @@ export default function EnquiryDetailPage() {
             <>
               <Link to={`/customers/${data.customer_id}`}>{data.customer.name}</Link> · opened{' '}
               {formatDateTime(data.created_at)}
+              {data.source !== 'manual' ? (
+                <>
+                  {' '}· captured by AI from {data.source === 'whatsapp' ? 'WhatsApp' : 'email'}
+                  {data.source_detail ? ` (${data.source_detail})` : ''}
+                </>
+              ) : null}
             </>
           ) : undefined
         }

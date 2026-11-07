@@ -220,8 +220,14 @@ def create_enquiry(
     customer_id: uuid.UUID,
     items: Iterable[Dict[str, Any]],
     notes: Optional[str] = None,
+    source: str = "manual",
+    source_detail: Optional[str] = None,
 ) -> CustomerEnquiry:
-    """Open an enquiry, pricing each line from the product master's MRP."""
+    """Open an enquiry, pricing each line from the product master's MRP.
+
+    ``source`` says where it came from -- ``manual``, ``whatsapp`` or
+    ``email`` -- and ``source_detail`` who sent it, for captured enquiries.
+    """
     cleaned = _clean_items(items)
 
     try:
@@ -240,6 +246,8 @@ def create_enquiry(
             customer_id=customer.id,
             notes=notes,
             status=EnquiryStatus.OPEN,
+            source=source,
+            source_detail=source_detail,
         )
         session.add(enquiry)
         session.flush()
@@ -483,6 +491,8 @@ def to_view(enquiry: CustomerEnquiry) -> Dict[str, Any]:
         "converted_at": enquiry.converted_at,
         "lost_at": enquiry.lost_at,
         "lost_reason": enquiry.lost_reason,
+        "source": enquiry.source,
+        "source_detail": enquiry.source_detail,
         "sales_order_id": enquiry.sales_order_id,
         "sales_order_number": (
             enquiry.sales_order.order_number if enquiry.sales_order is not None else None

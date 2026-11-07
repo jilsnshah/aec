@@ -15,6 +15,7 @@ import OrderDetailPage from './pages/OrderDetail'
 import OrdersPage from './pages/Orders'
 import ProductsPage from './pages/Products'
 import StockInPage from './pages/StockIn'
+import IntegrationsPage from './pages/Integrations'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="purchase-orders/:poId" element={<PurchaseOrderDetailPage />} />
         <Route path="goods-receipts" element={<GoodsReceiptsPage />} />
         <Route path="stock-in" element={<StockInPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
       </Routes>

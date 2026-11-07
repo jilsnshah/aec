@@ -19,6 +19,8 @@ from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy import (
+    JSON,
+    Boolean,
     CheckConstraint,
     Enum as SAEnum,
     DateTime,
@@ -548,6 +550,12 @@ class CustomerEnquiry(Base, TimestampMixin):
     )
     lost_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     lost_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Where the enquiry came from: typed in, or captured from a message.
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="manual", server_default="manual"
+    )
+    #: Who sent it, for captured enquiries (a phone number or an email address).
+    source_detail: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     customer: Mapped["Customer"] = relationship()
     items: Mapped[List["CustomerEnquiryItem"]] = relationship(
@@ -975,3 +983,60 @@ class DocumentCounter(Base):
 
     name: Mapped[str] = mapped_column(String(32), primary_key=True)
     last_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class IntegrationSetting(Base):
+    """Configuration of one integration: ``ai``, ``whatsapp`` or ``email``.
+
+    Plain settings live in ``config``. Credentials (API keys, passwords, app
+    secrets) live in ``secrets``, encrypted with the application's
+    ``SECRET_KEY``; they are never returned by the API, only whether each one
+    is set.
+    """
+
+    __tablename__ = "integration_settings"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    secrets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class InboundMessage(Base):
+    """A message received on WhatsApp or email, and what the AI made of it.
+
+    ``external_id`` is the channel's own id (WhatsApp message id, email
+    Message-ID), unique per channel, so a message delivered twice -- Meta
+    retries webhooks, a mailbox can be read twice -- is only processed once.
+    """
+
+    __tablename__ = "inbound_messages"
+    __table_args__ = (
+        UniqueConstraint("channel", "external_id", name="uq_inbound_channel_external"),
+        Index("ix_inbound_received", "received_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    sender: Mapped[str] = mapped_column(String(255), nullable=False)
+    sender_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    #: pending -> enquiry_created | not_enquiry | no_match | failed | skipped
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="SET NULL"), nullable=True
+    )
+    #: The agent's own one-line account of what it did and why.
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    enquiry: Mapped[Optional["CustomerEnquiry"]] = relationship()

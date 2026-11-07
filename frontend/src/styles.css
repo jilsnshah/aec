@@ -3586,3 +3586,79 @@ table.before-after {
   min-width: 88px;
   justify-content: center;
 }
+
+/* ---------------------------------------------------------------- integrations */
+.integration__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.integration__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex: none;
+  color: #fff;
+}
+.integration__icon--sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.integration__icon--ai {
+  background: linear-gradient(135deg, #bf5af2, #5e5ce6);
+}
+.integration__icon--whatsapp {
+  background: linear-gradient(135deg, #30d158, #1f9d4a);
+}
+.integration__icon--email {
+  background: linear-gradient(135deg, #0a84ff, #0060df);
+}
+.integration__footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+.integrations__channels {
+  align-items: start;
+}
+.copy-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.copy-field > .input {
+  flex: 1;
+  min-width: 0;
+}
+.inbound__message {
+  max-width: 420px;
+}
+.inbound__body {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.inbound__outcome {
+  min-width: 220px;
+}
+.inbound__outcome .cell-sub {
+  white-space: normal;
+  max-width: 320px;
+}
+
+/* On a phone, header actions that do not fit go under the title */
+@media (max-width: 680px) {
+  .card__header {
+    flex-wrap: wrap;
+  }
+  .card__header > .btn-group:has(.segmented) {
+    flex-basis: 100%;
+  }
+}

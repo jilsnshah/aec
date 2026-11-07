@@ -17,6 +17,7 @@ from .api import (
     customers,
     enquiries,
     fulfilment,
+    integrations,
     inventory,
     orders,
     products,
@@ -26,6 +27,7 @@ from .config import get_settings
 from .database import engine
 from .errors import DomainError
 from .logging_config import configure_logging
+from .services import email_inbox
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -59,7 +61,15 @@ async def lifespan(_app: FastAPI):
             )
     except SQLAlchemyError:
         logger.exception("Could not inspect the database at startup")
+    if settings.environment == "production" and settings.secret_key.startswith("dev-only"):
+        logger.error(
+            "SECRET_KEY is not set. Integration credentials are encrypted with a "
+            "development key; set SECRET_KEY to a long random value."
+        )
+    # Reads the email inbox on its schedule while the server runs.
+    email_inbox.poller.start()
     yield
+    email_inbox.poller.stop()
 
 
 app = FastAPI(
@@ -75,6 +85,7 @@ app = FastAPI(
         {"name": "inventory", "description": "Stock receipts, settlement and audit trail."},
         {"name": "purchasing", "description": "Suppliers, purchase orders and goods receipts."},
         {"name": "fulfilment", "description": "Customer commitments and deliveries."},
+        {"name": "integrations", "description": "AI enquiry agent, WhatsApp and email intake."},
     ],
 )
 
@@ -95,6 +106,7 @@ app.include_router(purchasing.suppliers_router)
 app.include_router(purchasing.po_router)
 app.include_router(purchasing.receipts_router)
 app.include_router(fulfilment.router)
+app.include_router(integrations.router)
 
 
 @app.exception_handler(DomainError)

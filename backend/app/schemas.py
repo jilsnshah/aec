@@ -385,6 +385,10 @@ class EnquiryOut(ORMModel):
     converted_at: Optional[datetime] = None
     lost_at: Optional[datetime] = None
     lost_reason: Optional[str] = None
+    #: manual, whatsapp or email
+    source: str = "manual"
+    #: Who sent it, for enquiries captured from a message.
+    source_detail: Optional[str] = None
     sales_order_id: Optional[uuid.UUID] = None
     sales_order_number: Optional[str] = None
     is_editable: bool
@@ -1158,3 +1162,69 @@ class PendingCommitmentsOut(BaseModel):
 PurchaseSettlementInput.model_rebuild()
 PurchaseOrderCreate.model_rebuild()
 PurchaseSettleRequest.model_rebuild()
+
+
+# ---------------------------------------------------------------------------
+# Integrations: AI, WhatsApp, email
+# ---------------------------------------------------------------------------
+
+
+class IntegrationCredentialOut(BaseModel):
+    #: Whether this credential is saved. Its value is never returned.
+    set: bool
+    #: The last four characters, to tell keys apart.
+    hint: Optional[str] = None
+
+
+class IntegrationOut(BaseModel):
+    name: str
+    enabled: bool
+    config: Dict[str, Any]
+    credentials: Dict[str, IntegrationCredentialOut]
+    updated_at: Optional[datetime] = None
+
+
+class AiModelOut(BaseModel):
+    id: str
+    label: str
+    hint: str
+
+
+class IntegrationsOut(BaseModel):
+    ai: IntegrationOut
+    whatsapp: IntegrationOut
+    email: IntegrationOut
+    models: List[AiModelOut]
+
+
+class IntegrationUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    config: Optional[Dict[str, Any]] = None
+    #: Omit a credential to keep it; send "" to remove it.
+    credentials: Optional[Dict[str, Optional[str]]] = None
+
+
+class AiTestOut(BaseModel):
+    ok: bool
+    model: str
+    reply: str
+
+
+class EmailCheckOut(BaseModel):
+    new_messages: int
+
+
+class InboundMessageOut(BaseModel):
+    id: uuid.UUID
+    channel: str
+    sender: str
+    sender_name: Optional[str] = None
+    subject: Optional[str] = None
+    body: str
+    received_at: datetime
+    status: str
+    enquiry_id: Optional[uuid.UUID] = None
+    enquiry_number: Optional[str] = None
+    summary: Optional[str] = None
+    error: Optional[str] = None
+    processed_at: Optional[datetime] = None

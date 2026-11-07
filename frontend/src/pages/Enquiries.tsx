@@ -11,6 +11,7 @@ import {
   DialogCancel,
   EmptyState,
   EnquiryStatusBadge,
+  EnquirySourceBadge,
   ExportButton,
   Field,
   KeyValue,
@@ -182,7 +183,10 @@ export default function EnquiriesPage() {
                   {...rowLink(`/enquiries/${enquiry.id}`)}
                 >
                   <td>
-                    <span className="cell-primary mono">{enquiry.enquiry_number}</span>
+                    <span className="row gap-2">
+                      <span className="cell-primary mono">{enquiry.enquiry_number}</span>
+                      <EnquirySourceBadge source={enquiry.source} detail={enquiry.source_detail} />
+                    </span>
                     {enquiry.sales_order_number ? (
                       <span className="cell-sub">
                         became{' '}
@@ -238,7 +242,8 @@ export default function EnquiriesPage() {
             title={enquiry.customer.name}
             subtitle={
               <>
-                <span className="mono">{enquiry.enquiry_number}</span> · {formatRelative(enquiry.created_at)}
+                <span className="mono">{enquiry.enquiry_number}</span> · {formatRelative(enquiry.created_at)}{' '}
+                <EnquirySourceBadge source={enquiry.source} detail={enquiry.source_detail} />
               </>
             }
             badge={<EnquiryStatusBadge status={enquiry.status} />}

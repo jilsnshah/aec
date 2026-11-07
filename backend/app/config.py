@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     #: Vite serves the app.
     frontend_dist: str = ""
 
+    #: Encrypts integration credentials (AI API key, email password, WhatsApp
+    #: app secret) at rest. Set a long random value in production and keep it:
+    #: changing it makes saved credentials unreadable, and they must be entered
+    #: again.
+    secret_key: str = "dev-only-insecure-secret-key-change-me"
+
+    #: How often the email inbox may be polled at most, in seconds.
+    email_poll_tick_seconds: int = 60
+
     @field_validator("database_url")
     @classmethod
     def _use_psycopg(cls, value: str) -> str:

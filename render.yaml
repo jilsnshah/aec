@@ -18,6 +18,10 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      # Encrypts integration credentials (AI key, email password) at rest.
+      # Generated once; keep it, or saved credentials must be entered again.
+      - key: SECRET_KEY
+        generateValue: true
       - key: ENVIRONMENT
         value: production
       - key: BUSINESS_TIMEZONE

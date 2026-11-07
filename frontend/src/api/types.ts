@@ -406,6 +406,10 @@ export interface Enquiry {
   converted_at: string | null
   lost_at: string | null
   lost_reason: string | null
+  /** Where it came from: typed in, or captured from a message. */
+  source: 'manual' | 'whatsapp' | 'email'
+  /** Who sent it, for captured enquiries. */
+  source_detail: string | null
   sales_order_id: string | null
   sales_order_number: string | null
   is_editable: boolean
@@ -846,4 +850,54 @@ export interface PendingCommitments {
     quantity_deliverable: string
     outstanding_value: string
   }
+}
+
+/* ---------------------------------------------------------------- integrations */
+
+export type IntegrationName = 'ai' | 'whatsapp' | 'email'
+
+export interface IntegrationCredential {
+  /** Whether it is saved. The value itself is never sent to the browser. */
+  set: boolean
+  /** The last four characters, to tell keys apart. */
+  hint: string | null
+}
+
+export interface Integration {
+  name: IntegrationName
+  enabled: boolean
+  config: Record<string, string | number | null>
+  credentials: Record<string, IntegrationCredential>
+  updated_at: string | null
+}
+
+export interface AiModel {
+  id: string
+  label: string
+  hint: string
+}
+
+export interface Integrations {
+  ai: Integration
+  whatsapp: Integration
+  email: Integration
+  models: AiModel[]
+}
+
+export type InboundStatus = 'pending' | 'enquiry_created' | 'not_enquiry' | 'no_match' | 'failed' | 'skipped'
+
+export interface InboundMessage {
+  id: string
+  channel: 'whatsapp' | 'email'
+  sender: string
+  sender_name: string | null
+  subject: string | null
+  body: string
+  received_at: string
+  status: InboundStatus
+  enquiry_id: string | null
+  enquiry_number: string | null
+  summary: string | null
+  error: string | null
+  processed_at: string | null
 }

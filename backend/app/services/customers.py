@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -111,13 +112,21 @@ def _customer_filter(search: Optional[str], include_inactive: bool):
         stmt = stmt.where(Customer.is_active.is_(True))
     if search:
         pattern = "%{}%".format(search.strip().lower())
-        stmt = stmt.where(
-            or_(
-                func.lower(Customer.name).like(pattern),
-                func.lower(func.coalesce(Customer.phone, "")).like(pattern),
-                func.lower(func.coalesce(Customer.email, "")).like(pattern),
+        conditions = [
+            func.lower(Customer.name).like(pattern),
+            func.lower(func.coalesce(Customer.phone, "")).like(pattern),
+            func.lower(func.coalesce(Customer.email, "")).like(pattern),
+        ]
+        # Phone numbers are written every which way ("+91 98765-43210",
+        # "919876543210"), so a number also matches on its digits alone.
+        digits = re.sub(r"\D", "", search)
+        if len(digits) >= 6:
+            conditions.append(
+                func.regexp_replace(func.coalesce(Customer.phone, ""), r"\D", "", "g").like(
+                    "%{}%".format(digits[-10:])
+                )
             )
-        )
+        stmt = stmt.where(or_(*conditions))
     return stmt
 
 
