@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from sqlalchemy import text
 
-from app.models import IntegrationSetting
+from app.config import get_settings
 from app.services import email_inbox, inbound
 
 PHONE_ID = "1098765432"
@@ -55,20 +55,24 @@ def last_result(messages: List[BaseMessage]) -> Any:
     return json.loads([m for m in messages if isinstance(m, ToolMessage)][-1].content)
 
 
+@pytest.fixture(autouse=True)
+def server_ai_credentials(monkeypatch):
+    """The server holds Gemini credentials, as it does in production."""
+    monkeypatch.setattr(get_settings(), "vertex_api_key", "server-side-test-key")
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
+
+
 @pytest.fixture()
 def wired(session_factory, monkeypatch):
     """Background work uses the test schema, and the model is scripted."""
     monkeypatch.setattr(inbound, "session_factory", session_factory)
     scripts: List[List[Any]] = []
-    monkeypatch.setattr(inbound, "model_factory", lambda model, key: ScriptedModel(script=scripts.pop(0)))
+    monkeypatch.setattr(inbound, "model_factory", lambda model: ScriptedModel(script=scripts.pop(0)))
     return scripts
 
 
 def enable_ai(client):
-    response = client.put("/api/integrations/ai", json={
-        "enabled": True, "config": {"model": "claude-opus-5-5"},
-        "credentials": {"api_key": "sk-ant-test-key-1234567890"},
-    })
+    response = client.put("/api/integrations/ai", json={"enabled": True})
     assert response.status_code == 200, response.text
 
 
@@ -95,42 +99,70 @@ def whatsapp_payload(message_id="wamid.1", sender="919876543210", body="Need 40 
 # --- settings -----------------------------------------------------------------------
 
 
-def test_credentials_are_encrypted_and_never_returned(client, db):
-    enable_ai(client)
-    everything = client.get("/api/integrations").text
-    assert "sk-ant-test-key-1234567890" not in everything
-    ai = client.get("/api/integrations").json()["ai"]
-    assert ai["enabled"] is True
-    assert ai["credentials"]["api_key"] == {"set": True, "hint": "…7890"}
-    stored = db.execute(text("SELECT secrets FROM integration_settings WHERE name = 'ai'")).scalar_one()
-    assert "1234567890" not in stored
+EMAIL = {"imap_host": "imap.test", "imap_port": 993, "username": "sales@aec.test"}
+
+
+def test_the_ai_has_no_credentials_for_users_to_see_or_set(client):
+    data = client.get("/api/integrations").json()
+    assert data["ai"]["credentials"] == {}
+    assert "server-side-test-key" not in client.get("/api/integrations").text
+    # Only models the server has credentials for, cheapest Gemini first.
+    assert [model["id"] for model in data["models"]][0] == "gemini-3.1-flash-lite"
+    assert all(model["provider"] == "vertex" for model in data["models"])
+    assert data["providers"] == ["Google Gemini (Vertex AI)"]
+    assert data["ai"]["config"]["model"] == "gemini-3.1-flash-lite"
+    # A credential cannot be sent in either.
+    response = client.put("/api/integrations/ai", json={"credentials": {"api_key": "sk-x"}})
+    assert response.status_code == 422
+
+
+def test_users_switch_the_ai_on_and_choose_a_model(client):
+    response = client.put("/api/integrations/ai", json={"enabled": True, "config": {"model": "gemini-3.8-flash"}})
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True and response.json()["config"]["model"] == "gemini-3.8-flash"
+    # A model whose provider has no credentials on the server is refused.
+    response = client.put("/api/integrations/ai", json={"config": {"model": "claude-opus-5-5"}})
+    assert response.status_code == 422
+
+
+def test_without_server_credentials_the_ai_cannot_be_switched_on(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "vertex_api_key", "")
+    monkeypatch.setattr(get_settings(), "vertex_project", "")
+    assert client.get("/api/integrations").json()["models"] == []
+    response = client.put("/api/integrations/ai", json={"enabled": True})
+    assert response.status_code == 422
+    assert "not set up on the server" in response.json()["message"]
 
 
 def test_an_integration_cannot_be_switched_on_half_configured(client):
-    response = client.put("/api/integrations/ai", json={"enabled": True})
-    assert response.status_code == 422
-    assert "API key" in response.json()["message"]
     response = client.put("/api/integrations/whatsapp", json={"enabled": True})
     assert response.status_code == 422
     assert "phone number ID" in response.json()["message"]
 
 
+def test_user_entered_credentials_are_encrypted_and_never_returned(client, db):
+    response = client.put("/api/integrations/email", json={
+        "enabled": True, "config": EMAIL, "credentials": {"password": "imap-secret-9876"},
+    })
+    assert response.status_code == 200, response.text
+    assert "imap-secret-9876" not in client.get("/api/integrations").text
+    assert client.get("/api/integrations").json()["email"]["credentials"]["password"] == {"set": True, "hint": "…9876"}
+    stored = db.execute(text("SELECT secrets FROM integration_settings WHERE name = 'email'")).scalar_one()
+    assert "imap-secret-9876" not in stored
+
+
 def test_an_omitted_credential_is_kept_and_an_empty_one_removed(client):
-    enable_ai(client)
-    client.put("/api/integrations/ai", json={"config": {"model": "claude-haiku-5-5"}})
-    ai = client.get("/api/integrations").json()["ai"]
-    assert ai["config"]["model"] == "claude-haiku-5-5"
-    assert ai["credentials"]["api_key"]["set"] is True
-    # Removing the key of a switched-on integration is refused ...
-    assert client.put("/api/integrations/ai", json={"credentials": {"api_key": ""}}).status_code == 422
+    client.put("/api/integrations/email", json={
+        "enabled": True, "config": EMAIL, "credentials": {"password": "imap-secret-9876"},
+    })
+    client.put("/api/integrations/email", json={"config": {"folder": "Sales"}})
+    email = client.get("/api/integrations").json()["email"]
+    assert email["config"]["folder"] == "Sales" and email["credentials"]["password"]["set"] is True
+    # Removing the password of a switched-on integration is refused ...
+    assert client.put("/api/integrations/email", json={"credentials": {"password": ""}}).status_code == 422
     # ... but allowed once it is off.
-    response = client.put("/api/integrations/ai", json={"enabled": False, "credentials": {"api_key": ""}})
-    assert response.json()["credentials"]["api_key"]["set"] is False
-
-
-def test_only_listed_models_are_accepted(client):
-    response = client.put("/api/integrations/ai", json={"config": {"model": "gpt-who-knows"}})
-    assert response.status_code == 422
+    response = client.put("/api/integrations/email", json={"enabled": False, "credentials": {"password": ""}})
+    assert response.json()["credentials"]["password"]["set"] is False
 
 
 # --- WhatsApp webhook -------------------------------------------------------------

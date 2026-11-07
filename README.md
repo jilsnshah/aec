@@ -758,8 +758,12 @@ multi-warehouse or batch/serial tracking.
 
 **Settings → Integrations** turns customer messages into sales enquiries.
 
-- **AI**: on/off, the Claude model (Opus 5.5 by default, Sonnet 5.5, Haiku 5.5)
-  and an Anthropic API key, with a connection test.
+- **AI**: on/off and the model, with a connection test. Users never see or set
+  credentials: the server holds them in environment variables, and only models
+  whose provider is configured are offered. `VERTEX_API_KEY` (Vertex AI
+  express key) or `VERTEX_PROJECT` (Application Default Credentials, for local
+  development) enables Gemini — 3.1 Flash-Lite first, the cheapest, which read
+  14 of 14 test messages correctly; `ANTHROPIC_API_KEY` enables Claude.
 - **WhatsApp**: on/off, phone number ID, business account ID, verify token and
   an optional app secret (when set, only requests signed by Meta are accepted).
   Copy the webhook URL into Meta for Developers → WhatsApp → Configuration and

@@ -873,6 +873,7 @@ export interface Integration {
 
 export interface AiModel {
   id: string
+  provider: string
   label: string
   hint: string
 }
@@ -881,7 +882,10 @@ export interface Integrations {
   ai: Integration
   whatsapp: Integration
   email: Integration
+  /** Only the models the server holds credentials for. */
   models: AiModel[]
+  /** Providers configured on the server, by name. Never their credentials. */
+  providers: string[]
 }
 
 export type InboundStatus = 'pending' | 'enquiry_created' | 'not_enquiry' | 'no_match' | 'failed' | 'skipped'

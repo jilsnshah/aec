@@ -24,11 +24,16 @@ router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 
 def _all(db: Session) -> dict:
+    models = settings_service.available_models()
     return {
         "ai": settings_service.view(settings_service.get(db, settings_service.AI)),
         "whatsapp": settings_service.view(settings_service.get(db, settings_service.WHATSAPP)),
         "email": settings_service.view(settings_service.get(db, settings_service.EMAIL)),
-        "models": settings_service.AI_MODELS,
+        "models": models,
+        # Which providers the server holds credentials for. Never the credentials.
+        "providers": sorted(
+            {settings_service.PROVIDER_LABELS[model["provider"]] for model in models}
+        ),
     }
 
 
@@ -49,14 +54,13 @@ def update_integration(name: str, payload: schemas.IntegrationUpdate, db: Sessio
 
 @router.post("/ai/test", response_model=schemas.AiTestOut)
 def test_ai(db: Session = Depends(get_db)):
-    """Send one tiny request with the saved model and key."""
+    """Send one tiny request with the chosen model and the server's credentials."""
     row = settings_service.get(db, settings_service.AI)
-    api_key = settings_service.credentials(row).get("api_key")
-    if not api_key:
-        raise ValidationError("Save an API key first.")
     model = row.config["model"]
     try:
-        reply = ai_agent.test_connection(model, api_key)
+        reply = ai_agent.test_connection(model)
+    except ai_agent.NotConfigured:
+        raise ValidationError("The AI is not set up on the server yet.")
     except anthropic.AuthenticationError:
         raise ValidationError("The API key was rejected. Check it and save it again.")
     except anthropic.PermissionDeniedError:
@@ -69,6 +73,10 @@ def test_ai(db: Session = Depends(get_db)):
         raise ValidationError("The AI provider returned an error ({}).".format(exc.status_code))
     except anthropic.APIConnectionError:
         raise ValidationError("Could not reach the AI provider. Check the server's internet access.")
+    except Exception as exc:  # the Gemini client's errors
+        if type(exc).__module__.startswith(("google", "langchain_google")):
+            raise ValidationError("The AI provider refused the request: {}".format(str(exc)[:300]))
+        raise
     return {"ok": True, "model": model, "reply": reply}
 
 

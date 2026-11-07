@@ -27,17 +27,49 @@ AI = "ai"
 WHATSAPP = "whatsapp"
 EMAIL = "email"
 
-#: The Claude models the enquiry agent may use, most capable first.
+#: Every model the enquiry agent knows how to run. Only those whose provider
+#: has credentials on the server are offered (see available_models).
 AI_MODELS: List[Dict[str, str]] = [
-    {"id": "claude-opus-5-5", "label": "Claude Opus 5.5", "hint": "Most capable. The default."},
-    {"id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "hint": "Fast and capable."},
-    {"id": "claude-haiku-5-5", "label": "Claude Haiku 5.5", "hint": "Fastest and lowest cost."},
+    {"id": "gemini-3.1-flash-lite", "provider": "vertex", "label": "Gemini 3.1 Flash-Lite",
+     "hint": "Lowest cost. Read 14 of 14 test messages correctly."},
+    {"id": "gemini-3.5-flash-lite", "provider": "vertex", "label": "Gemini 3.5 Flash-Lite",
+     "hint": "Low cost, newer."},
+    {"id": "gemini-3.8-flash", "provider": "vertex", "label": "Gemini 3.8 Flash",
+     "hint": "More capable, higher cost."},
+    {"id": "claude-opus-5-5", "provider": "anthropic", "label": "Claude Opus 5.5", "hint": "Most capable."},
+    {"id": "claude-sonnet-5-5", "provider": "anthropic", "label": "Claude Sonnet 5.5", "hint": "Fast and capable."},
+    {"id": "claude-haiku-5-5", "provider": "anthropic", "label": "Claude Haiku 5.5", "hint": "Fast, low cost."},
 ]
-DEFAULT_MODEL = "claude-opus-5-5"
+PROVIDER_LABELS = {"vertex": "Google Gemini (Vertex AI)", "anthropic": "Anthropic Claude"}
+
+
+def provider_configured(provider: str) -> bool:
+    settings = get_settings()
+    if provider == "vertex":
+        return bool(settings.vertex_api_key or settings.vertex_project)
+    if provider == "anthropic":
+        return bool(settings.anthropic_api_key)
+    return False
+
+
+def available_models() -> List[Dict[str, str]]:
+    """The models the server has credentials for, in preference order."""
+    return [model for model in AI_MODELS if provider_configured(model["provider"])]
+
+
+def model_info(model_id: str) -> Optional[Dict[str, str]]:
+    return next((model for model in AI_MODELS if model["id"] == model_id), None)
+
+
+def default_model() -> str:
+    models = available_models()
+    return models[0]["id"] if models else AI_MODELS[0]["id"]
 
 #: Per integration: default plain settings, and the names of its credentials.
 DEFINITIONS: Dict[str, Dict[str, Any]] = {
-    AI: {"config": {"model": DEFAULT_MODEL}, "secrets": ["api_key"]},
+    # The AI's credentials live on the server, not here: users only switch it
+    # on or off and choose a model.
+    AI: {"config": {"model": ""}, "secrets": []},
     WHATSAPP: {
         "config": {"phone_number_id": "", "business_account_id": "", "verify_token": ""},
         "secrets": ["app_secret"],
@@ -94,6 +126,8 @@ def get(session: Session, name: str) -> IntegrationSetting:
     if row is None:
         row = IntegrationSetting(name=name, enabled=False, config={}, secrets=None)
     row.config = {**DEFINITIONS[name]["config"], **(row.config or {})}
+    if name == AI and not row.config.get("model"):
+        row.config = {**row.config, "model": default_model()}
     return row
 
 
@@ -182,7 +216,9 @@ def record_system(session: Session, name: str, **values: Any) -> None:
 
 
 def _validate_config(name: str, config: Dict[str, Any]) -> None:
-    if name == AI and config["model"] not in {model["id"] for model in AI_MODELS}:
+    if name == AI and config.get("model") and config["model"] not in {
+        model["id"] for model in available_models()
+    }:
         raise ValidationError("Choose one of the listed models.")
     if name == EMAIL:
         for key, low, high in (("imap_port", 1, 65535), ("poll_minutes", 1, 1440)):
@@ -198,8 +234,12 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
 def _require_ready(name: str, config: Dict[str, Any], secrets: Dict[str, str]) -> None:
     """An integration can only be switched on with everything it needs."""
     missing: List[str] = []
-    if name == AI and not secrets.get("api_key"):
-        missing.append("an API key")
+    if name == AI:
+        model = model_info(config.get("model") or default_model())
+        if model is None or not provider_configured(model["provider"]):
+            raise ValidationError(
+                "The AI is not set up on the server yet. Ask the administrator to add its credentials."
+            )
     if name == WHATSAPP:
         if not config["phone_number_id"]:
             missing.append("the phone number ID")

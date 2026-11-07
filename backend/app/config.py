@@ -51,6 +51,19 @@ class Settings(BaseSettings):
     #: again.
     secret_key: str = "dev-only-insecure-secret-key-change-me"
 
+    # AI credentials. Set on the server only -- users can switch the AI on or
+    # off and pick a model, never see or change these. A model is offered only
+    # when its provider has credentials here.
+    #: Gemini on Vertex AI, express-mode API key ("AQ...").
+    vertex_api_key: str = ""
+    #: Gemini on Vertex AI with Application Default Credentials (local
+    #: development: gcloud auth application-default login). Ignored when
+    #: vertex_api_key is set.
+    vertex_project: str = ""
+    vertex_location: str = "global"
+    #: Claude through the Anthropic API.
+    anthropic_api_key: str = ""
+
     #: How often the email inbox may be polled at most, in seconds.
     email_poll_tick_seconds: int = 60
 

@@ -24,8 +24,8 @@ from .common import windowed
 
 logger = logging.getLogger(__name__)
 
-#: Builds the chat model from (model id, API key). Tests replace it.
-model_factory: Callable[[str, str], Any] = ai_agent.chat_model
+#: Builds the chat model from its id, with the server's credentials. Tests replace it.
+model_factory: Callable[[str], Any] = ai_agent.chat_model
 #: Opens a session for background work, outside any request. Tests replace it.
 session_factory: Callable[[], Session] = SessionLocal
 
@@ -73,8 +73,7 @@ def process(message_id: uuid.UUID) -> None:
         if message is None or message.status != "pending":
             return
         ai = settings_service.get(session, settings_service.AI)
-        api_key = settings_service.credentials(ai).get("api_key")
-        if not ai.enabled or not api_key:
+        if not ai.enabled:
             _finish(session, message, "skipped", summary="AI is switched off, so nobody read this message.")
             return
 
@@ -85,9 +84,7 @@ def process(message_id: uuid.UUID) -> None:
             subject=message.subject,
         )
         try:
-            outcome = ai_agent.run(
-                session, context, message.body, model_factory(ai.config["model"], api_key)
-            )
+            outcome = ai_agent.run(session, context, message.body, model_factory(ai.config["model"]))
         except Exception as exc:  # the agent, the model API or a tool failed
             logger.exception("The agent could not process %s message %s", message.channel, message.id)
             session.rollback()

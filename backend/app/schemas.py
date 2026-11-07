@@ -1186,6 +1186,7 @@ class IntegrationOut(BaseModel):
 
 class AiModelOut(BaseModel):
     id: str
+    provider: str
     label: str
     hint: str
 
@@ -1194,7 +1195,10 @@ class IntegrationsOut(BaseModel):
     ai: IntegrationOut
     whatsapp: IntegrationOut
     email: IntegrationOut
+    #: Only models the server holds credentials for.
     models: List[AiModelOut]
+    #: Providers configured on the server, by name.
+    providers: List[str] = []
 
 
 class IntegrationUpdate(BaseModel):

@@ -174,7 +174,47 @@ def build_tools(session: Session, context: InboundContext) -> list:
     return [search_products, find_customers, create_customer, create_enquiry]
 
 
-def chat_model(model: str, api_key: str) -> BaseChatModel:
+class NotConfigured(Exception):
+    """The server has no credentials for this model's provider."""
+
+
+def chat_model(model: str) -> BaseChatModel:
+    """The chat model, built from the server's own credentials.
+
+    Users choose the model; the credentials come from the environment and are
+    never stored in the database or shown in the app.
+    """
+    from ..config import get_settings
+    from . import integration_settings
+
+    info = integration_settings.model_info(model)
+    if info is None or not integration_settings.provider_configured(info["provider"]):
+        raise NotConfigured("No credentials are configured on the server for {}.".format(model))
+    settings = get_settings()
+    if info["provider"] == "vertex":
+        return _gemini(model, settings)
+    return _claude(model, settings.anthropic_api_key)
+
+
+def _gemini(model: str, settings) -> BaseChatModel:
+    """Gemini on Vertex AI: an express-mode key, or Application Default Credentials."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    if settings.vertex_api_key:
+        return ChatGoogleGenerativeAI(
+            model=model, vertexai=True, api_key=settings.vertex_api_key, max_retries=2, timeout=120
+        )
+    return ChatGoogleGenerativeAI(
+        model=model,
+        vertexai=True,
+        project=settings.vertex_project,
+        location=settings.vertex_location,
+        max_retries=2,
+        timeout=120,
+    )
+
+
+def _claude(model: str, api_key: str) -> BaseChatModel:
     """Claude through LangChain. Thinking is adaptive by default on these models."""
     from langchain_anthropic import ChatAnthropic
 
@@ -258,7 +298,7 @@ def run(
     )
 
 
-def test_connection(model: str, api_key: str) -> str:
-    """One tiny request, to check the key and model work. Returns the reply."""
-    reply = chat_model(model, api_key).invoke("Reply with the single word OK.")
+def test_connection(model: str) -> str:
+    """One tiny request, to check the server's credentials and the model work."""
+    reply = chat_model(model).invoke("Reply with the single word OK.")
     return _final_text({"messages": [reply]}) or "OK"

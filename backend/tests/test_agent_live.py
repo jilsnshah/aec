@@ -89,7 +89,7 @@ CASES: List[Tuple[str, str, str, str, Optional[Dict[str, int]]]] = [
 
 def live_model():
     if ANTHROPIC_KEY:
-        return ai_agent.chat_model(os.environ.get("LIVE_MODEL", "claude-opus-5-5"), ANTHROPIC_KEY)
+        return ai_agent._claude(os.environ.get("LIVE_MODEL", "claude-opus-5-5"), ANTHROPIC_KEY)
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     model = os.environ.get("LIVE_MODEL", "gemini-3.1-flash-lite")
@@ -104,14 +104,17 @@ def live_model():
 def live(client, session_factory, make_product, monkeypatch):
     monkeypatch.setattr(inbound, "session_factory", session_factory)
     model = live_model()
-    monkeypatch.setattr(inbound, "model_factory", lambda name, key: model)
+    monkeypatch.setattr(inbound, "model_factory", lambda name: model)
     for code, name, unit, mrp in CATALOGUE:
         make_product(name, sku=code, unit_of_measure=unit, mrp=mrp)
     # One customer already exists, as a phone number the agent must find.
     client.post("/api/customers", json={"name": "Ravi Builders", "phone": "+91 98765 43210"})
-    assert client.put("/api/integrations/ai", json={
-        "enabled": True, "credentials": {"api_key": "live-test"},
-    }).status_code == 200
+    from app.config import get_settings
+
+    # The integration only needs to see that the server has credentials; the
+    # model itself is the one built above.
+    monkeypatch.setattr(get_settings(), "vertex_project", get_settings().vertex_project or "live-test")
+    assert client.put("/api/integrations/ai", json={"enabled": True}).status_code == 200
     assert client.put("/api/integrations/whatsapp", json={
         "enabled": True, "config": {"phone_number_id": PHONE_ID, "verify_token": "live"},
     }).status_code == 200

@@ -182,51 +182,41 @@ function AiSection({ data, reload }: { data: Integrations; reload: () => void })
       icon={<AiIcon size={18} />}
       title="AI"
       description="Reads each WhatsApp message and email, and records the sales enquiries in them. It never replies to customers."
+      status={data.models.length === 0 ? { tone: 'orange', label: 'Not set up' } : undefined}
       onSaved={reload}
       extraActions={
-        <Button onClick={test} busy={testing} disabled={!integration.credentials.api_key?.set}>
+        <Button onClick={test} busy={testing} disabled={data.models.length === 0}>
           Test connection
         </Button>
       }
     >
-      {(form, set) => (
-        <FormGrid>
-          <Field label="Model" hint={data.models.find((model) => model.id === form.model)?.hint}>
-            {(props) => (
-              <select {...props} value={form.model} onChange={(event) => set('model', event.target.value)}>
-                {data.models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-          <Field
-            label="Anthropic API key"
-            hint={
-              <>
-                Create one at{' '}
-                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-                  console.anthropic.com
-                </a>
-                . Stored encrypted; never shown again.
-              </>
-            }
-          >
-            {(props) => (
-              <input
-                {...props}
-                type="password"
-                autoComplete="off"
-                placeholder={credentialPlaceholder(integration, 'api_key', 'sk-ant-…')}
-                value={form.api_key}
-                onChange={(event) => set('api_key', event.target.value)}
-              />
-            )}
-          </Field>
-        </FormGrid>
-      )}
+      {(form, set) =>
+        data.models.length === 0 ? (
+          <Notice kind="warning" title="Not set up on the server">
+            The AI's credentials are managed by the administrator and have not been added yet.
+          </Notice>
+        ) : (
+          <FormGrid>
+            <Field label="Model" hint={data.models.find((model) => model.id === form.model)?.hint}>
+              {(props) => (
+                <select {...props} value={form.model} onChange={(event) => set('model', event.target.value)}>
+                  {data.models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Field label="Provider">
+              {(props) => (
+                <input {...props} readOnly value={data.providers.join(', ')} tabIndex={-1} />
+              )}
+            </Field>
+            <p className="hint span-2">Credentials are managed by the administrator on the server.</p>
+          </FormGrid>
+        )
+      }
     </IntegrationCard>
   )
 }

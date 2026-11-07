@@ -22,6 +22,12 @@ services:
       # Generated once; keep it, or saved credentials must be entered again.
       - key: SECRET_KEY
         generateValue: true
+      # AI credentials, set by the administrator; users only pick the model.
+      # Gemini on Vertex AI (express-mode key "AQ...") and/or Claude.
+      - key: VERTEX_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: BUSINESS_TIMEZONE
