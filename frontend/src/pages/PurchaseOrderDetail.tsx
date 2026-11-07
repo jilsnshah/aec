@@ -33,6 +33,7 @@ import {
 } from '../lib/format'
 import { useAsync } from '../lib/useAsync'
 import { SettleCustomers, useSettlement } from '../components/SettleCustomers'
+import { TallyStatus } from '../components/TallyStatus'
 
 export default function PurchaseOrderDetailPage() {
   const { poId = '' } = useParams()
@@ -214,6 +215,8 @@ export default function PurchaseOrderDetailPage() {
                       </table>
                     </TableScroll>
                   </Card>
+
+                  <TallyStatus entityId={order.id} />
 
                   <Card title="Goods receipts" subtitle={`${order.receipts.length} delivery drop${order.receipts.length === 1 ? '' : 's'}`} flush>
                     {order.receipts.length === 0 ? (

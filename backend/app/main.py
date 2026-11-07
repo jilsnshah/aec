@@ -5,7 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .api import (
+    auth,
     customers,
     enquiries,
     fulfilment,
@@ -24,10 +25,12 @@ from .api import (
     purchasing,
 )
 from .config import get_settings
-from .database import engine
+from .api.auth import require_user
+from .database import SessionLocal, engine
 from .errors import DomainError
 from .logging_config import configure_logging
-from .services import email_inbox
+from .services import auth as auth_service
+from .services import background
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -66,10 +69,15 @@ async def lifespan(_app: FastAPI):
             "SECRET_KEY is not set. Integration credentials are encrypted with a "
             "development key; set SECRET_KEY to a long random value."
         )
-    # Reads the email inbox on its schedule while the server runs.
-    email_inbox.poller.start()
+    try:
+        with SessionLocal() as session:
+            auth_service.ensure_admin(session)
+    except SQLAlchemyError:
+        logger.exception("Could not create the first admin")
+    # Reads the email inbox and pushes queued documents to Tally.
+    background.poller.start()
     yield
-    email_inbox.poller.stop()
+    background.poller.stop()
 
 
 app = FastAPI(
@@ -86,6 +94,7 @@ app = FastAPI(
         {"name": "purchasing", "description": "Suppliers, purchase orders and goods receipts."},
         {"name": "fulfilment", "description": "Customer commitments and deliveries."},
         {"name": "integrations", "description": "AI enquiry agent, WhatsApp and email intake."},
+        {"name": "auth", "description": "Signing in and out."},
     ],
 )
 
@@ -97,16 +106,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(products.router)
-app.include_router(customers.router)
-app.include_router(enquiries.router)
-app.include_router(orders.router)
-app.include_router(inventory.router)
-app.include_router(purchasing.suppliers_router)
-app.include_router(purchasing.po_router)
-app.include_router(purchasing.receipts_router)
-app.include_router(fulfilment.router)
-app.include_router(integrations.router)
+# Everything needs a signed-in user, except signing in, the health check and
+# the webhooks Meta calls.
+signed_in = [Depends(require_user)]
+app.include_router(auth.router)
+app.include_router(integrations.webhooks)
+for router in (
+    products.router,
+    customers.router,
+    enquiries.router,
+    orders.router,
+    inventory.router,
+    purchasing.suppliers_router,
+    purchasing.po_router,
+    purchasing.receipts_router,
+    fulfilment.router,
+    integrations.router,
+):
+    app.include_router(router, dependencies=signed_in)
 
 
 @app.exception_handler(DomainError)

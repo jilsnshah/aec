@@ -19,8 +19,9 @@ import hmac
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+import httpx
 from sqlalchemy.orm import Session
 
 from ..errors import DomainError
@@ -113,3 +114,114 @@ def receive(session: Session, payload: Dict[str, Any], raw_body: bytes, signatur
         if stored is not None:
             recorded.append(stored.id)
     return recorded
+
+
+# ---------------------------------------------------------------------------
+# Sending: invoices to customers
+# ---------------------------------------------------------------------------
+
+
+GRAPH = "https://graph.facebook.com"
+
+#: Builds the HTTP client for Meta's Graph API. Tests replace it.
+http_factory: Callable[[], httpx.Client] = lambda: httpx.Client(timeout=60)
+
+
+class SendError(Exception):
+    """Meta refused or could not take the message; the text is Meta's reason."""
+
+
+def recipient(phone: Optional[str], country_code: str) -> Optional[str]:
+    """A phone number as WhatsApp wants it: digits only, with the country code."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) == 10 and country_code:
+        digits = country_code + digits
+    return digits.lstrip("0") or None
+
+
+def _graph_error(response: httpx.Response) -> str:
+    try:
+        error = response.json().get("error", {})
+        return "{} (code {})".format(error.get("message", response.text[:200]), error.get("code", response.status_code))
+    except ValueError:
+        return "HTTP {}".format(response.status_code)
+
+
+def send_invoice(
+    config: Dict[str, Any],
+    access_token: str,
+    to: str,
+    pdf: bytes,
+    filename: str,
+    body_parameters: List[str],
+) -> str:
+    """Upload the invoice PDF, then send the approved template with it attached.
+
+    A message the business starts must use a template Meta has approved. The
+    template needs a DOCUMENT header and a body whose variables are, in order,
+    ``body_parameters`` (customer name, invoice number, amount). Returns the
+    WhatsApp message id.
+    """
+    base = "{}/{}/{}".format(GRAPH, config.get("graph_version") or "v23.0", config["phone_number_id"])
+    headers = {"Authorization": "Bearer " + access_token}
+    try:
+        with http_factory() as client:
+            upload = client.post(
+                base + "/media",
+                headers=headers,
+                data={"messaging_product": "whatsapp", "type": "application/pdf"},
+                files={"file": (filename, pdf, "application/pdf")},
+            )
+            if upload.status_code >= 400 or "id" not in upload.json():
+                raise SendError("Uploading the invoice failed: " + _graph_error(upload))
+            message = client.post(
+                base + "/messages",
+                headers=headers,
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": to,
+                    "type": "template",
+                    "template": {
+                        "name": config["invoice_template"],
+                        "language": {"code": config.get("template_language") or "en"},
+                        "components": [
+                            {"type": "header", "parameters": [
+                                {"type": "document", "document": {"id": upload.json()["id"], "filename": filename}},
+                            ]},
+                            {"type": "body", "parameters": [
+                                {"type": "text", "text": text} for text in body_parameters
+                            ]},
+                        ],
+                    },
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
+    if message.status_code >= 400:
+        raise SendError("WhatsApp refused the message: " + _graph_error(message))
+    messages = message.json().get("messages") or [{}]
+    return messages[0].get("id") or ""
+
+
+def template_status(config: Dict[str, Any], access_token: str) -> str:
+    """Whether Meta has approved the invoice template: APPROVED, PENDING, REJECTED..."""
+    waba = config.get("business_account_id")
+    if not waba:
+        raise SendError("Add the WhatsApp Business Account ID to check the template.")
+    try:
+        with http_factory() as client:
+            response = client.get(
+                "{}/{}/{}/message_templates".format(GRAPH, config.get("graph_version") or "v23.0", waba),
+                headers={"Authorization": "Bearer " + access_token},
+                params={"name": config["invoice_template"], "fields": "name,status,language"},
+            )
+    except httpx.HTTPError as exc:
+        raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
+    if response.status_code >= 400:
+        raise SendError(_graph_error(response))
+    matches = [t for t in response.json().get("data", []) if t.get("name") == config["invoice_template"]]
+    if not matches:
+        return "NOT_FOUND"
+    return ", ".join(sorted({"{} ({})".format(t.get("status"), t.get("language")) for t in matches}))

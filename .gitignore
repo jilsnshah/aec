@@ -25,3 +25,10 @@ tsconfig.tsbuildinfo
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal
+
+# Client data (Tally backups, exports) never goes in the repo
+*.tar.gz
+*.zip
+*.1800
+*.TSF
+/100000/

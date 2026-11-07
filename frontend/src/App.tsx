@@ -16,10 +16,13 @@ import OrdersPage from './pages/Orders'
 import ProductsPage from './pages/Products'
 import StockInPage from './pages/StockIn'
 import IntegrationsPage from './pages/Integrations'
+import SignInPage from './pages/SignIn'
+import { AuthGate } from './lib/auth'
 
 export default function App() {
   return (
     <ToastProvider>
+      <AuthGate signIn={(done) => <SignInPage onSignedIn={done} />}>
       <Routes>
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
@@ -40,6 +43,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
       </Routes>
+      </AuthGate>
     </ToastProvider>
   )
 }

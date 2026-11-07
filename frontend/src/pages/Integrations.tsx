@@ -23,6 +23,7 @@ import {
 } from '../components/ui'
 import {
   AiIcon,
+  DocumentIcon as TallyIcon,
   CheckIcon,
   CopyIcon,
   EmailIcon,
@@ -248,14 +249,70 @@ function randomToken() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+/** A yes/no setting kept as text in the form ('true' / 'false'). */
+function Check({ form, set, name, label, hint }: { form: Form; set: (key: string, value: string) => void; name: string; label: string; hint?: string }) {
+  return (
+    <label className="check-row span-2">
+      <input type="checkbox" checked={form[name] === 'true'} onChange={(event) => set(name, String(event.target.checked))} />
+      <span>
+        <span className="check-row__label">{label}</span>
+        {hint ? <span className="hint">{hint}</span> : null}
+      </span>
+    </label>
+  )
+}
+
+function Section({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="form-section span-2">
+      <span className="section-label">{title}</span>
+      {hint ? <span className="hint">{hint}</span> : null}
+    </div>
+  )
+}
+
+function TextField({ form, set, name, label, hint, placeholder, mono, optional }: {
+  form: Form; set: (key: string, value: string) => void; name: string; label: string
+  hint?: ReactNode; placeholder?: string; mono?: boolean; optional?: boolean
+}) {
+  return (
+    <Field label={label} hint={hint} optional={optional}>
+      {(props) => (
+        <input {...props} className={mono ? 'input mono' : 'input'} value={form[name]} placeholder={placeholder}
+          onChange={(event) => set(name, event.target.value)} />
+      )}
+    </Field>
+  )
+}
+
 function WhatsAppSection({ data, reload }: { data: Integrations; reload: () => void }) {
+  const toast = useToast()
+  const [checking, setChecking] = useState(false)
   const integration = data.whatsapp
+
+  async function checkTemplate() {
+    setChecking(true)
+    try {
+      const result = await api.integrations.templateStatus()
+      const approved = result.status.includes('APPROVED')
+      ;(approved ? toast.success : toast.error)(`Template "${result.template}"`, result.status === 'NOT_FOUND' ? 'Not found in your WhatsApp account.' : result.status)
+    } catch (cause) {
+      toast.error('Could not check the template', errorText(cause))
+    } finally {
+      setChecking(false)
+    }
+  }
   const url = webhookUrl()
   const local = /\/\/(localhost|127\.)/.test(url)
   return (
     <IntegrationCard
       integration={integration}
-      fields={['phone_number_id', 'business_account_id', 'verify_token']}
+      fields={['phone_number_id', 'business_account_id', 'verify_token', 'send_invoices', 'invoice_template', 'template_language', 'country_code']}
+      extraActions={
+        <Button onClick={checkTemplate} busy={checking} disabled={!integration.credentials.access_token?.set || !integration.config.invoice_template}>
+          Check template
+        </Button>
+      }
       icon={<WhatsAppIcon size={18} />}
       title="WhatsApp"
       description="Receive customer messages from your WhatsApp Business number through Meta's Cloud API."
@@ -313,12 +370,132 @@ function WhatsAppSection({ data, reload }: { data: Integrations; reload: () => v
             >
               {() => <CopyField value={url} />}
             </Field>
+
+            <Section title="Send invoices" hint="Invoices from Tally go to the customer's WhatsApp as soon as Tally creates them." />
+            <Check form={form} set={set} name="send_invoices" label="Send each invoice to the customer on WhatsApp" />
+            <Field
+              label="Access token"
+              hint="Meta Business settings → System users → generate a permanent token with whatsapp_business_messaging."
+            >
+              {(props) => (
+                <input {...props} type="password" autoComplete="off"
+                  placeholder={credentialPlaceholder(integration, 'access_token', 'EAAG…')}
+                  value={form.access_token} onChange={(event) => set('access_token', event.target.value)} />
+              )}
+            </Field>
+            <TextField form={form} set={set} name="invoice_template" label="Invoice template name" mono placeholder="invoice_pdf"
+              hint={<>Utility template with a <b>Document</b> header and body “Hello {'{{1}}'}, your invoice {'{{2}}'} for {'{{3}}'} is attached.”</>} />
+            <TextField form={form} set={set} name="template_language" label="Template language" mono placeholder="en" />
+            <TextField form={form} set={set} name="country_code" label="Default country code" mono placeholder="91"
+              hint="Added to 10-digit customer numbers." />
           </FormGrid>
         </>
       )}
     </IntegrationCard>
   )
 }
+
+const TALLY_FIELDS = [
+  'server_url', 'company', 'sync_sales_orders', 'create_invoices', 'sync_purchase_orders',
+  'customer_group', 'supplier_group', 'godown', 'sales_ledger', 'purchase_ledger',
+  'sales_order_type', 'sales_invoice_type', 'purchase_order_type',
+  'tax_mode', 'gst_rate', 'cgst_ledger', 'sgst_ledger', 'igst_ledger',
+  'seller_name', 'seller_address', 'seller_gstin', 'seller_phone',
+]
+
+function TallySection({ data, reload }: { data: Integrations; reload: () => void }) {
+  const toast = useToast()
+  const [testing, setTesting] = useState(false)
+  const integration = data.tally
+
+  async function test() {
+    setTesting(true)
+    try {
+      const result = await api.integrations.testTally()
+      if (result.company_found) toast.success('Connected to Tally', `${integration.config.company} is open.`)
+      else toast.error('Connected, but the company is not open', `Open in Tally: ${result.companies.join(', ') || 'none'}`)
+    } catch (cause) {
+      toast.error('Could not reach Tally', errorText(cause))
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <IntegrationCard
+      integration={integration}
+      fields={TALLY_FIELDS}
+      icon={<TallyIcon size={18} />}
+      title="Tally"
+      description="Sales and purchase orders go to TallyPrime as vouchers the moment they are placed; each sale is invoiced in Tally."
+      onSaved={reload}
+      extraActions={
+        <Button onClick={test} busy={testing} disabled={!integration.config.server_url}>
+          Test connection
+        </Button>
+      }
+    >
+      {(form, set) => (
+        <FormGrid>
+          <Section title="Connection" hint="TallyPrime's HTTP server: F1 → Settings → Connectivity → TallyPrime acts as Server (port 9000). Open its port only to this app." />
+          <TextField form={form} set={set} name="server_url" label="Tally server address" mono placeholder="http://your-tally-host:9000" />
+          <TextField form={form} set={set} name="company" label="Company name" hint="Exactly as it appears in Tally." />
+          <Field label="Access token" optional hint="Only if a gateway or tunnel in front of Tally asks for one (sent as a bearer token).">
+            {(props) => (
+              <input {...props} type="password" autoComplete="off"
+                placeholder={credentialPlaceholder(integration, 'auth_token', 'Not needed for a direct connection')}
+                value={form.auth_token} onChange={(event) => set('auth_token', event.target.value)} />
+            )}
+          </Field>
+
+          <Section title="What to sync" />
+          <Check form={form} set={set} name="sync_sales_orders" label="Sales orders → Sales Order vouchers" />
+          <Check form={form} set={set} name="create_invoices" label="Invoice each sales order in Tally (Sales voucher)" hint="Tally numbers the invoice; that number is used on the PDF sent to the customer." />
+          <Check form={form} set={set} name="sync_purchase_orders" label="Placed purchase orders → Purchase Order vouchers" />
+
+          <Section title="Ledgers and voucher types" hint="Must match the names in your Tally company. Customers, suppliers and stock items are created if missing." />
+          <TextField form={form} set={set} name="sales_ledger" label="Sales ledger" />
+          <TextField form={form} set={set} name="purchase_ledger" label="Purchase ledger" />
+          <TextField form={form} set={set} name="customer_group" label="Group for new customers" />
+          <TextField form={form} set={set} name="supplier_group" label="Group for new suppliers" />
+          <TextField form={form} set={set} name="godown" label="Godown" />
+          <TextField form={form} set={set} name="sales_order_type" label="Sales Order voucher type" />
+          <TextField form={form} set={set} name="sales_invoice_type" label="Sales voucher type" hint="Set its numbering to Automatic in Tally." />
+          <TextField form={form} set={set} name="purchase_order_type" label="Purchase Order voucher type" />
+
+          <Section title="GST on invoices" />
+          <Field label="Tax">
+            {(props) => (
+              <select {...props} value={form.tax_mode} onChange={(event) => set('tax_mode', event.target.value)}>
+                <option value="none">No tax</option>
+                <option value="cgst_sgst">CGST + SGST (within the state)</option>
+                <option value="igst">IGST (other states)</option>
+              </select>
+            )}
+          </Field>
+          <Field label="GST rate (%)">
+            {(props) => <input {...props} className="input input--num" inputMode="decimal" value={form.gst_rate} onChange={(event) => set('gst_rate', event.target.value)} disabled={form.tax_mode === 'none'} />}
+          </Field>
+          {form.tax_mode === 'cgst_sgst' ? (
+            <>
+              <TextField form={form} set={set} name="cgst_ledger" label="CGST ledger" />
+              <TextField form={form} set={set} name="sgst_ledger" label="SGST ledger" />
+            </>
+          ) : form.tax_mode === 'igst' ? (
+            <TextField form={form} set={set} name="igst_ledger" label="IGST ledger" />
+          ) : null}
+
+          <Section title="Your details on the invoice" />
+          <TextField form={form} set={set} name="seller_name" label="Business name" />
+          <TextField form={form} set={set} name="seller_gstin" label="GSTIN" mono optional />
+          <TextField form={form} set={set} name="seller_address" label="Address" optional />
+          <TextField form={form} set={set} name="seller_phone" label="Phone" optional />
+        </FormGrid>
+      )}
+    </IntegrationCard>
+  )
+}
+
 
 function EmailSection({ data, reload }: { data: Integrations; reload: () => void }) {
   const toast = useToast()
@@ -573,10 +750,152 @@ export default function IntegrationsPage() {
               <WhatsAppSection data={data} reload={state.reload} />
               <EmailSection data={data} reload={state.reload} />
             </div>
+            <TallySection data={data} reload={state.reload} />
             <MessagesSection />
+            <TallySyncSection />
           </div>
         )}
       </AsyncBlock>
     </Page>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+const KIND_LABEL: Record<string, string> = {
+  sales_order: 'Sales Order',
+  sales_invoice: 'Sales invoice',
+  purchase_order: 'Purchase Order',
+}
+const SYNC_TONE: Record<string, Tone> = { pending: 'blue', synced: 'green', failed: 'red' }
+const NOTIFY: Record<string, { tone: Tone; label: string } | undefined> = {
+  pending: { tone: 'blue', label: 'Sending…' },
+  sent: { tone: 'green', label: 'Sent' },
+  failed: { tone: 'red', label: 'Not sent' },
+  skipped: { tone: 'gray', label: 'Not sent' },
+}
+
+/** What has gone to Tally, and whether each invoice reached the customer. */
+function TallySyncSection() {
+  const toast = useToast()
+  const paging = usePaging('tally-syncs', [])
+  const state = useAsync(
+    () => api.integrations.tallySyncs({ limit: paging.limit, offset: paging.offset }),
+    [paging.limit, paging.offset],
+  )
+  const busy = (state.data?.items ?? []).some((row) => row.status === 'pending' || row.notify_status === 'pending')
+  useEffect(() => {
+    if (!busy) return
+    const timer = window.setTimeout(state.reload, 4000)
+    return () => window.clearTimeout(timer)
+  }, [busy, state.data])
+
+  async function retry(id: string) {
+    try {
+      await api.integrations.retryTally(id)
+      toast.success('Trying again')
+      state.reload()
+    } catch (cause) {
+      toast.error('Could not retry', errorText(cause))
+    }
+  }
+
+  return (
+    <Card
+      flush
+      title="Tally sync"
+      subtitle="Every order sent to Tally, and every invoice sent to a customer"
+      actions={
+        <Button size="sm" variant="plain" icon={<RefreshIcon size={14} />} onClick={state.reload}>
+          Refresh
+        </Button>
+      }
+    >
+      <AsyncBlock loading={state.loading} error={state.error} data={state.data} onRetry={state.reload} skeleton="spinner">
+        {(page) =>
+          page.items.length === 0 ? (
+            <EmptyState
+              compact
+              icon={<TallyIcon size={22} />}
+              title="Nothing sent to Tally yet"
+              body="Orders appear here once Tally is switched on and an order is placed."
+            />
+          ) : (
+            <>
+              <TableScroll>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Document</th>
+                      <th>Tally</th>
+                      <th>Invoice on WhatsApp</th>
+                      <th className="num">When</th>
+                      <th className="col-actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {page.items.map((row) => {
+                      const notify = NOTIFY[row.notify_status]
+                      const link = row.kind === 'purchase_order' ? `/purchase-orders/${row.entity_id}` : `/orders/${row.entity_id}`
+                      const hasPdf = row.kind === 'sales_invoice' && row.status === 'synced'
+                      const canRetry =
+                        row.status === 'failed' ||
+                        (row.kind === 'sales_invoice' && (row.notify_status === 'failed' || row.notify_status === 'skipped'))
+                      return (
+                        <tr key={row.id}>
+                          <td>
+                            <span className="cell-primary">{KIND_LABEL[row.kind]}</span>
+                            <Link className="cell-sub mono" to={link}>
+                              {row.reference}
+                            </Link>
+                          </td>
+                          <td className="inbound__outcome">
+                            <div className="row gap-2">
+                              <Badge tone={SYNC_TONE[row.status]} dot>
+                                {row.status === 'synced' ? 'In Tally' : row.status === 'pending' ? 'Sending…' : 'Failed'}
+                              </Badge>
+                              {row.tally_number ? <span className="mono">{row.tally_number}</span> : null}
+                            </div>
+                            {row.error ? <span className="cell-sub q-negative">{row.error}</span> : null}
+                          </td>
+                          <td className="inbound__outcome">
+                            <div className="row gap-2">
+                              {notify ? (
+                                <Badge tone={notify.tone} dot>
+                                  {notify.label}
+                                </Badge>
+                              ) : null}
+                              {row.notify_to ? <span className="mono">+{row.notify_to}</span> : null}
+                              {hasPdf ? (
+                                <a href={api.integrations.invoiceUrl(row.entity_id)} target="_blank" rel="noreferrer">
+                                  PDF
+                                </a>
+                              ) : null}
+                              {!notify && !hasPdf ? <span className="q-muted">—</span> : null}
+                            </div>
+                            {row.notify_error ? <span className="cell-sub q-negative">{row.notify_error}</span> : null}
+                          </td>
+                          <td className="num nowrap">
+                            <span title={formatDateTime(row.created_at)}>{formatRelative(row.created_at)}</span>
+                          </td>
+                          <td className="col-actions">
+                            {canRetry ? (
+                              <Button size="sm" variant="plain" onClick={() => retry(row.id)}>
+                                Retry
+                              </Button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </TableScroll>
+              <Pagination paging={paging} total={page.total} noun="documents" />
+            </>
+          )
+        }
+      </AsyncBlock>
+    </Card>
   )
 }

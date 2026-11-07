@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 AI = "ai"
 WHATSAPP = "whatsapp"
 EMAIL = "email"
+TALLY = "tally"
+
+TAX_MODES = ("none", "cgst_sgst", "igst")
 
 #: Every model the enquiry agent knows how to run. Only those whose provider
 #: has credentials on the server are offered (see available_models).
@@ -71,8 +74,49 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
     # on or off and choose a model.
     AI: {"config": {"model": ""}, "secrets": []},
     WHATSAPP: {
-        "config": {"phone_number_id": "", "business_account_id": "", "verify_token": ""},
-        "secrets": ["app_secret"],
+        "config": {
+            "phone_number_id": "",
+            "business_account_id": "",
+            "verify_token": "",
+            # Sending invoices to customers (business-initiated, so Meta
+            # requires an approved template with a document header).
+            "send_invoices": False,
+            "invoice_template": "",
+            "template_language": "en",
+            "country_code": "91",
+            "graph_version": "v23.0",
+        },
+        "secrets": ["app_secret", "access_token"],
+    },
+    TALLY: {
+        "config": {
+            # TallyPrime's HTTP server, e.g. http://tally.example.com:9000
+            "server_url": "",
+            "company": "",
+            "sync_sales_orders": True,
+            "create_invoices": True,
+            "sync_purchase_orders": True,
+            "customer_group": "Sundry Debtors",
+            "supplier_group": "Sundry Creditors",
+            "godown": "Main Location",
+            "sales_ledger": "Sales",
+            "purchase_ledger": "Purchase",
+            "sales_order_type": "Sales Order",
+            "sales_invoice_type": "Sales",
+            "purchase_order_type": "Purchase Order",
+            "tax_mode": "none",
+            "gst_rate": 0,
+            "cgst_ledger": "Output CGST",
+            "sgst_ledger": "Output SGST",
+            "igst_ledger": "Output IGST",
+            # Printed on the invoice PDF sent to customers.
+            "seller_name": "",
+            "seller_address": "",
+            "seller_gstin": "",
+            "seller_phone": "",
+        },
+        # Sent as a bearer token, for a gateway or tunnel in front of Tally.
+        "secrets": ["auth_token"],
     },
     EMAIL: {
         "config": {
@@ -220,6 +264,25 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
         model["id"] for model in available_models()
     }:
         raise ValidationError("Choose one of the listed models.")
+    for key, default in DEFINITIONS[name]["config"].items():
+        if isinstance(default, bool) and not isinstance(config.get(key), bool):
+            config[key] = str(config.get(key)).lower() in ("1", "true", "yes", "on")
+    if name == TALLY:
+        if config["tax_mode"] not in TAX_MODES:
+            raise ValidationError("Tax must be none, CGST + SGST, or IGST.")
+        try:
+            rate = float(config["gst_rate"] or 0)
+        except (TypeError, ValueError):
+            raise ValidationError("GST rate must be a number.")
+        if not 0 <= rate <= 100:
+            raise ValidationError("GST rate must be between 0 and 100.")
+        config["gst_rate"] = rate
+        url = config["server_url"].rstrip("/")
+        if url and not url.startswith(("http://", "https://")):
+            raise ValidationError("The Tally server address must start with http:// or https://.")
+        config["server_url"] = url
+    if name == WHATSAPP:
+        config["country_code"] = "".join(ch for ch in str(config["country_code"]) if ch.isdigit())
     if name == EMAIL:
         for key, low, high in (("imap_port", 1, 65535), ("poll_minutes", 1, 1440)):
             try:
@@ -245,6 +308,16 @@ def _require_ready(name: str, config: Dict[str, Any], secrets: Dict[str, str]) -
             missing.append("the phone number ID")
         if not config["verify_token"]:
             missing.append("a verify token")
+        if config["send_invoices"]:
+            if not secrets.get("access_token"):
+                missing.append("an access token (to send invoices)")
+            if not config["invoice_template"]:
+                missing.append("the invoice template name")
+    if name == TALLY:
+        if not config["server_url"]:
+            missing.append("the Tally server address")
+        if not config["company"]:
+            missing.append("the company name")
     if name == EMAIL:
         if not config["imap_host"]:
             missing.append("the IMAP server")

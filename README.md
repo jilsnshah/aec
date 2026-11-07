@@ -754,6 +754,20 @@ multi-warehouse or batch/serial tracking.
   `quantity_reserved` and `quantity_unallocated` beside it.
 
 
+## Signing in
+
+Every page and API call needs a signed-in user, except the sign-in itself,
+`/api/health` and the WhatsApp webhook Meta calls. The first admin is created
+at startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` when no user exists yet
+(never overwritten afterwards); change the password from the account menu at
+the foot of the sidebar, which signs out every other session. Passwords are
+stored as scrypt hashes; the session is a signed, HttpOnly, SameSite=Lax
+cookie (Secure in production) lasting `SESSION_DAYS` (7). Five wrong passwords
+lock a username for five minutes.
+
+In development the Vite server forwards `/api` to the backend
+(`API_PROXY_TARGET`), so the app and the API share an origin as in production.
+
 ## Integrations: AI, WhatsApp and email
 
 **Settings → Integrations** turns customer messages into sales enquiries.
@@ -798,6 +812,40 @@ Code: `app/services/ai_agent.py` (agent and tools), `whatsapp.py` (webhook),
 `email_inbox.py` (IMAP and the background poller), `inbound.py` (the shared
 pipeline), `integration_settings.py`; API in `app/api/integrations.py`.
 
+## Tally and invoices on WhatsApp
+
+**Settings → Integrations → Tally** connects any TallyPrime. Everything is
+configurable per business: server address, company, an optional bearer token
+for a gateway, ledgers, groups for new customers/suppliers, godown, voucher
+type names, GST (none / CGST+SGST / IGST, rate and ledgers) and the seller
+details printed on invoices. **Test connection** lists the companies open in
+Tally.
+
+- **Sales order placed** → a *Sales Order* voucher and a *Sales* invoice in
+  Tally. The invoice number is Tally's own (set the Sales voucher type to
+  automatic numbering). Customers and stock items are created if missing.
+- **Purchase order placed** (not drafts) → a *Purchase Order* voucher.
+- **Invoice to the customer**: as soon as Tally has the invoice, a PDF of it
+  (Tally's number, the order's lines, GST) is uploaded to WhatsApp and sent
+  with the approved template — WhatsApp card → *Send invoices*: access token,
+  template name, language, default country code. The template needs a
+  **Document** header and a body with `{{1}}` customer, `{{2}}` invoice number,
+  `{{3}}` amount; **Check template** shows Meta's approval status.
+
+Each document's status is in the *Tally sync* log and on the order's page.
+A failure keeps Tally's or Meta's exact reason and is retried automatically
+(a few times, a little later each time) or by hand.
+
+**Connecting.** Tally has no hosted cloud API: the app talks XML to
+TallyPrime's own HTTP server (F1 → Settings → Connectivity → acts as Server,
+port 9000) — XML works on every release. Tally's server has no authentication,
+so expose that port **only to this app** (firewall / IP allow-list), or put a
+gateway in front of it and set the access token. Tally on cloud hosting works
+the same way; ask the provider to open the port to Render's outbound IPs.
+
+Code: `app/services/tally.py` (XML client), `tally_sync.py` (queue, push,
+retries, invoice), `invoice_pdf.py`, `whatsapp.py` (sending).
+
 ## Deploying to Render
 
 `render.yaml` describes one Docker web service on Render that runs the API and
@@ -814,4 +862,3 @@ app picks the psycopg driver itself.
 The service uses Render's free plan, which sleeps after 15 minutes idle (the
 first request then takes about a minute). Switch to `starter` for real use.
 
-There is no login yet: anyone with the URL can use the app.

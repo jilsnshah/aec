@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { api } from '../api/client'
+import { ApiError, api } from '../api/client'
+import { useAuth } from '../lib/auth'
 import { useTheme, type ThemeChoice } from '../lib/theme'
 import { CommandPalette } from './CommandPalette'
 import {
@@ -9,10 +10,16 @@ import {
   MenuIcon,
   SearchIcon,
   SystemThemeIcon,
+  PasswordIcon,
+  SignOutIcon,
 } from './icons'
 import { LogoMark } from './Logo'
 import { NAV, titleForPath } from './navigation'
-import { Button, Kbd } from './primitives'
+import { Button, Kbd, Notice } from './primitives'
+import { Avatar } from './collection'
+import { ActionMenu, Dialog, DialogCancel } from './overlays'
+import { Field } from './forms'
+import { useToast } from './toast'
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -138,6 +145,7 @@ export default function Layout() {
         ))}
 
         <div className="sidebar__footer">
+          <UserMenu />
           <div className="theme-switch" role="group" aria-label="Appearance">
             {THEMES.map((option) => {
               const Icon = option.icon
@@ -187,5 +195,73 @@ export default function Layout() {
         <CommandPalette onClose={() => setPaletteOpen(false)} onTheme={setTheme} />
       ) : null}
     </div>
+  )
+}
+
+/** Who is signed in, with changing the password and signing out. */
+function UserMenu() {
+  const { user, signOut } = useAuth()
+  const [changing, setChanging] = useState(false)
+  if (!user) return null
+  return (
+    <div className="user-row">
+      <Avatar name={user.username} seed={user.username} size="sm" />
+      <span className="user-row__name">{user.username}</span>
+      <ActionMenu
+        label="Account"
+        items={[
+          { label: 'Change password', icon: <PasswordIcon size={15} />, onSelect: () => setChanging(true) },
+          { label: 'Sign out', icon: <SignOutIcon size={15} />, onSelect: () => void signOut(), separatorBefore: true },
+        ]}
+      />
+      {changing ? <ChangePassword onClose={() => setChanging(false)} /> : null}
+    </div>
+  )
+}
+
+function ChangePassword({ onClose }: { onClose: () => void }) {
+  const toast = useToast()
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.auth.changePassword(current, next)
+      toast.success('Password changed', 'Other devices have been signed out.')
+      onClose()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : String(cause))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog
+      title="Change password"
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <DialogCancel />
+          <Button variant="primary" busy={busy} disabled={!current || next.length < 10} onClick={submit}>
+            Change password
+          </Button>
+        </>
+      }
+    >
+      <div className="stack">
+        {error ? <Notice kind="error">{error}</Notice> : null}
+        <Field label="Current password">
+          {(props) => <input {...props} type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} />}
+        </Field>
+        <Field label="New password" hint="At least 10 characters.">
+          {(props) => <input {...props} type="password" autoComplete="new-password" value={next} onChange={(event) => setNext(event.target.value)} />}
+        </Field>
+      </div>
+    </Dialog>
   )
 }

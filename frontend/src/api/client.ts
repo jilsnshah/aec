@@ -1,6 +1,7 @@
 import type {
   InboundMessage,
   Integration,
+  TallySync,
   IntegrationName,
   Integrations,
   Customer,
@@ -29,7 +30,7 @@ import type {
   StockReceiptResult,
 } from './types'
 
-const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(
+const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL ?? '').replace(
   /\/+$/,
   '',
 )
@@ -50,6 +51,9 @@ export class ApiError extends Error {
 }
 
 export type Query = Record<string, string | number | boolean | undefined | null>
+
+/** Fired whenever the API says nobody is signed in. */
+export const SIGNED_OUT_EVENT = 'aec:signed-out'
 
 function buildUrl(path: string, query?: Query): string {
   const url = new URL(BASE_URL + path, window.location.origin)
@@ -74,6 +78,7 @@ async function request<T>(
       method,
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: 'include',
       signal,
     })
   } catch (cause) {
@@ -87,6 +92,10 @@ async function request<T>(
   }
 
   if (response.status === 204) return undefined as T
+  // Signed out (expired, or signed out elsewhere): the app shows the sign-in page.
+  if (response.status === 401 && !path.startsWith('/api/auth/login')) {
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT))
+  }
 
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
@@ -230,6 +239,20 @@ export const api = {
     receiveStock: (body: unknown) =>
       request<StockReceiptResult>('/api/stock-receipts', { method: 'POST', body }),
   },
+  auth: {
+    me: () => request<{ username: string; is_admin: boolean }>('/api/auth/me'),
+    login: (username: string, password: string) =>
+      request<{ username: string; is_admin: boolean }>('/api/auth/login', {
+        method: 'POST',
+        body: { username, password },
+      }),
+    logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+    changePassword: (current_password: string, new_password: string) =>
+      request<{ username: string }>('/api/auth/password', {
+        method: 'POST',
+        body: { current_password, new_password },
+      }),
+  },
   integrations: {
     get: () => request<Integrations>('/api/integrations'),
     update: (
@@ -246,6 +269,15 @@ export const api = {
     messages: (query?: Query) => request<Page<InboundMessage>>('/api/integrations/messages', { query }),
     retry: (id: string) =>
       request<InboundMessage>(`/api/integrations/messages/${id}/retry`, { method: 'POST' }),
+    testTally: () =>
+      request<{ companies: string[]; company_found: boolean }>('/api/integrations/tally/test', { method: 'POST' }),
+    tallySyncs: (query?: Query) => request<Page<TallySync>>('/api/integrations/tally/syncs', { query }),
+    retryTally: (id: string) =>
+      request<TallySync>(`/api/integrations/tally/syncs/${id}/retry`, { method: 'POST' }),
+    templateStatus: () => request<{ template: string; status: string }>('/api/integrations/whatsapp/template'),
+    /** The invoice PDF for an order, once Tally has the invoice. */
+    invoiceUrl: (orderId: string) =>
+      new URL(`/api/integrations/invoices/${orderId}.pdf`, BASE_URL || window.location.origin).toString(),
   },
 }
 

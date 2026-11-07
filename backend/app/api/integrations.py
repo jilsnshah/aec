@@ -7,20 +7,24 @@ from typing import Optional
 
 import anthropic
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..errors import ValidationError
+from ..errors import NotFoundError, ValidationError
 from ..services import ai_agent
 from ..services import email_inbox
 from ..services import inbound as inbound_service
 from ..services import integration_settings as settings_service
+from ..services import invoice_pdf, tally, tally_sync
 from ..services import whatsapp as whatsapp_service
 from .pagination import PageParams, page_params
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
+#: Called by Meta, not by a signed-in user: no sign-in required. The verify
+#: token and the app-secret signature protect them instead.
+webhooks = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 
 def _all(db: Session) -> dict:
@@ -29,6 +33,7 @@ def _all(db: Session) -> dict:
         "ai": settings_service.view(settings_service.get(db, settings_service.AI)),
         "whatsapp": settings_service.view(settings_service.get(db, settings_service.WHATSAPP)),
         "email": settings_service.view(settings_service.get(db, settings_service.EMAIL)),
+        "tally": settings_service.view(settings_service.get(db, settings_service.TALLY)),
         "models": models,
         # Which providers the server holds credentials for. Never the credentials.
         "providers": sorted(
@@ -83,7 +88,7 @@ def test_ai(db: Session = Depends(get_db)):
 # --- WhatsApp -------------------------------------------------------------------
 
 
-@router.get("/whatsapp/webhook", response_class=PlainTextResponse, include_in_schema=False)
+@webhooks.get("/whatsapp/webhook", response_class=PlainTextResponse, include_in_schema=False)
 def whatsapp_verify(
     mode: Optional[str] = Query(default=None, alias="hub.mode"),
     token: Optional[str] = Query(default=None, alias="hub.verify_token"),
@@ -94,7 +99,7 @@ def whatsapp_verify(
     return PlainTextResponse(whatsapp_service.verify_subscription(db, mode, token, challenge))
 
 
-@router.post("/whatsapp/webhook", include_in_schema=False)
+@webhooks.post("/whatsapp/webhook", include_in_schema=False)
 async def whatsapp_receive(request: Request, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Meta posts every WhatsApp event here. Answer fast; the agent runs after."""
     raw = await request.body()
@@ -141,3 +146,66 @@ def retry_message(message_id: uuid.UUID, background: BackgroundTasks, db: Sessio
     message = inbound_service.retry(db, message_id)
     background.add_task(inbound_service.process, message.id)
     return inbound_service.view(message)
+
+
+# --- Tally ----------------------------------------------------------------------------
+
+
+@router.post("/tally/test", response_model=schemas.TallyTestOut)
+def tally_test(db: Session = Depends(get_db)):
+    """Reach the saved Tally server and list the companies open in it."""
+    try:
+        return tally_sync.test_connection(db)
+    except tally.TallyError as exc:
+        raise ValidationError(str(exc))
+
+
+@router.get("/tally/syncs", response_model=schemas.Page[schemas.TallySyncOut])
+def tally_syncs(
+    status: Optional[str] = Query(default=None, pattern="^(pending|synced|failed)$"),
+    entity_id: Optional[uuid.UUID] = None,
+    paging: PageParams = Depends(page_params),
+    db: Session = Depends(get_db),
+):
+    """What has been sent to Tally, newest first. ``entity_id`` narrows to one order."""
+    if entity_id:
+        rows = tally_sync.for_entity(db, entity_id)
+        return paging.page([tally_sync.view(row) for row in rows], len(rows))
+    rows = tally_sync.list_recent(db, status, paging.limit, paging.offset)
+    return paging.page([tally_sync.view(row) for row in rows], tally_sync.count(db, status))
+
+
+@router.post("/tally/syncs/{sync_id}/retry", response_model=schemas.TallySyncOut)
+def tally_retry(sync_id: uuid.UUID, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """Push a failed document again, or resend an invoice that was not sent."""
+    row = tally_sync.retry(db, sync_id)
+    background.add_task(tally_sync.process, row.id)
+    return tally_sync.view(row)
+
+
+@router.get("/whatsapp/template", response_model=schemas.TemplateStatusOut)
+def whatsapp_template(db: Session = Depends(get_db)):
+    """Whether Meta has approved the invoice template."""
+    row = settings_service.get(db, settings_service.WHATSAPP)
+    token = settings_service.credentials(row).get("access_token")
+    if not token or not row.config.get("invoice_template"):
+        raise ValidationError("Save the access token and the template name first.")
+    try:
+        status = whatsapp_service.template_status(row.config, token)
+    except whatsapp_service.SendError as exc:
+        raise ValidationError(str(exc))
+    return {"template": row.config["invoice_template"], "status": status}
+
+
+@router.get("/invoices/{order_id}.pdf", include_in_schema=False)
+def invoice_download(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    """The invoice PDF for an order, once Tally has the invoice."""
+    row = tally_sync.invoice_for_order(db, order_id)
+    if row is None:
+        raise NotFoundError("This order has no invoice in Tally yet.")
+    invoice = tally_sync.build_invoice(db, row)
+    return Response(
+        content=invoice_pdf.render(invoice),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="Invoice-{}.pdf"'.format(invoice.number.replace("/", "-"))},
+    )

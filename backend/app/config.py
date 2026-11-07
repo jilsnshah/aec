@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     #: Claude through the Anthropic API.
     anthropic_api_key: str = ""
 
+    #: The first admin, created at startup when nobody can sign in yet.
+    #: Change the password from the app afterwards; these are not re-read.
+    admin_username: str = ""
+    admin_password: str = ""
+    #: How long a sign-in lasts.
+    session_days: int = 7
+
     #: How often the email inbox may be polled at most, in seconds.
     email_poll_tick_seconds: int = 60
 

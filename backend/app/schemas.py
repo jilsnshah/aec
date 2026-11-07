@@ -1195,6 +1195,7 @@ class IntegrationsOut(BaseModel):
     ai: IntegrationOut
     whatsapp: IntegrationOut
     email: IntegrationOut
+    tally: IntegrationOut
     #: Only models the server holds credentials for.
     models: List[AiModelOut]
     #: Providers configured on the server, by name.
@@ -1232,3 +1233,35 @@ class InboundMessageOut(BaseModel):
     summary: Optional[str] = None
     error: Optional[str] = None
     processed_at: Optional[datetime] = None
+
+
+class TallySyncOut(BaseModel):
+    id: uuid.UUID
+    #: sales_order, sales_invoice or purchase_order
+    kind: str
+    entity_id: uuid.UUID
+    reference: str
+    #: pending, synced or failed
+    status: str
+    attempts: int
+    next_attempt_at: Optional[datetime] = None
+    #: Tally's number for it -- for an invoice, Tally's invoice number.
+    tally_number: Optional[str] = None
+    error: Optional[str] = None
+    synced_at: Optional[datetime] = None
+    #: Invoice to the customer on WhatsApp: none, pending, sent, failed, skipped
+    notify_status: str
+    notify_to: Optional[str] = None
+    notify_error: Optional[str] = None
+    notified_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class TallyTestOut(BaseModel):
+    companies: List[str]
+    company_found: bool
+
+
+class TemplateStatusOut(BaseModel):
+    template: str
+    status: str

@@ -28,6 +28,11 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # The first admin, created once at startup when no user exists.
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: BUSINESS_TIMEZONE

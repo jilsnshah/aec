@@ -22,7 +22,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+from app.api.auth import require_user
 from app.database import create_app_engine, get_db
+from app.models import User
 from app.main import app
 from app.models import Base, DocumentCounter
 from app.services import customers as customer_service
@@ -92,6 +94,24 @@ def db(session_factory) -> Iterator[Session]:
 
 @pytest.fixture()
 def client(session_factory) -> Iterator[TestClient]:
+    def override_get_db() -> Iterator[Session]:
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    # Signed in by default; tests/test_auth.py covers signing in for real.
+    app.dependency_overrides[require_user] = lambda: User(username="tester", is_admin=True, session_version=1)
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def anonymous_client(session_factory) -> Iterator[TestClient]:
+    """A client with no sign-in shortcut: every request goes through the guard."""
     def override_get_db() -> Iterator[Session]:
         session = session_factory()
         try:

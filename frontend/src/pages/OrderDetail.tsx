@@ -34,6 +34,7 @@ import {
   formatUnitPrice,
 } from '../lib/format'
 import { useAsync } from '../lib/useAsync'
+import { TallyStatus } from '../components/TallyStatus'
 
 type CancelMode = 'full' | 'remaining'
 
@@ -334,6 +335,7 @@ export default function OrderDetailPage() {
                 </div>
 
                 <div className="stack">
+                  <TallyStatus entityId={order.id} />
                   {money ? (
                     <Card title="Bill and profit" subtitle="Profit counts delivered goods only">
                       <CardBody>

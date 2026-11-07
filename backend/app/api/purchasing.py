@@ -4,11 +4,13 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..models import PurchaseOrderStatus
+from ..services import tally_sync
 from ..services import purchasing as purchasing_service
 from ..services import suppliers as supplier_service
 from .pagination import PageParams, page_params
@@ -92,7 +94,9 @@ def list_purchase_orders(
 
 
 @po_router.post("", response_model=schemas.PurchaseOrderOut, status_code=201)
-def create_purchase_order(payload: schemas.PurchaseOrderCreate, db: Session = Depends(get_db)):
+def create_purchase_order(
+    payload: schemas.PurchaseOrderCreate, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     """Raise a purchase order. Placed straight away, it counts as stock at once."""
     order = purchasing_service.create_purchase_order(
         db,
@@ -107,7 +111,15 @@ def create_purchase_order(payload: schemas.PurchaseOrderCreate, db: Session = De
             else None
         ),
     )
+    if order.status != PurchaseOrderStatus.DRAFT:
+        _to_tally(db, order, background)
     return purchasing_service.to_po_view(order)
+
+
+def _to_tally(db: Session, order, background: BackgroundTasks) -> None:
+    """A placed purchase order goes to Tally, after the response."""
+    for sync_id in tally_sync.queue_purchase_order(db, order):
+        background.add_task(tally_sync.process, sync_id)
 
 
 @po_router.get("/{po_id}", response_model=schemas.PurchaseOrderOut)
@@ -136,6 +148,7 @@ def _settlements(payload: Optional[schemas.PurchaseSettleRequest]):
 @po_router.post("/{po_id}/confirm", response_model=schemas.PurchaseOrderOut)
 def confirm_purchase_order(
     po_id: uuid.UUID,
+    background: BackgroundTasks,
     payload: Optional[schemas.PurchaseSettleRequest] = None,
     db: Session = Depends(get_db),
 ):
@@ -144,9 +157,9 @@ def confirm_purchase_order(
     It counts as stock at once, so it must settle customers who are short;
     ``settlements`` says who and how much.
     """
-    return purchasing_service.to_po_view(
-        purchasing_service.confirm_purchase_order(db, po_id, _settlements(payload))
-    )
+    order = purchasing_service.confirm_purchase_order(db, po_id, _settlements(payload))
+    _to_tally(db, order, background)
+    return purchasing_service.to_po_view(order)
 
 
 @po_router.post("/{po_id}/settle", response_model=schemas.PurchaseOrderOut)

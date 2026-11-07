@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => {
     server: {
       port: Number(env.VITE_PORT ?? 5173),
       strictPort: false,
+      // The app calls /api on its own origin, as it does in production, so the
+      // sign-in cookie works; the dev server forwards those calls to the API.
+      proxy: {
+        '/api': { target: env.API_PROXY_TARGET ?? 'http://localhost:8000', changeOrigin: false },
+      },
     },
   }
 })

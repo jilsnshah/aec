@@ -5,11 +5,12 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..services import tally_sync
 from ..services import enquiries as enquiry_service
 from .orders import _detail
 from .pagination import PageParams, page_params
@@ -68,7 +69,7 @@ def update_enquiry(
 
 
 @router.post("/{enquiry_id}/convert", response_model=schemas.EnquiryConversionResult, status_code=201)
-def convert_enquiry(enquiry_id: uuid.UUID, db: Session = Depends(get_db)):
+def convert_enquiry(enquiry_id: uuid.UUID, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Win the deal: create the sales order and close the enquiry.
 
     The order is created by the Phase 1 service in the same transaction, so
@@ -77,6 +78,8 @@ def convert_enquiry(enquiry_id: uuid.UUID, db: Session = Depends(get_db)):
     never creates a second order.
     """
     result = enquiry_service.convert_enquiry(db, enquiry_id)
+    for sync_id in tally_sync.queue_sales_order(db, result["order"]):
+        background.add_task(tally_sync.process, sync_id)
     return {
         "enquiry": enquiry_service.to_view(result["enquiry"]),
         "order": _detail(db, result["order"]),

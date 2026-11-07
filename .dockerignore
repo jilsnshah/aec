@@ -11,3 +11,8 @@
 !**/.env.example
 .git
 frontend/tsconfig.tsbuildinfo
+
+# Client data
+*.tar.gz
+*.zip
+100000/

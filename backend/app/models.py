@@ -1040,3 +1040,62 @@ class InboundMessage(Base):
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     enquiry: Mapped[Optional["CustomerEnquiry"]] = relationship()
+
+
+class TallySync(Base):
+    """One document pushed to Tally, and the invoice sent on from it.
+
+    ``kind`` is ``sales_order``, ``sales_invoice`` or ``purchase_order``; each
+    document is synced once per kind. ``tally_master_id`` and ``tally_number``
+    are what Tally reports back -- the invoice number on a sales invoice comes
+    from Tally. ``notify_*`` tracks sending that invoice to the customer on
+    WhatsApp.
+    """
+
+    __tablename__ = "tally_syncs"
+    __table_args__ = (
+        UniqueConstraint("kind", "entity_id", name="uq_tally_sync_kind_entity"),
+        Index("ix_tally_syncs_status", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, index=True)
+    reference: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: pending -> synced | failed (retried automatically a few times)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    tally_master_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    tally_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: For sales invoices: none | pending | sent | failed | skipped
+    notify_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    notify_to: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    notify_message_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    notify_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class User(Base):
+    """Someone who can sign in. Passwords are stored as scrypt hashes only."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: Raised when the password changes, which signs out every session.
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

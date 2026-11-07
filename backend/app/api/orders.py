@@ -4,12 +4,13 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
 from ..services import orders as order_service
+from ..services import tally_sync
 from .pagination import PageParams, page_params
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -42,13 +43,19 @@ def list_orders(
 
 
 @router.post("", response_model=schemas.OrderDetailOut, status_code=201)
-def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
+def create_order(
+    payload: schemas.OrderCreate, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     order = order_service.create_order(
         db,
         customer_id=payload.customer_id,
         lines=[item.model_dump() for item in payload.items],
         notes=payload.notes,
     )
+    # Placed: to Tally as a Sales Order and an invoice, and the invoice on to
+    # the customer -- after the response, so placing the order stays fast.
+    for sync_id in tally_sync.queue_sales_order(db, order):
+        background.add_task(tally_sync.process, sync_id)
     return _detail(db, order)
 
 

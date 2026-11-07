@@ -854,7 +854,7 @@ export interface PendingCommitments {
 
 /* ---------------------------------------------------------------- integrations */
 
-export type IntegrationName = 'ai' | 'whatsapp' | 'email'
+export type IntegrationName = 'ai' | 'whatsapp' | 'email' | 'tally'
 
 export interface IntegrationCredential {
   /** Whether it is saved. The value itself is never sent to the browser. */
@@ -882,6 +882,7 @@ export interface Integrations {
   ai: Integration
   whatsapp: Integration
   email: Integration
+  tally: Integration
   /** Only the models the server holds credentials for. */
   models: AiModel[]
   /** Providers configured on the server, by name. Never their credentials. */
@@ -904,4 +905,26 @@ export interface InboundMessage {
   summary: string | null
   error: string | null
   processed_at: string | null
+}
+
+export type TallyKind = 'sales_order' | 'sales_invoice' | 'purchase_order'
+
+/** One document pushed to Tally, and the invoice sent on from it. */
+export interface TallySync {
+  id: string
+  kind: TallyKind
+  entity_id: string
+  reference: string
+  status: 'pending' | 'synced' | 'failed'
+  attempts: number
+  next_attempt_at: string | null
+  /** Tally's number for it; on an invoice, Tally's invoice number. */
+  tally_number: string | null
+  error: string | null
+  synced_at: string | null
+  notify_status: 'none' | 'pending' | 'sent' | 'failed' | 'skipped'
+  notify_to: string | null
+  notify_error: string | null
+  notified_at: string | null
+  created_at: string
 }

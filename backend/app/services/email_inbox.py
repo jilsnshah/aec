@@ -14,7 +14,6 @@ import html
 import imaplib
 import logging
 import re
-import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
@@ -24,7 +23,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..errors import ValidationError
 from . import inbound
 from . import integration_settings as settings_service
@@ -178,31 +176,3 @@ def poll_once() -> int:
     for message_id in ids:
         inbound.process(message_id)
     return len(ids)
-
-
-class Poller:
-    """Reads the inbox in the background while the server runs."""
-
-    def __init__(self) -> None:
-        self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-
-    def start(self) -> None:
-        if self._thread is not None:
-            return
-        self._thread = threading.Thread(target=self._run, name="email-poller", daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-
-    def _run(self) -> None:
-        tick = max(10, get_settings().email_poll_tick_seconds)
-        while not self._stop.wait(tick):
-            try:
-                poll_once()
-            except Exception:
-                logger.exception("Email poller tick failed")
-
-
-poller = Poller()
