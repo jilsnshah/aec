@@ -265,3 +265,62 @@ def test_the_template_approval_can_be_checked(client, fakes):
     send_invoices(client)
     assert client.get("/api/integrations/whatsapp/template").json() == {
         "template": "invoice_pdf", "status": "APPROVED (en)"}
+
+
+class TallyMasters(FakeTally):
+    """A Tally company with stock items and parties to import."""
+
+    def _export(self, root, report):
+        if report != "AECImport":
+            return super()._export(root, report)
+        object_type = root.findtext(".//COLLECTION/TYPE")
+        formula = root.findtext(".//SYSTEM") or ""
+        if object_type == "Stock Item":
+            return self._reply(
+                '<STOCKITEM NAME="OPC Cement 53"><NAME.LIST><NAME>OPC Cement 53</NAME><NAME>OPC53</NAME></NAME.LIST>'
+                "<PARENT>Cement</PARENT><BASEUNITS>Bags</BASEUNITS><CLOSINGBALANCE> 120 Bags</CLOSINGBALANCE>"
+                "<CLOSINGRATE>340.00/Bags</CLOSINGRATE><CLOSINGVALUE>-40800.00</CLOSINGVALUE>"
+                "<MRPDETAILS.LIST><MRPRATE>420.00/Bags</MRPRATE></MRPDETAILS.LIST></STOCKITEM>"
+                '<STOCKITEM NAME="Red Brick"><BASEUNITS>Nos</BASEUNITS><CLOSINGBALANCE>-5 Nos</CLOSINGBALANCE></STOCKITEM>'
+            )
+        if object_type == "Ledger" and "Debtors" in formula:
+            return self._reply(
+                '<LEDGER NAME="Ravi Builders"><PARENT>Sundry Debtors</PARENT><LEDGERMOBILE>+91 98765 43210</LEDGERMOBILE>'
+                "<EMAIL>ravi@builders.test</EMAIL><ADDRESS.LIST><ADDRESS>Plot 4</ADDRESS><ADDRESS>Ahmedabad</ADDRESS></ADDRESS.LIST>"
+                "<PARTYGSTIN>24ABCDE1234F1Z5</PARTYGSTIN></LEDGER>"
+            )
+        if object_type == "Ledger":
+            return self._reply('<LEDGER NAME="Shree Depot"><PARENT>Sundry Creditors</PARENT><LEDGERPHONE>079 2222 3333</LEDGERPHONE></LEDGER>')
+        if object_type == "Voucher":
+            return self._reply("<VOUCHER><VOUCHERTYPENAME>Sales</VOUCHERTYPENAME></VOUCHER>" * 3 +
+                               "<VOUCHER><VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME></VOUCHER>")
+        raise AssertionError(object_type)
+
+
+def test_importing_masters_from_tally(db, client, monkeypatch):
+    from app.services import tally_import
+
+    fake = TallyMasters()
+    monkeypatch.setattr(tally, "client_factory", lambda: httpx.Client(transport=httpx.MockTransport(fake)))
+    source = tally.TallyClient(TALLY_URL, "Labdhi Exim")
+
+    preview = tally_import.run(db, source, dry_run=True)
+    assert (preview.products, preview.customers, preview.suppliers) == (2, 1, 1)
+    assert preview.vouchers == {"Sales": 3, "Purchase": 1}
+    assert client.get("/api/products").json()["total"] == 0  # a dry run writes nothing
+
+    report = tally_import.run(db, source)
+    assert (report.products, report.customers, report.suppliers, report.problems) == (2, 1, 1, [])
+    cement = client.get("/api/products", params={"search": "OPC Cement"}).json()["items"][0]
+    assert cement["sku"] == "OPC53" and cement["unit_of_measure"] == "Bags"
+    assert D(cement["physical_stock"]) == 120 and D(cement["mrp"]) == D("420")
+    assert D(cement["stock_value"]) == D("40800.00")  # at Tally's closing rate
+    brick = client.get("/api/products", params={"search": "Red Brick"}).json()["items"][0]
+    assert D(brick["physical_stock"]) == 0  # negative stock in Tally is not carried over
+    ravi = client.get("/api/customers", params={"search": "Ravi"}).json()["items"][0]
+    assert ravi["phone"] == "+91 98765 43210" and ravi["address"] == "Plot 4, Ahmedabad"
+    assert "GSTIN 24ABCDE1234F1Z5" in ravi["notes"]
+    assert client.get("/api/suppliers", params={"search": "Shree"}).json()["items"][0]["phone"] == "079 2222 3333"
+
+    again = tally_import.run(db, source)
+    assert (again.products, again.customers, again.suppliers, again.skipped) == (0, 0, 0, 4)
