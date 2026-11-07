@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Leftover local SQLite files from before the move to PostgreSQL
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal

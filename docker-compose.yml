@@ -1,0 +1,26 @@
+# Local development database.
+#
+# NOT a production configuration: the password is a placeholder and the port is
+# published to the host for convenience. In production run PostgreSQL as a
+# managed service or with its own secrets, backups and TLS.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aec-postgres
+    environment:
+      POSTGRES_USER: aec
+      POSTGRES_PASSWORD: aec_dev_password
+      POSTGRES_DB: aec
+    ports:
+      - "5432:5432"
+    volumes:
+      - aec-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aec -d aec"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  aec-postgres-data:

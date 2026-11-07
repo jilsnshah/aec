@@ -1,0 +1,43 @@
+# Render Blueprint: one web service (API + web app) and its PostgreSQL database.
+# Deploy with "New > Blueprint" in the Render dashboard, pointing at this repo.
+#
+# Free plans, for trying it out: the service sleeps after 15 minutes idle and
+# the free database expires after 30 days. For real use switch the web plan to
+# "starter" and the database to "basic-256mb".
+databases:
+  - name: aec-db
+    databaseName: aec
+    user: aec
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: aec
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aec-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: BUSINESS_TIMEZONE
+        value: Asia/Kolkata
+      - key: LOG_LEVEL
+        value: INFO
+      # The web app is served from the same origin, so no other origins.
+      - key: CORS_ORIGINS
+        value: ""
+      # Small Postgres plans allow few connections; one process needs few.
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: DB_MAX_OVERFLOW
+        value: "5"
