@@ -382,7 +382,12 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Update Unit
+         * @description Change a unit's name, conversion, or whether it is used for sales and purchases.
+         *     Lines already written keep the conversion they were made with.
+         */
+        put: operations["update_unit_api_products__product_id__units__unit_id__put"];
         post?: never;
         /** Remove Unit */
         delete: operations["remove_unit_api_products__product_id__units__unit_id__delete"];
@@ -442,13 +447,13 @@ export interface paths {
         };
         /**
          * List Groups
-         * @description Customer groups with their rules, price list and member count.
+         * @description Customer groups with their rules, prices and member count.
          */
         get: operations["list_groups_api_customer_groups_get"];
         put?: never;
         /**
          * Create Group
-         * @description Create a smart group: rules (all or any must match) and an optional price list. Members are calculated at once.
+         * @description Create a group: members by hand and/or rules, and the prices members get (discount_percent and product items).
          */
         post: operations["create_group_api_customer_groups_post"];
         delete?: never;
@@ -509,7 +514,10 @@ export interface paths {
          * @description A group with its members (rule, manual or excluded).
          */
         get: operations["get_group_api_customer_groups__group_id__get"];
-        /** Update Group */
+        /**
+         * Update Group
+         * @description Change a group's name, rules, members' discount or product prices.
+         */
         put: operations["update_group_api_customer_groups__group_id__put"];
         post?: never;
         /** Delete Group */
@@ -548,7 +556,7 @@ export interface paths {
         };
         /**
          * Customer Pricing
-         * @description A customer's flat discount, own product prices, price list and groups.
+         * @description A customer's flat discount, own product prices and groups (with how they joined).
          */
         get: operations["customer_pricing_api_customers__customer_id__pricing_get"];
         /**
@@ -575,7 +583,7 @@ export interface paths {
         /**
          * Apply Prices
          * @description Set every line of an open enquiry to the customer's best price (own
-         *     prices, discount, price list, groups); says what changed.
+         *     prices, discount, groups); says what changed.
          */
         post: operations["apply_prices_api_enquiries__enquiry_id__apply_prices_post"];
         delete?: never;
@@ -3149,6 +3157,11 @@ export interface components {
              * @default 0
              */
             discount_percent: number;
+            /**
+             * Unit
+             * @description Unit the quantity and price are in; omit for the base unit.
+             */
+            unit?: string | null;
         };
         /** CommitmentCustomerSummary */
         CommitmentCustomerSummary: {
@@ -3793,6 +3806,8 @@ export interface components {
              * @default 0
              */
             discount_percent: number;
+            /** Unit */
+            unit?: string | null;
         };
         /** EmailCheckOut */
         EmailCheckOut: {
@@ -3868,6 +3883,22 @@ export interface components {
             line_total: string;
             /** Discount Amount */
             discount_amount: string;
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Unit Name
+             * @default
+             */
+            unit_name: string;
+            /**
+             * Unit Factor
+             * @default 1
+             */
+            unit_factor: string;
+            /** Unit Quantity */
+            unit_quantity?: string | null;
+            /** Unit Rate */
+            unit_rate?: string | null;
         };
         /** EnquiryLineCreate */
         EnquiryLineCreate: {
@@ -3876,8 +3907,16 @@ export interface components {
              * Format: uuid
              */
             product_id: string;
-            /** Quantity */
+            /**
+             * Quantity
+             * @description In ``unit`` if given, else in the product's base unit.
+             */
             quantity: number | string;
+            /**
+             * Unit
+             * @description Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.
+             */
+            unit?: string | null;
             /**
              * Discount Percent
              * @description Discount for this product, 0-100.
@@ -4248,17 +4287,50 @@ export interface components {
             name?: string | null;
             /** Description */
             description?: string | null;
-            /** Rules */
+            /**
+             * Rules
+             * @description Empty for a group picked by hand only.
+             */
             rules?: components["schemas"]["Rule"][] | null;
             /**
              * Match
              * @description all or any
              */
             match?: string | null;
-            /** Price List Id */
+            /**
+             * Discount Percent
+             * @description Members' discount off MRP on everything; empty for none.
+             */
+            discount_percent?: string | null;
+            /**
+             * Items
+             * @description Members' product prices: fixed price or discount_percent, from min_quantity (replaces them all).
+             */
+            items?: components["schemas"]["GroupPriceItem"][] | null;
+            /**
+             * Price List Id
+             * @description Legacy; prefer discount_percent and items.
+             */
             price_list_id?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** GroupPriceItem */
+        GroupPriceItem: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Min Quantity
+             * @default 0
+             */
+            min_quantity: string | null;
+            /** Price */
+            price?: string | null;
+            /** Discount Percent */
+            discount_percent?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4741,6 +4813,22 @@ export interface components {
             /** Unit Price Net */
             unit_price_net: string;
             product: components["schemas"]["ProductRef"];
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Unit Name
+             * @default
+             */
+            unit_name: string;
+            /**
+             * Unit Factor
+             * @default 1
+             */
+            unit_factor: string;
+            /** Unit Quantity */
+            unit_quantity?: string | null;
+            /** Unit Rate */
+            unit_rate?: string | null;
         };
         /** OrderLineCreate */
         OrderLineCreate: {
@@ -4749,13 +4837,21 @@ export interface components {
              * Format: uuid
              */
             product_id: string;
-            /** Quantity Ordered */
+            /**
+             * Quantity Ordered
+             * @description In ``unit`` if given, else in the product's base unit.
+             */
             quantity_ordered: number | string;
             /**
              * Unit Price
-             * @description Price per unit before discount. Defaults to the product MRP.
+             * @description Price per unit (per ``unit`` if given) before discount. Defaults to the product MRP.
              */
             unit_price?: number | string | null;
+            /**
+             * Unit
+             * @description Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.
+             */
+            unit?: string | null;
             /**
              * Discount Percent
              * @description Line discount as a percentage.
@@ -5369,6 +5465,45 @@ export interface components {
              * @description Days from ordering to arrival.
              */
             lead_time_days?: number | null;
+            /** Brand */
+            brand?: string | null;
+            /**
+             * Hsn Code
+             * @description HSN code for GST.
+             */
+            hsn_code?: string | null;
+            /**
+             * Gst Rate
+             * @description GST % for this product; empty uses Settings.
+             */
+            gst_rate?: number | string | null;
+            /**
+             * Weight Kg
+             * @description Weight of one base unit in kg.
+             */
+            weight_kg?: number | string | null;
+            /**
+             * Specs
+             * @description Further details as [{name, value}]: grade, size, colour...
+             */
+            specs?: {
+                [key: string]: string;
+            }[] | null;
+            /**
+             * Sales Unit
+             * @description Unit sales lines start in; empty for the base unit.
+             */
+            sales_unit?: string | null;
+            /**
+             * Purchase Unit
+             * @description Unit purchase lines start in; empty for the base unit.
+             */
+            purchase_unit?: string | null;
+            /**
+             * Whole Units
+             * @description Only whole base units (no 2.5 bags).
+             */
+            whole_units?: boolean | null;
         };
         /** ProductInventoryOut */
         ProductInventoryOut: {
@@ -5412,6 +5547,31 @@ export interface components {
             preferred_supplier_name?: string | null;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Brand */
+            brand?: string | null;
+            /** Hsn Code */
+            hsn_code?: string | null;
+            /** Gst Rate */
+            gst_rate?: string | null;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Specs */
+            specs?: {
+                [key: string]: unknown;
+            }[];
+            /** Sales Unit */
+            sales_unit?: string | null;
+            /** Purchase Unit */
+            purchase_unit?: string | null;
+            /**
+             * Whole Units
+             * @default false
+             */
+            whole_units: boolean;
+            /** Units */
+            units?: {
+                [key: string]: unknown;
+            }[];
             /** Physical Stock */
             physical_stock: string;
             /**
@@ -5504,6 +5664,31 @@ export interface components {
             preferred_supplier_name?: string | null;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Brand */
+            brand?: string | null;
+            /** Hsn Code */
+            hsn_code?: string | null;
+            /** Gst Rate */
+            gst_rate?: string | null;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Specs */
+            specs?: {
+                [key: string]: unknown;
+            }[];
+            /** Sales Unit */
+            sales_unit?: string | null;
+            /** Purchase Unit */
+            purchase_unit?: string | null;
+            /**
+             * Whole Units
+             * @default false
+             */
+            whole_units: boolean;
+            /** Units */
+            units?: {
+                [key: string]: unknown;
+            }[];
             /** Physical Stock */
             physical_stock: string;
             /**
@@ -5599,6 +5784,45 @@ export interface components {
              * @description Days from ordering to arrival.
              */
             lead_time_days?: number | null;
+            /** Brand */
+            brand?: string | null;
+            /**
+             * Hsn Code
+             * @description HSN code for GST.
+             */
+            hsn_code?: string | null;
+            /**
+             * Gst Rate
+             * @description GST % for this product; empty uses Settings.
+             */
+            gst_rate?: number | string | null;
+            /**
+             * Weight Kg
+             * @description Weight of one base unit in kg.
+             */
+            weight_kg?: number | string | null;
+            /**
+             * Specs
+             * @description Further details as [{name, value}]: grade, size, colour...
+             */
+            specs?: {
+                [key: string]: string;
+            }[] | null;
+            /**
+             * Sales Unit
+             * @description Unit sales lines start in; empty for the base unit.
+             */
+            sales_unit?: string | null;
+            /**
+             * Purchase Unit
+             * @description Unit purchase lines start in; empty for the base unit.
+             */
+            purchase_unit?: string | null;
+            /**
+             * Whole Units
+             * @description Only whole base units (no 2.5 bags).
+             */
+            whole_units?: boolean | null;
         };
         /** PublicEnquiryIn */
         PublicEnquiryIn: {
@@ -5658,6 +5882,22 @@ export interface components {
              */
             product_id: string;
             product: components["schemas"]["ProductRef"];
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Unit Name
+             * @default
+             */
+            unit_name: string;
+            /**
+             * Unit Factor
+             * @default 1
+             */
+            unit_factor: string;
+            /** Unit Quantity */
+            unit_quantity?: string | null;
+            /** Unit Rate */
+            unit_rate?: string | null;
             /** Line Number */
             line_number: number;
             /** Quantity Ordered */
@@ -5695,13 +5935,22 @@ export interface components {
              * Format: uuid
              */
             product_id: string;
-            /** Quantity Ordered */
+            /**
+             * Quantity Ordered
+             * @description In ``unit`` if given, else in the product's base unit.
+             */
             quantity_ordered: number | string;
             /**
              * Unit Cost
+             * @description Cost per unit (per ``unit`` if given).
              * @default 0
              */
             unit_cost: number | string;
+            /**
+             * Unit
+             * @description Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.
+             */
+            unit?: string | null;
             /** Notes */
             notes?: string | null;
         };
@@ -6837,6 +7086,18 @@ export interface components {
              * @description How many base units one of these holds, e.g. 20 (bags per tonne).
              */
             factor: string;
+            /**
+             * For Sales
+             * @description Offered on quotes and sales orders.
+             * @default true
+             */
+            for_sales: boolean;
+            /**
+             * For Purchase
+             * @description Offered on purchase orders.
+             * @default true
+             */
+            for_purchase: boolean;
         };
         /** UserRef */
         UserRef: {
@@ -7528,6 +7789,42 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unit_api_products__product_id__units__unit_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -13,7 +13,7 @@ import { useAction } from '@/api/queries'
 import type { OrderDetailOut } from '@/api/types'
 import { fmtMoney, fmtQty, n } from '@/lib/format'
 import { Button, Facts, Field, Notice } from '@/ui/core'
-import { LineEditor, lineErrors, lineTotal, newLine, useCustomers, useProducts, type Line } from '@/ui/lines'
+import { LineEditor, baseQty, factorOf, lineErrors, lineTotal, lineUnit, newLine, unitParam, useCustomers, useProducts, type Line } from '@/ui/lines'
 import { Sheet } from '@/ui/overlays'
 import { Picker } from '@/ui/pickers'
 
@@ -44,26 +44,26 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
     if (repeatFrom) {
       api.orders.get(repeatFrom).then((order) => {
         setCustomer(order.customer_id)
-        setLines(order.items.map((item) => newLine({ product_id: item.product_id, quantity: String(n(item.quantity_ordered) - n(item.quantity_cancelled)), discount: String(n(item.discount_percent)) })))
+        setLines(order.items.map((item) => newLine({ product_id: item.product_id, unit: lineUnit(item), quantity: String((n(item.quantity_ordered) - n(item.quantity_cancelled)) / n(item.unit_factor ?? 1)), discount: String(n(item.discount_percent)) })))
         setNotes(`Repeat of ${order.order_number}`)
       })
     }
   }, [open, repeatFrom]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const errors = [...(customer ? [] : ['Choose a customer.']), ...lineErrors(lines, 'sale')]
+  const errors = [...(customer ? [] : ['Choose a customer.']), ...lineErrors(lines, 'sale', products.byId)]
   const chosen = lines.filter((line) => line.product_id)
-  const subtotal = chosen.reduce((sum, line) => sum + n(line.quantity) * n(products.byId.get(line.product_id)?.mrp), 0)
+  const subtotal = chosen.reduce((sum, line) => sum + baseQty(line, products.byId.get(line.product_id)) * n(products.byId.get(line.product_id)?.mrp), 0)
   const total = chosen.reduce((sum, line) => sum + lineTotal(line, products.byId.get(line.product_id), 'sale'), 0)
-  const short = chosen.reduce((sum, line) => sum + Math.max(0, n(line.quantity) - Math.max(0, n(products.byId.get(line.product_id)?.stock))), 0)
+  const short = chosen.reduce((sum, line) => sum + Math.max(0, baseQty(line, products.byId.get(line.product_id)) - Math.max(0, n(products.byId.get(line.product_id)?.stock))), 0)
 
-  const draft = useDebounced(JSON.stringify({ customer, lines: chosen.map((line) => [line.product_id, line.quantity, line.discount]) }), 400)
+  const draft = useDebounced(JSON.stringify({ customer, lines: chosen.map((line) => [line.product_id, line.quantity, line.unit, line.discount]) }), 400)
   const check = useQuery({
     queryKey: ['records', 'order-check', draft],
     enabled: open && chosen.length > 0,
     queryFn: () =>
       records.checkOrder({
         customer_id: customer || null,
-        items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) })),
+        items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), unit: unitParam(line), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) * factorOf(line, products.byId.get(line.product_id)) })),
       }),
   })
   const gate = useQuery({
@@ -72,7 +72,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
     queryFn: () =>
       controlsApi.check({
         customer_id: customer || null,
-        items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) })),
+        items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), unit: unitParam(line), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) * factorOf(line, products.byId.get(line.product_id)) })),
       }),
   })
   const holds = gate.data?.holds ?? []
@@ -84,7 +84,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
     setTried(true)
     if (errors.length > 0) return
     create.mutate(
-      { approval, body: { customer_id: customer, contact_id: contactId || null, delivery_address_id: siteId || null, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, discount_percent: line.discount || '0', unit_price: null })) } },
+      { approval, body: { customer_id: customer, contact_id: contactId || null, delivery_address_id: siteId || null, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, unit: unitParam(line), discount_percent: line.discount || '0', unit_price: null })) } },
       {
         onSuccess: (order) => {
           onClose()

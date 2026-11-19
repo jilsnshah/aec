@@ -7,7 +7,7 @@ import type { CommitmentRow, PurchaseOrderOut } from '@/api/types'
 import { fmtMoney, fmtQty, n } from '@/lib/format'
 import { AllocationEditor, useAllocation, type Claimant } from '@/ui/allocate'
 import { Button, Facts, Field, Notice } from '@/ui/core'
-import { LineEditor, lineErrors, newLine, useProducts, useSuppliers, type Line } from '@/ui/lines'
+import { LineEditor, baseQty, lineErrors, lineUnit, newLine, unitParam, useProducts, useSuppliers, type Line } from '@/ui/lines'
 import { Sheet } from '@/ui/overlays'
 import { Picker } from '@/ui/pickers'
 
@@ -64,7 +64,7 @@ export function PurchaseSheet({
     if (!open) return
     if (editing) {
       setSupplier(editing.supplier_id)
-      setLines(editing.items.map((item) => newLine({ product_id: item.product_id, quantity: String(n(item.quantity_ordered)), cost: String(n(item.unit_cost)) })))
+      setLines(editing.items.map((item) => newLine({ product_id: item.product_id, unit: lineUnit(item), quantity: String(n(item.unit_quantity ?? item.quantity_ordered)), cost: String(n(item.unit_rate ?? item.unit_cost)) })))
       setExpected(editing.expected_delivery_date ?? '')
       setNotes(editing.notes ?? '')
     } else {
@@ -91,7 +91,7 @@ export function PurchaseSheet({
   /** Per product: how much this purchase must settle, and who could get it. */
   const needs = useMemo(() => {
     const byProduct = new Map<string, number>()
-    chosen.forEach((line) => byProduct.set(line.product_id, (byProduct.get(line.product_id) ?? 0) + n(line.quantity)))
+    chosen.forEach((line) => byProduct.set(line.product_id, (byProduct.get(line.product_id) ?? 0) + baseQty(line, products.byId.get(line.product_id))))
     return [...byProduct.entries()]
       .map(([productId, quantity]) => {
         const claimants = claimantsFrom((short.data?.rows ?? []).filter((row) => row.product_id === productId))
@@ -100,13 +100,13 @@ export function PurchaseSheet({
         return { productId, name: product?.name ?? '', unit: product?.unit_of_measure ?? '', claimants, required: Math.min(quantity, shortTotal) }
       })
       .filter((need) => need.required > 0)
-  }, [JSON.stringify(chosen.map((line) => [line.product_id, line.quantity])), short.data, products.items.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(chosen.map((line) => [line.product_id, line.quantity, line.unit])), short.data, products.items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allSettled = needs.every((need) => settlements[need.productId]?.balanced)
-  const errors = [...(supplier ? [] : ['Choose a supplier.']), ...lineErrors(lines, 'purchase')]
+  const errors = [...(supplier ? [] : ['Choose a supplier.']), ...lineErrors(lines, 'purchase', products.byId)]
   const body = () => ({
     supplier_id: supplier,
-    items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, unit_cost: line.cost, notes: null })),
+    items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, unit: unitParam(line), unit_cost: line.cost, notes: null })),
     expected_delivery_date: expected || null,
     notes: notes || null,
   })
@@ -140,7 +140,7 @@ export function PurchaseSheet({
             <Facts
               items={[
                 { label: 'Lines', value: chosen.length },
-                { label: 'Units', value: fmtQty(chosen.reduce((sum, line) => sum + n(line.quantity), 0)) },
+                { label: 'Units', value: fmtQty(chosen.reduce((sum, line) => sum + baseQty(line, products.byId.get(line.product_id)), 0)) },
                 { label: 'Value', value: fmtMoney(total), strong: true },
               ]}
             />

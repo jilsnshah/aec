@@ -332,7 +332,7 @@ function ProductInspector({ id }: { id: string }) {
         eyebrow={`Product · ${data.sku}${data.is_active ? '' : ' · archived'}`}
         title={data.name}
         badges={stock < 0 ? <Badge tone="bad" dot>Short {fmtQty(-stock)}</Badge> : stock === 0 ? <Badge tone="warn" dot>None free</Badge> : null}
-        meta={`Sold in ${data.unit_of_measure} · MRP ${fmtMoney(data.mrp)}${data.description ? ` · ${data.description}` : ''}`}
+        meta={`${data.brand ? `${data.brand} · ` : ''}Stocked in ${data.unit_of_measure}${(data.units ?? []).length > 1 ? ` · also ${(data.units as { name: string }[]).slice(1).map((u) => u.name).join(', ')}` : ''} · MRP ${fmtMoney(data.mrp)}`}
         actions={
           <>
             <Button icon={<PackagePlus size={14} />} onClick={() => navigate(`/stock-in?product=${id}`)}>
@@ -392,6 +392,7 @@ function ProductInspector({ id }: { id: string }) {
         ]}
       >
         <TabPanel value="overview">
+          <ProductAbout data={data} />
           {intel ? <Intelligence row={intel} onBuy={() => navigate(buyLink([intel]))} onAsk={() => ask(`Analyse product ${data.name} (id ${id}): demand trend, stock position, ageing, profitability and enquiries. Should we buy, hold or clear it, and how much?`)} /> : null}
           <Section title="Warehouse over time" hint="Physical quantity after each movement">
             <StockHistory data={data} />
@@ -730,5 +731,38 @@ function PricesTab({ id }: { id: string }) {
         </div>
       </div>
     </div>
+  )
+}
+
+/** What the product is: description, details, units, tax. The AI describes it from the same fields. */
+function ProductAbout({ data }: { data: ProductInventoryOut }) {
+  const specs = (data.specs ?? []) as { name: string; value: string }[]
+  const units = (data.units ?? []) as { name: string; factor: number; base: boolean }[]
+  const facts = [
+    data.brand ? ['Brand', data.brand] : null,
+    data.category ? ['Category', data.category] : null,
+    data.hsn_code ? ['HSN', data.hsn_code] : null,
+    data.gst_rate != null ? ['GST', `${n(data.gst_rate)}%`] : null,
+    data.weight_kg != null ? ['Weight', `${n(data.weight_kg)} kg per ${data.unit_of_measure}`] : null,
+    ...units.filter((u) => !u.base).map((u) => [`1 ${u.name}`, `${u.factor} ${data.unit_of_measure}`]),
+    ...specs.map((x) => [x.name, x.value]),
+  ].filter(Boolean) as string[][]
+  if (!data.description && !facts.length) return null
+  return (
+    <Section title="About this product" hint="The AI describes it to customers from this">
+      <div className="card space-y-3 p-4">
+        {data.description ? <p className="text-[13.5px] leading-relaxed">{data.description}</p> : null}
+        {facts.length ? (
+          <dl className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-4 gap-y-2">
+            {facts.map(([label, value]) => (
+              <div key={label + value}>
+                <dt className="text-[11px] text-fg-3">{label}</dt>
+                <dd className="text-[13px] font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+    </Section>
   )
 }

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Barcode, MessageSquareQuote, Ruler, Tag, Trash2, Truck } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { useAction } from '@/api/queries'
-import { parties } from '@/api/parties'
+import { api } from '@/api/endpoints'
+import { parties, type ProductNames } from '@/api/parties'
 import { cn } from '@/lib/cn'
 import { Badge, Button, Empty, Notice, Spinner } from '@/ui/core'
 import { useSuppliers } from '@/ui/lines'
@@ -21,11 +22,8 @@ export function ProductNamesTab({ id, name }: { id: string; name: string }) {
   const [kind, setKind] = useState<(typeof KINDS)[number]['value']>('alias')
   const [value, setValue] = useState('')
   const [supplier, setSupplier] = useState('')
-  const [unit, setUnit] = useState({ name: '', factor: '' })
   const add = useAction(() => parties.addAlias(id, { kind, value, supplier_id: kind === 'supplier_code' ? supplier : null }), { success: 'Added', quiet: true })
   const remove = useAction((aliasId: string) => parties.removeAlias(id, aliasId))
-  const addUnit = useAction(() => parties.addUnit(id, unit), { success: 'Unit added', quiet: true })
-  const removeUnit = useAction((unitId: string) => parties.removeUnit(id, unitId))
   if (data.isPending) return <Spinner />
   if (!data.data) return <Empty title="Could not load" />
   const d = data.data
@@ -90,43 +88,115 @@ export function ProductNamesTab({ id, name }: { id: string; name: string }) {
           </div>
         </div>
       </section>
-      <section className="card p-4">
-        <div className="flex items-center gap-2.5">
-          <span className="icon-disc size-7">
-            <Ruler size={14} />
-          </span>
-          <div>
-            <div className="text-[13.5px] font-semibold">Units</div>
-            <div className="text-[11.5px] text-fg-3">
-              Stock is kept in {d.base_unit}. Other units say how many {d.base_unit} they hold, so "2 tonnes" can be read as the right number of {d.base_unit}.
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 space-y-1.5">
-          <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-[13px]">
-            <b>1 {d.base_unit}</b> <Badge tone="sky">Base unit</Badge>
-          </div>
-          {d.units.map((u) => (
-            <div key={u.id} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-[13px]">
-              <b>1 {u.name}</b> = {u.factor} {d.base_unit}
-              <span className="flex-1" />
-              <button className="grid size-7 place-items-center rounded-full text-fg-3 hover:bg-white/8" aria-label={`Remove ${u.name}`} onClick={() => removeUnit.mutate(u.id)}>
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
-        </div>
-        {addUnit.error ? <div className="mt-2"><Notice tone="bad">{errorText(addUnit.error)}</Notice></div> : null}
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
-          1
-          <input className="field field-sm w-[120px]" placeholder="tonne" value={unit.name} onChange={(e) => setUnit({ ...unit, name: e.target.value })} />=
-          <input className="field field-sm w-[90px] text-right" inputMode="decimal" placeholder="20" value={unit.factor} onChange={(e) => setUnit({ ...unit, factor: e.target.value })} />
-          {d.base_unit}
-          <Button small busy={addUnit.isPending} disabled={!unit.name.trim() || !unit.factor} onClick={() => addUnit.mutate(undefined, { onSuccess: () => setUnit({ name: '', factor: '' }) })}>
-            Add unit
-          </Button>
-        </div>
-      </section>
+      <UnitsCard id={id} d={d} />
     </div>
+  )
+}
+
+const PRESETS = ['tonne', 'quintal', 'kg', 'bag', 'box', 'bundle', 'dozen', 'piece', 'brass', 'cft', 'sqft', 'litre', 'metre', 'roll', 'packet', 'trolley', 'truck']
+
+/** The units a product is counted, bought and sold in. */
+function UnitsCard({ id, d }: { id: string; d: ProductNames }) {
+  const [unit, setUnit] = useState({ name: '', factor: '' })
+  const addUnit = useAction(() => parties.addUnit(id, unit), { success: 'Unit added', quiet: true })
+  const removeUnit = useAction((unitId: string) => parties.removeUnit(id, unitId))
+  const toggle = useAction((u: ProductNames['units'][number] & { patch: Partial<{ for_sales: boolean; for_purchase: boolean }> }) =>
+    parties.updateUnit(id, u.id, { name: u.name, factor: String(u.factor), for_sales: u.for_sales, for_purchase: u.for_purchase, ...u.patch }),
+  )
+  const product = useAction((body: { sales_unit?: string | null; purchase_unit?: string | null; whole_units?: boolean }) => api.products.update(id, body), { success: 'Saved' })
+  const single = (x: string) => x.toLowerCase().replace(/(es|s)$/, '')
+  const used = new Set([d.base_unit, ...d.units.map((u) => u.name)].map(single))
+  return (
+    <section className="card p-4">
+      <div className="flex items-center gap-2.5">
+        <span className="icon-disc size-7">
+          <Ruler size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-semibold">Units</div>
+          <div className="text-[11.5px] text-fg-3">
+            Stock is kept in {d.base_unit}. Add any unit it is bought or sold in and how many {d.base_unit} it holds; orders, quotes and purchase orders can then use it, and the AI understands it.
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="grid-table min-w-[560px]">
+          <thead>
+            <tr>
+              <th>Unit</th>
+              <th>Holds</th>
+              <th className="text-center">Sell in it</th>
+              <th className="text-center">Buy in it</th>
+              <th className="text-center">Default for sales</th>
+              <th className="text-center">Default for purchases</th>
+              <th className="w-[40px]" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="font-semibold">
+                {d.base_unit} <Badge tone="sky">Base</Badge>
+              </td>
+              <td className="text-fg-3">1 {d.base_unit}</td>
+              <td className="text-center">✓</td>
+              <td className="text-center">✓</td>
+              <td className="text-center">
+                <input type="radio" name={`sale-${id}`} aria-label={`Sell in ${d.base_unit} by default`} checked={!d.sales_unit} onChange={() => product.mutate({ sales_unit: null })} />
+              </td>
+              <td className="text-center">
+                <input type="radio" name={`buy-${id}`} aria-label={`Buy in ${d.base_unit} by default`} checked={!d.purchase_unit} onChange={() => product.mutate({ purchase_unit: null })} />
+              </td>
+              <td />
+            </tr>
+            {d.units.map((u) => (
+              <tr key={u.id}>
+                <td className="font-semibold">{u.name}</td>
+                <td className="num">
+                  {u.factor} {d.base_unit}
+                </td>
+                <td className="text-center">
+                  <input type="checkbox" aria-label={`Sell in ${u.name}`} checked={u.for_sales} onChange={(e) => toggle.mutate({ ...u, patch: { for_sales: e.target.checked } })} />
+                </td>
+                <td className="text-center">
+                  <input type="checkbox" aria-label={`Buy in ${u.name}`} checked={u.for_purchase} onChange={(e) => toggle.mutate({ ...u, patch: { for_purchase: e.target.checked } })} />
+                </td>
+                <td className="text-center">
+                  <input type="radio" name={`sale-${id}`} aria-label={`Sell in ${u.name} by default`} disabled={!u.for_sales} checked={d.sales_unit === u.name} onChange={() => product.mutate({ sales_unit: u.name })} />
+                </td>
+                <td className="text-center">
+                  <input type="radio" name={`buy-${id}`} aria-label={`Buy in ${u.name} by default`} disabled={!u.for_purchase} checked={d.purchase_unit === u.name} onChange={() => product.mutate({ purchase_unit: u.name })} />
+                </td>
+                <td>
+                  <button className="grid size-7 place-items-center rounded-full text-fg-3 hover:bg-white/8" aria-label={`Remove ${u.name}`} onClick={() => removeUnit.mutate(u.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {addUnit.error ? <div className="mt-2"><Notice tone="bad">{errorText(addUnit.error)}</Notice></div> : null}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
+        1
+        <input className="field field-sm w-[120px]" placeholder="tonne" aria-label="New unit name" value={unit.name} onChange={(e) => setUnit({ ...unit, name: e.target.value })} />=
+        <input className="field field-sm w-[90px] text-right" inputMode="decimal" placeholder="20" aria-label="How many base units" value={unit.factor} onChange={(e) => setUnit({ ...unit, factor: e.target.value })} />
+        {d.base_unit}
+        <Button small busy={addUnit.isPending} disabled={!unit.name.trim() || !unit.factor} onClick={() => addUnit.mutate(undefined, { onSuccess: () => setUnit({ name: '', factor: '' }) })}>
+          Add unit
+        </Button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {PRESETS.filter((p) => !used.has(single(p))).map((p) => (
+          <button key={p} onClick={() => setUnit({ ...unit, name: p })} className="h-[26px] rounded-full bg-ink-700 px-2.5 text-[11.5px] text-fg-2 hover:text-fg">
+            {p}
+          </button>
+        ))}
+      </div>
+      <label className="mt-4 flex items-center gap-2 text-[13px]">
+        <input type="checkbox" checked={d.whole_units} onChange={(e) => product.mutate({ whole_units: e.target.checked })} />
+        Only whole {d.base_unit} (no 2.5 {d.base_unit}): orders that would split one are stopped.
+      </label>
+    </section>
   )
 }

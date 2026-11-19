@@ -59,7 +59,10 @@ export interface ProductNames {
   product_id: string
   base_unit: string
   aliases: { id: string; kind: 'alias' | 'barcode' | 'supplier_code'; value: string; supplier_id: string | null; supplier_name: string | null }[]
-  units: { id: string; name: string; factor: number }[]
+  units: { id: string; name: string; factor: number; for_sales: boolean; for_purchase: boolean }[]
+  sales_unit: string | null
+  purchase_unit: string | null
+  whole_units: boolean
 }
 
 const base = (kind: PartyKind, id: string) => `/api/parties/${kind}/${id}`
@@ -78,6 +81,7 @@ export const parties = {
   productNames: (id: string) => http.get<ProductNames>(`/api/products/${id}/names`),
   addAlias: (id: string, body: { kind: string; value: string; supplier_id?: string | null }) => http.post<ProductNames>(`/api/products/${id}/aliases`, body),
   removeAlias: (id: string, aliasId: string) => request('DELETE', `/api/products/${id}/aliases/${aliasId}`),
-  addUnit: (id: string, body: { name: string; factor: string }) => http.post<ProductNames>(`/api/products/${id}/units`, body),
+  addUnit: (id: string, body: { name: string; factor: string; for_sales?: boolean; for_purchase?: boolean }) => http.post<ProductNames>(`/api/products/${id}/units`, body),
+  updateUnit: (id: string, unitId: string, body: { name: string; factor: string; for_sales: boolean; for_purchase: boolean }) => http.put<ProductNames>(`/api/products/${id}/units/${unitId}`, body),
   removeUnit: (id: string, unitId: string) => request('DELETE', `/api/products/${id}/units/${unitId}`),
 }

@@ -1,3 +1,4 @@
+import { QtyCell, perUnit } from '@/ui/lines'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AssignCustomer } from './AssignCustomer'
@@ -13,7 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { insights } from '@/api/insights'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
-import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtPercent, fmtQty, n, plural } from '@/lib/format'
+import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtPercent, n, plural } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
 import { EnquiryBadge } from '@/lib/status'
 import { Badge, Button, Empty, Notice, SearchBox, Spinner } from '@/ui/core'
@@ -338,10 +339,15 @@ function EnquiryInspector({ id }: { id: string }) {
                     {item.product.sku} · {item.product.unit_of_measure}
                   </div>
                 </td>
-                <td className="r num">{fmtQty(item.quantity)}</td>
-                <td className="r num text-fg-3">{fmtAmount(item.mrp_snapshot)}</td>
+                <td className="r num">
+                  <QtyCell item={item} base={item.quantity} />
+                </td>
+                <td className="r num text-fg-3">{fmtAmount(perUnit(item.mrp_snapshot, item))}</td>
                 <td className="r num">{n(item.discount_percent) > 0 ? fmtPercent(item.discount_percent) : '—'}</td>
-                <td className="r num">{fmtAmount(item.quoted_unit_price)}</td>
+                <td className="r num">
+                  {fmtAmount(perUnit(item.quoted_unit_price, item))}
+                  {item.unit ? <div className="text-[11px] text-fg-3">per {item.unit}</div> : null}
+                </td>
                 <td className="r num font-medium">{fmtAmount(item.line_total)}</td>
               </tr>
             ))}

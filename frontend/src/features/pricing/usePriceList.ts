@@ -2,17 +2,19 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { priceLists } from '@/api/records'
 import { useDebounced } from '@/lib/route'
-import type { Line } from '@/ui/lines'
+import { factorOf, useProducts, type Line } from '@/ui/lines'
 
 /** Apply the customer's best prices (own, discount, groups) to each line's discount, unless the user
  *  typed a discount by hand. Returns the resolved prices and rules. */
 export function usePriceList(open: boolean, customer: string, lines: Line[], setLines: (update: (current: Line[]) => Line[]) => void) {
   const chosen = lines.filter((line) => line.product_id)
-  const key = useDebounced(JSON.stringify({ customer, lines: chosen.map((line) => [line.product_id, line.quantity]) }), 300)
+  const products = useProducts()
+  const base = (line: Line) => String((Number(line.quantity) || 1) * factorOf(line, products.byId.get(line.product_id)))
+  const key = useDebounced(JSON.stringify({ customer, lines: chosen.map((line) => [line.product_id, base(line)]) }), 300)
   const pricing = useQuery({
     queryKey: ['price-lists', 'resolve', key],
     enabled: open && Boolean(customer) && chosen.length > 0,
-    queryFn: () => priceLists.resolve({ customer_id: customer, lines: chosen.map((line) => ({ product_id: line.product_id, quantity: line.quantity || '1' })) }),
+    queryFn: () => priceLists.resolve({ customer_id: customer, lines: chosen.map((line) => ({ product_id: line.product_id, quantity: base(line) })) }),
   })
   const auto = useRef<Record<string, string>>({})
   useEffect(() => {

@@ -7,7 +7,7 @@ import { useAction } from '@/api/queries'
 import type { EnquiryOut } from '@/api/types'
 import { fmtMoney, n } from '@/lib/format'
 import { Button, Facts, Field, Notice } from '@/ui/core'
-import { LineEditor, lineErrors, lineTotal, newLine, useCustomers, useProducts, type Line } from '@/ui/lines'
+import { LineEditor, baseQty, lineErrors, lineQty, lineTotal, lineUnit, newLine, unitParam, useCustomers, useProducts, type Line } from '@/ui/lines'
 import { Sheet } from '@/ui/overlays'
 import { Picker } from '@/ui/pickers'
 
@@ -24,7 +24,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
   const [tried, setTried] = useState(false)
   const save = useAction(
     () => {
-      const items = lines.filter((line) => line.product_id).map((line) => ({ product_id: line.product_id, quantity: line.quantity, discount_percent: line.discount || '0' }))
+      const items = lines.filter((line) => line.product_id).map((line) => ({ product_id: line.product_id, quantity: line.quantity, unit: unitParam(line), discount_percent: line.discount || '0' }))
       return editing ? api.enquiries.update(editing.id, { notes: notes || null, items, contact_id: contactId || null, delivery_address_id: siteId || null }) : api.enquiries.create({ customer_id: customer, contact_id: contactId || null, delivery_address_id: siteId || null, notes: notes || null, items })
     },
     { success: (enquiry) => (editing ? `${enquiry.enquiry_number} saved` : `${enquiry.enquiry_number} opened`), quiet: true },
@@ -33,7 +33,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
   useEffect(() => {
     if (!open) return
     setCustomer(editing?.customer_id ?? customerId ?? '')
-    setLines(editing ? editing.items.map((item) => newLine({ product_id: item.product_id, quantity: String(n(item.quantity)), discount: String(n(item.discount_percent)) })) : [newLine()])
+    setLines(editing ? editing.items.map((item) => newLine({ product_id: item.product_id, unit: lineUnit(item), quantity: lineQty(item, item.quantity), discount: String(n(item.discount_percent)) })) : [newLine()])
     setNotes(editing?.notes ?? '')
     setContactId(editing?.contact_id ?? '')
     setSiteId(editing?.delivery_address_id ?? '')
@@ -42,9 +42,9 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const chosen = lines.filter((line) => line.product_id)
-  const atMrp = chosen.reduce((sum, line) => sum + n(line.quantity) * n(products.byId.get(line.product_id)?.mrp), 0)
+  const atMrp = chosen.reduce((sum, line) => sum + baseQty(line, products.byId.get(line.product_id)) * n(products.byId.get(line.product_id)?.mrp), 0)
   const total = chosen.reduce((sum, line) => sum + lineTotal(line, products.byId.get(line.product_id), 'sale'), 0)
-  const errors = [...(customer ? [] : ['Choose a customer.']), ...lineErrors(lines, 'sale')]
+  const errors = [...(customer ? [] : ['Choose a customer.']), ...lineErrors(lines, 'sale', products.byId)]
 
   return (
     <Sheet

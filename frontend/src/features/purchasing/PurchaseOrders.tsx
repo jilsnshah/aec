@@ -1,3 +1,4 @@
+import { QtyCell, perUnit } from '@/ui/lines'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -305,8 +306,13 @@ function PurchaseInspector({ id }: { id: string }) {
                       {item.product.sku} · {item.product.unit_of_measure}
                     </div>
                   </td>
-                  <td className="r num">{fmtAmount(item.unit_cost)}</td>
-                  <td className="r num">{fmtQty(item.quantity_ordered)}</td>
+                  <td className="r num">
+                    {fmtAmount(perUnit(item.unit_cost, item))}
+                    {item.unit ? <div className="text-[11px] text-fg-3">per {item.unit}</div> : null}
+                  </td>
+                  <td className="r num">
+                    <QtyCell item={item} base={item.quantity_ordered} />
+                  </td>
                   <td>
                     <Meter parts={[{ label: 'Received', value: n(item.quantity_received), color: 'var(--color-blue)' }]} total={n(item.quantity_ordered)} />
                     <div className="mt-1 text-[11px] text-fg-3">

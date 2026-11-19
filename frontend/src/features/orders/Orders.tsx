@@ -1,3 +1,4 @@
+import { QtyCell, perUnit } from '@/ui/lines'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -421,10 +422,13 @@ function LinesTab({ order }: { order: OrderDetailOut }) {
                 </div>
               </td>
               <td className="r num text-[13px]">
-                {fmtAmount(item.unit_price_net)}
+                {fmtAmount(perUnit(item.unit_price_net, item))}
+                {item.unit ? <div className="text-[11px] text-fg-3">per {item.unit}</div> : null}
                 {n(item.discount_percent) > 0 ? <div className="text-[11px] text-fg-3">−{fmtPercent(item.discount_percent)}</div> : null}
               </td>
-              <td className="r num">{fmtQty(item.quantity_ordered)}</td>
+              <td className="r num">
+                <QtyCell item={item} base={item.quantity_ordered} />
+              </td>
               <td>
                 <Meter parts={lineParts(item)} total={n(item.quantity_ordered) - n(item.quantity_cancelled)} />
                 <div className="mt-1.5 flex flex-wrap gap-x-2 text-[11px] text-fg-3">
