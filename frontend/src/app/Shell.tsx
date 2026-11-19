@@ -1,18 +1,19 @@
 import { Command } from 'cmdk'
 import { motion } from 'motion/react'
 import { Suspense, useEffect, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, KeyRound, LogOut, Plus, Search } from 'lucide-react'
+import { ChevronDown, KeyRound, LogOut, Moon, Plus, Search, Sun } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useSummary } from '@/api/queries'
 import { cn } from '@/lib/cn'
 import { Avatar, Button, Tip } from '@/ui/core'
 import { Menu } from '@/ui/overlays'
 import { useAuth } from './auth'
-import { Logo } from './Logo'
-import { MODULES, moduleFor, type Module } from './nav'
+import { Wordmark } from './Logo'
+import { MODULES, type Module } from './nav'
 import { PasswordSheet } from './PasswordSheet'
+import { useTheme } from './theme'
 
 const CREATE = [
   { label: 'Sales order', to: '/orders?new=1', hint: 'O' },
@@ -24,7 +25,7 @@ const CREATE = [
   { label: 'Product', to: '/products?new=1' },
 ]
 
-/** The window: a frosted title bar, the module dock, and the workspace. */
+/** The window: a top bar with the brand, pill navigation and tools, then the workspace. */
 export function Shell() {
   const [palette, setPalette] = useState(false)
   useEffect(() => {
@@ -39,49 +40,47 @@ export function Shell() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col bg-ink-950">
-      <TitleBar onSearch={() => setPalette(true)} />
-      <div className="flex min-h-0 flex-1 max-md:flex-col-reverse">
-        <Dock />
-        <main className="min-h-0 min-w-0 flex-1">
-          <Suspense fallback={null}>
-            <Outlet />
-          </Suspense>
-        </main>
-      </div>
+    <div className="flex h-full flex-col">
+      <TopBar onSearch={() => setPalette(true)} />
+      <main className="min-h-0 min-w-0 flex-1">
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
+      </main>
       <Palette open={palette} onClose={() => setPalette(false)} />
     </div>
   )
 }
 
-function TitleBar({ onSearch }: { onSearch: () => void }) {
-  const location = useLocation()
+const round = 'grid size-10 shrink-0 place-items-center rounded-full bg-ink-850 text-fg-2 shadow-pane transition hover:text-fg active:scale-95'
+
+function TopBar({ onSearch }: { onSearch: () => void }) {
   const navigate = useNavigate()
-  const module = moduleFor(location.pathname)
+  const { theme, toggle } = useTheme()
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
   return (
-    <header className="relative z-20 flex h-[52px] shrink-0 items-center gap-4 border-b border-white/[0.06] bg-ink-900/80 px-4 backdrop-blur-xl max-md:gap-2 max-md:px-3">
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-sky/20 to-transparent" />
-      <div className="flex w-[260px] items-center gap-3 max-lg:w-auto">
-        <Logo size={26} />
-        <div className="leading-tight">
-          <div className="text-[13px] font-semibold tracking-[-0.01em]">AEC Desk</div>
-          <div className="text-[11px] text-fg-3">{module.label}</div>
-        </div>
+    <header className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 px-6 pt-4 pb-4 max-md:px-3 max-md:pt-3 max-md:pb-2">
+      <div className="w-[190px] shrink-0 max-2xl:w-auto max-2xl:pr-2 max-[1400px]:[&_span]:hidden max-xl:[&_span]:inline">
+        <Wordmark />
       </div>
-      <button
-        onClick={onSearch}
-        className="mx-auto flex h-8 w-full max-w-[460px] items-center gap-2.5 rounded-lg max-md:mr-0 max-md:w-8 max-md:justify-center max-md:px-0 bg-white/[0.045] px-3 text-[13px] text-fg-3 ring-1 ring-white/[0.07] transition hover:bg-white/[0.07] hover:text-fg-2"
-      >
-        <Search size={14} />
-        <span className="flex-1 text-left max-md:hidden">Search orders, customers, products or jump to…</span>
-        <kbd className="rounded bg-white/8 px-1.5 py-px font-sans text-[11px] text-fg-3 max-md:hidden">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
-      </button>
-      <div className="flex w-[260px] items-center justify-end gap-2 max-lg:w-auto">
+      <Nav />
+      <div className="ml-auto flex shrink-0 items-center gap-2 max-2xl:pl-2 max-md:gap-1.5 max-md:pl-0">
+        <Tip label={<>Search <span className="opacity-60">{isMac ? '⌘K' : 'Ctrl K'}</span></>} side="bottom">
+          <button onClick={onSearch} className={round} aria-label="Search">
+            <Search size={17} />
+          </button>
+        </Tip>
+        <Tip label={theme === 'dark' ? 'Light mode' : 'Dark mode'} side="bottom">
+          <button onClick={toggle} className={round} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            <motion.span key={theme} initial={{ rotate: -60, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            </motion.span>
+          </button>
+        </Tip>
         <Menu
           trigger={
-            <Button kind="primary" small icon={<Plus size={14} strokeWidth={2.4} />}>
-              New <ChevronDown size={13} className="-mr-1 opacity-70" />
+            <Button kind="primary" className="h-10 px-4" icon={<Plus size={15} strokeWidth={2.4} />}>
+              <span className="max-md:hidden">New</span> <ChevronDown size={13} className="-mr-1 opacity-60 max-md:hidden" />
             </Button>
           }
           items={CREATE.map((item, index) => ({ label: item.label, onSelect: () => navigate(item.to), separator: index === 4 }))}
@@ -94,18 +93,20 @@ function TitleBar({ onSearch }: { onSearch: () => void }) {
 
 function AccountMenu() {
   const { user, signOut } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [changing, setChanging] = useState(false)
   if (!user) return null
   return (
     <>
       <Menu
         trigger={
-          <button className="flex items-center gap-2 rounded-full py-0.5 pr-2.5 pl-0.5 text-[12.5px] text-fg-2 ring-1 ring-white/8 transition hover:bg-white/5 hover:text-fg" aria-label="Account">
-            <Avatar name={user.username} size={26} />
-            <span className="max-md:hidden">{user.username}</span>
+          <button className="flex items-center gap-1.5 rounded-full p-0.5 pr-2 text-fg-3 transition hover:text-fg" aria-label="Account">
+            <Avatar name={user.username} size={36} />
+            <ChevronDown size={14} />
           </button>
         }
         items={[
+          { label: theme === 'dark' ? 'Light mode' : 'Dark mode', icon: theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />, onSelect: () => setTheme(theme === 'dark' ? 'light' : 'dark') },
           { label: 'Change password', icon: <KeyRound size={14} />, onSelect: () => setChanging(true) },
           { label: 'Sign out', icon: <LogOut size={14} />, onSelect: () => void signOut(), separator: true },
         ]}
@@ -115,54 +116,38 @@ function AccountMenu() {
   )
 }
 
-const GROUPS: Module['group'][] = ['main', 'sales', 'buying', 'stock']
-
-function Dock() {
+/** The modules as pills; the black pill glides to the open one. */
+function Nav() {
   const summary = useSummary()
   const open = summary.data?.open_orders ?? 0
   const short = Number(summary.data?.total_unallocated_quantity ?? 0) > 0
   return (
-    <nav className="flex w-[76px] shrink-0 flex-col items-center gap-1 py-3 max-md:w-full max-md:flex-row max-md:gap-0 max-md:overflow-x-auto max-md:border-t max-md:border-white/7 max-md:bg-ink-900/90 max-md:px-1 max-md:py-1" aria-label="Modules">
-      {GROUPS.map((group, index) => (
-        <div key={group} className="flex w-full flex-col items-center gap-1 max-md:w-auto max-md:flex-row max-md:gap-0">
-          {index > 0 ? <div className="my-1.5 h-px w-8 bg-white/8 max-md:hidden" /> : null}
-          {MODULES.filter((module) => module.group === group).map((module) => (
-            <DockItem key={module.to} module={module} badge={module.to === '/fulfilment' && open > 0 ? { count: open, alert: short } : undefined} />
-          ))}
-        </div>
+    <nav
+      className="no-scrollbar mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full bg-ink-850/70 p-1 shadow-pane backdrop-blur-xl max-xl:order-last max-xl:mx-0 max-xl:w-full"
+      aria-label="Modules"
+    >
+      {MODULES.map((module) => (
+        <NavItem key={module.to} module={module} badge={module.to === '/fulfilment' && open > 0 ? { count: open, alert: short } : undefined} />
       ))}
-      <div className="mt-auto flex w-full flex-col items-center max-md:mt-0 max-md:w-auto">
-        {MODULES.filter((module) => module.group === 'settings').map((module) => (
-          <DockItem key={module.to} module={module} />
-        ))}
-      </div>
     </nav>
   )
 }
 
-function DockItem({ module, badge }: { module: Module; badge?: { count: number; alert: boolean } }) {
-  const Icon = module.icon
+function NavItem({ module, badge }: { module: Module; badge?: { count: number; alert: boolean } }) {
   return (
-    <Tip label={module.label} side="right">
-      <NavLink to={module.to} end={module.to === '/'} className="group relative flex w-[64px] shrink-0 flex-col items-center gap-1 rounded-xl py-2 max-md:w-[62px] max-md:py-1.5">
-        {({ isActive }) => (
-          <>
-            {isActive ? (
-              <motion.span layoutId="dock" className="absolute inset-0 rounded-xl bg-sky/[0.1] ring-1 ring-sky/20 ring-inset" transition={{ type: 'spring', stiffness: 480, damping: 40 }} />
-            ) : null}
-            <span className={cn('relative transition-colors', isActive ? 'text-sky' : 'text-fg-3 group-hover:text-fg')}>
-              <Icon size={19} strokeWidth={1.7} />
-              {badge ? (
-                <span className={cn('num absolute -top-1.5 -right-3 min-w-[17px] rounded-full px-1 text-center text-[10px] leading-[16px] font-semibold', badge.alert ? 'bg-blue text-white' : 'bg-white/15 text-fg')}>
-                  {badge.count}
-                </span>
-              ) : null}
+    <NavLink to={module.to} end={module.to === '/'} className="group relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium whitespace-nowrap max-2xl:px-[11px] max-2xl:text-[12.5px]">
+      {({ isActive }) => (
+        <>
+          {isActive ? <motion.span layoutId="nav" className="absolute inset-0 rounded-full bg-contrast shadow-[0_6px_16px_-8px_rgb(0_0_0/0.6)]" transition={{ type: 'spring', stiffness: 480, damping: 40 }} /> : null}
+          <span className={cn('relative transition-colors', isActive ? 'text-on-contrast' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
+          {badge ? (
+            <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', badge.alert ? 'bg-blue text-[#fff]' : isActive ? 'bg-on-contrast/20 text-on-contrast' : 'bg-white/10 text-fg-2')}>
+              {badge.count}
             </span>
-            <span className={cn('relative text-[10.5px] font-medium transition-colors', isActive ? 'text-fg' : 'text-fg-3 group-hover:text-fg-2')}>{module.short}</span>
-          </>
-        )}
-      </NavLink>
-    </Tip>
+          ) : null}
+        </>
+      )}
+    </NavLink>
   )
 }
 
@@ -194,20 +179,20 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
     navigate(to)
   }
   const item = (value: string, onSelect: () => void, children: ReactNode) => (
-    <Command.Item key={value} value={value} onSelect={onSelect} className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13.5px] text-fg data-[selected=true]:bg-white/8">
+    <Command.Item key={value} value={value} onSelect={onSelect} className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13.5px] text-fg data-[selected=true]:bg-peri/20">
       {children}
     </Command.Item>
   )
   const group = 'pt-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-fg-4 [&_[cmdk-group-heading]]:uppercase'
 
   return (
-    <div className="fixed inset-0 z-[160] flex justify-center bg-black/50 pt-[13vh] backdrop-blur-[3px] animate-fade" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[160] flex justify-center bg-[var(--scrim)] pt-[13vh] backdrop-blur-[3px] animate-fade" onMouseDown={onClose}>
       <Command
         label="Command menu"
         shouldFilter={true}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.key === 'Escape' && onClose()}
-        className="h-fit w-[640px] max-w-[calc(100vw-32px)] overflow-hidden rounded-2xl bg-ink-800 shadow-[0_40px_100px_-20px_rgb(0_0_0/0.9),0_0_0_1px_rgb(255_255_255/0.09)] animate-[pop_220ms_var(--ease-out-quint)_both]"
+        className="h-fit w-[640px] max-w-[calc(100vw-32px)] overflow-hidden rounded-[24px] bg-ink-800 shadow-float animate-[pop_220ms_var(--ease-out-quint)_both]"
       >
         <div className="flex items-center gap-3 border-b border-white/8 px-4">
           <Search size={16} className="text-fg-3" />
@@ -238,4 +223,4 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
-const ReceiptIcon = () => <span className="grid size-5 place-items-center rounded bg-sky/12 text-[10px] font-bold text-sky">#</span>
+const ReceiptIcon = () => <span className="grid size-5 place-items-center rounded-full bg-peri/25 text-[10px] font-bold text-sky">#</span>

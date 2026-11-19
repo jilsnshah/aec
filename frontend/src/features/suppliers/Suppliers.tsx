@@ -178,7 +178,7 @@ function SupplierInspector({ id }: { id: string }) {
                         <PurchaseBadge status={po.status} />
                       </td>
                       <td>
-                        <Meter parts={[{ label: 'Received', value: n(po.total_received), color: '#7cc4ff' }]} total={n(po.total_ordered)} />
+                        <Meter parts={[{ label: 'Received', value: n(po.total_received), color: 'var(--color-blue)' }]} total={n(po.total_ordered)} />
                         <div className="num mt-1 text-[11px] text-fg-3">
                           {fmtQty(po.total_received)} of {fmtQty(po.total_ordered)}
                         </div>

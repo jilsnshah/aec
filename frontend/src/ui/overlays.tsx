@@ -33,14 +33,13 @@ export function Sheet({
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-[3px] data-[state=open]:animate-fade" />
+        <Dialog.Overlay className="fixed inset-0 z-[100] bg-[var(--scrim)] backdrop-blur-[3px] data-[state=open]:animate-fade" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed top-[52px] left-1/2 z-[101] flex max-h-[calc(100vh-72px)] w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-b-2xl rounded-t-md bg-ink-800 shadow-[0_40px_100px_-20px_rgb(0_0_0/0.9),0_0_0_1px_rgb(255_255_255/0.09)] outline-none data-[state=open]:animate-[sheet_380ms_var(--ease-spring)_both]"
+          className="fixed top-[52px] left-1/2 z-[101] flex max-h-[calc(100vh-72px)] w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-b-[24px] rounded-t-lg bg-ink-800 shadow-float outline-none data-[state=open]:animate-[sheet_380ms_var(--ease-spring)_both]"
           style={{ maxWidth: width }}
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky/40 to-transparent" />
-          <header className="flex items-start gap-3 border-b border-white/7 px-6 pt-5 pb-4">
+                    <header className="flex items-start gap-3 border-b border-white/7 px-6 pt-5 pb-4">
             <div className="min-w-0 flex-1">
               <Dialog.Title className="text-[17px] font-semibold tracking-[-0.015em]">{title}</Dialog.Title>
               {subtitle ? <p className="mt-0.5 text-[13px] text-fg-3">{subtitle}</p> : null}
@@ -53,9 +52,9 @@ export function Sheet({
           </header>
           <div className="flex min-h-0 flex-1">
             <div className="min-w-0 flex-1 overflow-x-auto overflow-y-auto px-6 py-5 max-md:px-4">{children}</div>
-            {aside ? <aside className="w-[280px] shrink-0 overflow-y-auto border-l border-white/7 bg-ink-850/60 px-5 py-5 max-md:hidden">{aside}</aside> : null}
+            {aside ? <aside className="w-[280px] shrink-0 overflow-y-auto border-l border-white/7 bg-ink-900/60 px-5 py-5 max-md:hidden">{aside}</aside> : null}
           </div>
-          {footer ? <footer className="flex items-center justify-end gap-2 border-t border-white/7 bg-ink-850/70 px-6 py-3.5">{footer}</footer> : null}
+          {footer ? <footer className="flex items-center justify-end gap-2 border-t border-white/7 bg-ink-900/60 px-6 py-3.5">{footer}</footer> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -86,10 +85,10 @@ export function useConfirm() {
   const element = (
     <Dialog.Root open={state !== null} onOpenChange={(next) => (next ? null : close(false))}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[110] bg-black/55 backdrop-blur-[3px] data-[state=open]:animate-fade" />
+        <Dialog.Overlay className="fixed inset-0 z-[110] bg-[var(--scrim)] backdrop-blur-[3px] data-[state=open]:animate-fade" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed top-[22vh] left-1/2 z-[111] w-[calc(100vw-32px)] max-w-[420px] -translate-x-1/2 rounded-2xl bg-ink-800 p-5 shadow-[0_40px_100px_-20px_rgb(0_0_0/0.9),0_0_0_1px_rgb(255_255_255/0.09)] outline-none data-[state=open]:animate-[pop_260ms_var(--ease-spring)_both]"
+          className="fixed top-[22vh] left-1/2 z-[111] w-[calc(100vw-32px)] max-w-[420px] -translate-x-1/2 rounded-[22px] bg-ink-800 p-5 shadow-float outline-none data-[state=open]:animate-[pop_260ms_var(--ease-spring)_both]"
         >
           <div className="flex gap-3.5">
             <div className={cn('grid size-10 shrink-0 place-items-center rounded-xl', state?.danger ? 'bg-bad/12 text-bad' : 'bg-sky/12 text-sky')}>
@@ -136,7 +135,7 @@ export function Menu({ trigger, items, align = 'end', side = 'bottom' }: { trigg
           side={side}
           sideOffset={6}
           collisionPadding={10}
-          className="z-[150] min-w-[210px] rounded-xl bg-ink-750/95 p-1.5 shadow-[0_20px_50px_-10px_rgb(0_0_0/0.8),0_0_0_1px_rgb(255_255_255/0.09)] backdrop-blur-xl data-[state=open]:animate-[pop_180ms_var(--ease-out-quint)_both]"
+          className="z-[150] min-w-[210px] rounded-2xl bg-ink-750/95 p-1.5 shadow-pop backdrop-blur-xl data-[state=open]:animate-[pop_180ms_var(--ease-out-quint)_both]"
         >
           {items.map((item) => (
             <div key={item.label}>
@@ -189,7 +188,7 @@ export function Tabs({
             {tab.label}
             {tab.count !== undefined ? <span className="num rounded-full bg-white/7 px-1.5 text-[11px] text-fg-2">{tab.count}</span> : null}
             {value === tab.value ? (
-              <motion.span layoutId={`tab-${group}`} className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-sky" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />
+              <motion.span layoutId={`tab-${group}`} className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-contrast" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />
             ) : null}
           </RadixTabs.Trigger>
         ))}
@@ -209,20 +208,20 @@ export const TabPanel = ({ value, children, className }: { value: string; childr
 export function Segmented<V extends string>({ value, onChange, options, className }: { value: V; onChange: (value: V) => void; options: { value: V; label: ReactNode; count?: number }[]; className?: string }) {
   const [group] = useState(() => Math.random().toString(36).slice(2))
   return (
-    <div className={cn('flex rounded-lg bg-ink-900 p-[3px] ring-1 ring-white/7 ring-inset', className)} role="radiogroup">
+    <div className={cn('flex rounded-full bg-ink-900 p-[3px] ring-1 ring-white/7 ring-inset', className)} role="radiogroup">
       {options.map((option) => (
         <button
           key={option.value}
           role="radio"
           aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
-          className={cn('relative flex h-[24px] flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium whitespace-nowrap transition-colors', value === option.value ? 'text-fg' : 'text-fg-3 hover:text-fg-2')}
+          className={cn('relative flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-semibold whitespace-nowrap transition-colors', value === option.value ? 'text-on-contrast' : 'text-fg-3 hover:text-fg')}
         >
           {value === option.value ? (
-            <motion.span layoutId={`seg-${group}`} className="absolute inset-0 rounded-md bg-ink-600 shadow-[0_1px_2px_rgb(0_0_0/0.4),inset_0_0_0_1px_rgb(255_255_255/0.08)]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+            <motion.span layoutId={`seg-${group}`} className="absolute inset-0 rounded-full bg-contrast shadow-[0_4px_10px_-4px_rgb(0_0_0/0.4)]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
           ) : null}
           <span className="relative">{option.label}</span>
-          {option.count !== undefined ? <span className="num relative text-[10.5px] text-fg-3">{option.count}</span> : null}
+          {option.count !== undefined ? <span className={cn('num relative text-[10.5px]', value === option.value ? 'text-on-contrast/70' : 'text-fg-4')}>{option.count}</span> : null}
         </button>
       ))}
     </div>

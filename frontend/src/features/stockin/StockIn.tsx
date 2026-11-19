@@ -138,7 +138,6 @@ function Entry({ productId }: { productId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-6 pt-5 pb-4">
-        <div className="pointer-events-none absolute -top-24 right-[-10%] h-48 w-[60%] rounded-full bg-sky/[0.07] blur-3xl" />
         <div className="eyebrow mb-1.5">Stock in · {product.sku}</div>
         <h2 className="text-[21px] font-semibold tracking-[-0.022em]">{product.name}</h2>
         <p className="mt-1 text-[13px] text-fg-3">Stock rises now. Customers who are short can be given theirs from it.</p>

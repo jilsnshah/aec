@@ -37,10 +37,10 @@ export const PurchaseBadge = ({ status }: { status: string }) => {
 
 /** The colours of a line's states, used by meters and legends everywhere. */
 export const STATE = {
-  delivered: '#3a404b',
-  ready: '#7cc4ff',
-  onOrder: '#5b77a6',
-  short: '#f2898f',
+  delivered: 'var(--color-fg-4)',
+  ready: 'var(--color-blue)',
+  onOrder: 'var(--color-peri)',
+  short: 'var(--color-bad)',
 } as const
 
 export const ORDER_FILTERS = [

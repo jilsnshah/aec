@@ -257,9 +257,10 @@ a per-customer roll-up, and the delivery action itself.
 ## The interface
 
 AEC Desk is built as a desktop application, not a scrolling website. The
-window never scrolls as a page: a frosted title bar (search, **New** menu,
-account) sits over a labelled module dock, and every module is a fixed
-workspace of panes. Only lists inside panes scroll. See `frontend/DESIGN.md`
+window never scrolls as a page: a top bar carries the modules as pills (a
+black pill marks the open one), search, the light/dark switch, the **New**
+menu and the account menu, and every module is a fixed workspace of rounded
+cards. Only lists inside cards scroll. See `frontend/DESIGN.md`
 for the full plan.
 
 - **Split views** — Enquiries, Sales Orders, Customers, Purchase Orders,
@@ -268,15 +269,16 @@ for the full plan.
   follows the selection, so links and the back button work.
 - **Sheets** — every create and edit form drops from the title bar, with the
   form on the left and a live summary on the right.
-- **Home** — one board that fits the window: headline figures, a running
-  sales chart, a to-do queue (buy what is short, receive what is due) and
-  recent activity.
+- **Home** — one board that fits the window: headline figures, a gauge of
+  owed stock already in hand, a gross-profit card, booked-against-delivered
+  bars, recent orders with to-buy and to-receive tabs, and orders per day.
 - **Fulfilment** — a board with three lanes: Ready, On order and Short. Each
   card carries its next action: Deliver, Receive or Buy.
 - **Integrations** — a settings window: connections on the left (AI,
   WhatsApp, Email, Tally) and the message and Tally logs.
-- **Look** — black, white and light blue only. Status colours are muted and
-  carry meaning (short is red, warnings amber, done green).
+- **Look** — light blue, black and white, in a light and a dark theme. The
+  choice is kept per computer and starts from the system setting. Status
+  colours carry meaning (short is red, warnings amber, done green).
 - **Keyboard** — `⌘K` / `Ctrl K` opens the command palette: go to any module,
   create any record, or find orders, purchases, customers and products by
   number or name. `Esc` closes the topmost sheet, menu or palette.
@@ -284,8 +286,9 @@ for the full plan.
   `/orders?new=1`); `/receipts?new=1&po=<id>` starts a receipt for a purchase
   order; `/fulfilment?customer=<id>` filters the board; `/stock-in?product=<id>`
   opens Stock In for a product; `/integrations/<section>` opens a settings pane.
-- **Narrow windows** — the dock becomes a bottom tab bar, split views show one
-  pane at a time with a way back to the list, and Home and Fulfilment stack.
+- **Narrow windows** — the module pills move to their own row and scroll
+  sideways, split views show one card at a time with a way back to the list,
+  and Home and Fulfilment stack.
 
 ---
 

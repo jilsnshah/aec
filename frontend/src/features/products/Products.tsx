@@ -313,13 +313,13 @@ function StockHistory({ data }: { data: ProductInventoryOut }) {
       <svg viewBox={`0 0 ${width} ${height}`} className="h-[120px] w-full" preserveAspectRatio="none">
         <defs>
           <linearGradient id="stockfill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#7cc4ff" stopOpacity="0.22" />
-            <stop offset="1" stopColor="#7cc4ff" stopOpacity="0" />
+            <stop offset="0" style={{ stopColor: "var(--color-blue)" }} stopOpacity="0.22" />
+            <stop offset="1" style={{ stopColor: "var(--color-blue)" }} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <line x1="0" x2={width} y1={y(0)} y2={y(0)} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
+        <line x1="0" x2={width} y1={y(0)} y2={y(0)} style={{ stroke: "var(--hair)" }} strokeDasharray="3 4" />
         <motion.path d={`${d} V${height} H0 Z`} fill="url(#stockfill)" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} />
-        <motion.path d={d} fill="none" stroke="#7cc4ff" strokeWidth="1.8" vectorEffect="non-scaling-stroke" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
+        <motion.path d={d} fill="none" style={{ stroke: "var(--color-blue)" }} strokeWidth="1.8" vectorEffect="non-scaling-stroke" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }} />
       </svg>
       <div className="mt-2 flex justify-between text-[11px] text-fg-4">
         <span>{fmtDate(points[0].at)}</span>

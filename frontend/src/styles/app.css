@@ -1,41 +1,134 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /* ==========================================================================
-   AEC Desk theme: black, white and light blue.
+   AEC Desk theme. Two themes share one set of names; :root is light and
+   [data-theme='dark'] swaps the values. Tailwind's "white" is remapped to a
+   tint, so white/7 lines and hovers read on both themes.
    ========================================================================== */
+:root {
+  --c-canvas: #dfe5f6;
+  --c-canvas-2: #d3dbf2;
+  --c-ink-950: #dfe5f6;
+  --c-ink-900: #f1f4fc;
+  --c-ink-850: #ffffff;
+  --c-ink-800: #ffffff;
+  --c-ink-750: #ffffff;
+  --c-ink-700: #eef1fa;
+  --c-ink-600: #e2e7f6;
+
+  --c-fg: #0b0d12;
+  --c-fg-2: #394050;
+  --c-fg-3: #6a7183;
+  --c-fg-4: #a1a8b8;
+
+  --c-sky: #2a5be3;
+  --c-sky-2: #5b80f0;
+  --c-blue: #1f4fe6;
+  --c-blue-2: #3a66ee;
+  --c-peri: #8ea7f3;
+  --c-peri-2: #c9d5fa;
+
+  --c-ok: #1f8a4f;
+  --c-warn: #b4741c;
+  --c-bad: #d6404c;
+  --c-steel: #5a6a8e;
+
+  --c-contrast: #0b0c10;
+  --c-on-contrast: #ffffff;
+  --c-tint: #10183a;
+  --c-strong: #0b0c10;
+
+  --pane-border: transparent;
+  --hair: rgb(16 24 58 / 0.07);
+  --shadow-pane: 0 1px 2px rgb(16 24 58 / 0.04), 0 8px 24px -12px rgb(16 24 58 / 0.12);
+  --shadow-float: 0 30px 80px -24px rgb(16 24 58 / 0.35), 0 0 0 1px rgb(16 24 58 / 0.06);
+  --shadow-pop: 0 14px 40px -12px rgb(16 24 58 / 0.28), 0 0 0 1px rgb(16 24 58 / 0.07);
+  --scrim: rgb(20 28 60 / 0.28);
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  --c-canvas: #08090c;
+  --c-canvas-2: #0d0f15;
+  --c-ink-950: #08090c;
+  --c-ink-900: #0f1117;
+  --c-ink-850: #15171e;
+  --c-ink-800: #181b23;
+  --c-ink-750: #1d2029;
+  --c-ink-700: #22262f;
+  --c-ink-600: #2c313c;
+
+  --c-fg: #f3f5f9;
+  --c-fg-2: #b4bac6;
+  --c-fg-3: #808797;
+  --c-fg-4: #565d6b;
+
+  --c-sky: #9db3f6;
+  --c-sky-2: #bccbf9;
+  --c-blue: #3f6cf2;
+  --c-blue-2: #5a80f4;
+  --c-peri: #8ea7f3;
+  --c-peri-2: #2b3556;
+
+  --c-ok: #7fd3a6;
+  --c-warn: #e8c07a;
+  --c-bad: #f08a91;
+  --c-steel: #9fb2cf;
+
+  --c-contrast: #f3f5f9;
+  --c-on-contrast: #0b0c10;
+  --c-tint: #ffffff;
+  --c-strong: linear-gradient(150deg, #2f5ff0, #1c3fc0);
+
+  --pane-border: rgb(255 255 255 / 0.05);
+  --hair: rgb(255 255 255 / 0.08);
+  --shadow-pane: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-float: 0 40px 100px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.09);
+  --shadow-pop: 0 20px 50px -10px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.09);
+  --scrim: rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
+
 @theme {
-  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* Surfaces, back to front */
-  --color-ink-950: #08090b;
-  --color-ink-900: #0c0e11;
-  --color-ink-850: #101216;
-  --color-ink-800: #15181d;
-  --color-ink-750: #1a1e24;
-  --color-ink-700: #21262e;
-  --color-ink-600: #2b313b;
+  --color-white: var(--c-tint);
+  --color-ink-950: var(--c-ink-950);
+  --color-ink-900: var(--c-ink-900);
+  --color-ink-850: var(--c-ink-850);
+  --color-ink-800: var(--c-ink-800);
+  --color-ink-750: var(--c-ink-750);
+  --color-ink-700: var(--c-ink-700);
+  --color-ink-600: var(--c-ink-600);
 
-  /* Text */
-  --color-fg: #f4f6f8;
-  --color-fg-2: #aeb5bf;
-  --color-fg-3: #7d8490;
-  --color-fg-4: #545a65;
+  --color-fg: var(--c-fg);
+  --color-fg-2: var(--c-fg-2);
+  --color-fg-3: var(--c-fg-3);
+  --color-fg-4: var(--c-fg-4);
 
-  /* Light blue, the one accent; solid blue for primary actions */
-  --color-sky: #7cc4ff;
-  --color-sky-2: #a8d8ff;
-  --color-blue: #2f80ed;
-  --color-blue-2: #4a91f2;
+  --color-sky: var(--c-sky);
+  --color-sky-2: var(--c-sky-2);
+  --color-blue: var(--c-blue);
+  --color-blue-2: var(--c-blue-2);
+  --color-peri: var(--c-peri);
+  --color-peri-2: var(--c-peri-2);
 
-  /* Meaning only */
-  --color-ok: #82d6ab;
-  --color-warn: #e9c27c;
-  --color-bad: #f2898f;
-  --color-steel: #9fb2cf;
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --color-bad: var(--c-bad);
+  --color-steel: var(--c-steel);
 
-  --radius-pane: 14px;
+  --color-contrast: var(--c-contrast);
+  --color-on-contrast: var(--c-on-contrast);
+
+  --shadow-float: var(--shadow-float);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-pane: var(--shadow-pane);
+
+  --radius-pane: 22px;
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 
@@ -81,20 +174,23 @@
     height: 100%;
   }
   html {
-    color-scheme: dark;
-    background: var(--color-ink-950);
+    background: var(--c-canvas);
   }
   body {
     margin: 0;
     overflow: hidden;
     color: var(--color-fg);
+    background: radial-gradient(1200px 700px at 85% -10%, var(--c-peri-2), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
     font-family: var(--font-sans);
     font-size: 13.5px;
     line-height: 1.45;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.006em;
     -webkit-font-smoothing: antialiased;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';
     user-select: none;
+    transition: background-color 200ms ease;
+  }
+  [data-theme='dark'] body {
+    background: radial-gradient(1200px 700px at 85% -10%, rgb(63 108 242 / 0.08), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
   }
   input,
   textarea,
@@ -102,15 +198,15 @@
     user-select: text;
   }
   ::selection {
-    background: rgb(124 196 255 / 0.3);
+    background: color-mix(in oklab, var(--c-peri) 40%, transparent);
   }
   :focus-visible {
-    outline: 2px solid rgb(124 196 255 / 0.8);
+    outline: 2px solid color-mix(in oklab, var(--c-blue) 70%, transparent);
     outline-offset: 2px;
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+    scrollbar-color: color-mix(in oklab, var(--c-tint) 14%, transparent) transparent;
   }
   button {
     cursor: default;
@@ -131,19 +227,32 @@
     font-variant-numeric: tabular-nums;
   }
   .hairline {
-    border-color: rgb(255 255 255 / 0.07);
+    border-color: var(--hair);
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   /* A pane: the building block of every workspace */
   .pane {
     background: var(--color-ink-850);
-    border: 1px solid rgb(255 255 255 / 0.065);
+    border: 1px solid var(--pane-border);
     border-radius: var(--radius-pane);
+    box-shadow: var(--shadow-pane);
   }
   .card {
-    background: var(--color-ink-800);
-    border: 1px solid rgb(255 255 255 / 0.065);
-    border-radius: 12px;
+    background: var(--color-ink-900);
+    border: 1px solid var(--hair);
+    border-radius: 16px;
+  }
+  /* The black card: one strong surface per screen */
+  .pane-contrast {
+    background: var(--c-strong);
+    color: #fff;
+    border-radius: var(--radius-pane);
   }
 
   /* Buttons */
@@ -152,15 +261,15 @@
     align-items: center;
     justify-content: center;
     gap: 7px;
-    height: 32px;
-    padding: 0 13px;
-    border-radius: 8px;
+    height: 34px;
+    padding: 0 15px;
+    border-radius: 999px;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
     color: var(--color-fg);
     background: var(--color-ink-700);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.04);
+    box-shadow: inset 0 0 0 1px var(--hair);
     transition:
       background 120ms ease,
       transform 120ms ease,
@@ -176,15 +285,12 @@
     opacity: 0.4;
   }
   .btn-primary {
-    background: var(--color-blue);
-    color: #fff;
-    font-weight: 600;
-    box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.4),
-      inset 0 1px 0 rgb(255 255 255 / 0.18);
+    background: var(--c-contrast);
+    color: var(--c-on-contrast);
+    box-shadow: 0 6px 16px -8px rgb(11 12 16 / 0.5);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--color-blue-2);
+    background: color-mix(in oklab, var(--c-contrast) 86%, var(--c-blue));
   }
   .btn-ghost {
     background: transparent;
@@ -192,47 +298,46 @@
     color: var(--color-fg-2);
   }
   .btn-ghost:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.06);
+    background: color-mix(in oklab, var(--c-tint) 6%, transparent);
     color: var(--color-fg);
   }
   .btn-quiet {
-    background: rgb(124 196 255 / 0.1);
+    background: color-mix(in oklab, var(--c-peri) 22%, transparent);
     color: var(--color-sky);
-    box-shadow: inset 0 0 0 1px rgb(124 196 255 / 0.18);
+    box-shadow: none;
   }
   .btn-quiet:hover:not(:disabled) {
-    background: rgb(124 196 255 / 0.16);
+    background: color-mix(in oklab, var(--c-peri) 32%, transparent);
   }
   .btn-danger {
-    background: rgb(242 137 143 / 0.12);
+    background: color-mix(in oklab, var(--c-bad) 12%, transparent);
     color: var(--color-bad);
-    box-shadow: inset 0 0 0 1px rgb(242 137 143 / 0.22);
+    box-shadow: none;
   }
   .btn-danger:hover:not(:disabled) {
-    background: rgb(242 137 143 / 0.18);
+    background: color-mix(in oklab, var(--c-bad) 18%, transparent);
   }
   .btn-sm {
-    height: 26px;
-    padding: 0 10px;
+    height: 28px;
+    padding: 0 12px;
     font-size: 12px;
-    border-radius: 7px;
   }
   .btn-icon {
-    width: 32px;
+    width: 34px;
     padding: 0;
   }
   .btn-sm.btn-icon {
-    width: 26px;
+    width: 28px;
   }
 
   /* Fields */
   .field {
     width: 100%;
-    height: 34px;
-    padding: 0 11px;
-    border-radius: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 11px;
     background: var(--color-ink-900);
-    border: 1px solid rgb(255 255 255 / 0.1);
+    border: 1px solid var(--hair);
     color: var(--color-fg);
     font: inherit;
     font-size: 13.5px;
@@ -244,20 +349,20 @@
     color: var(--color-fg-4);
   }
   .field:hover:not(:focus):not(:disabled) {
-    border-color: rgb(255 255 255 / 0.16);
+    border-color: color-mix(in oklab, var(--c-tint) 18%, transparent);
   }
   .field:focus {
     outline: none;
-    border-color: rgb(124 196 255 / 0.75);
-    box-shadow: 0 0 0 3px rgb(124 196 255 / 0.14);
+    border-color: color-mix(in oklab, var(--c-blue) 70%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--c-peri) 25%, transparent);
   }
   .field:disabled,
   .field[readonly] {
     color: var(--color-fg-3);
-    background: rgb(255 255 255 / 0.02);
+    background: color-mix(in oklab, var(--c-tint) 3%, transparent);
   }
   .field[aria-invalid='true'] {
-    border-color: rgb(242 137 143 / 0.7);
+    border-color: color-mix(in oklab, var(--c-bad) 70%, transparent);
   }
   textarea.field {
     height: auto;
@@ -280,10 +385,10 @@
     font-variant-numeric: tabular-nums;
   }
   .field-sm {
-    height: 28px;
-    padding: 0 8px;
+    height: 30px;
+    padding: 0 10px;
     font-size: 12.5px;
-    border-radius: 7px;
+    border-radius: 9px;
   }
   .label {
     display: block;
@@ -295,10 +400,9 @@
 
   /* Small caps heading used for sections and table heads */
   .eyebrow {
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0;
     color: var(--color-fg-3);
   }
 
@@ -314,18 +418,16 @@
     height: 32px;
     padding: 0 12px;
     text-align: left;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--color-fg-3);
-    border-bottom: 1px solid rgb(255 255 255 / 0.08);
+    border-bottom: 1px solid var(--hair);
     white-space: nowrap;
   }
   .grid-table td {
     height: 46px;
     padding: 0 12px;
-    border-bottom: 1px solid rgb(255 255 255 / 0.05);
+    border-bottom: 1px solid var(--hair);
   }
   .grid-table tr:last-child td {
     border-bottom: 0;
@@ -334,7 +436,7 @@
     transition: background 120ms ease;
   }
   .grid-table tbody tr:hover {
-    background: rgb(255 255 255 / 0.025);
+    background: color-mix(in oklab, var(--c-tint) 3%, transparent);
   }
   .grid-table .r {
     text-align: right;
@@ -350,7 +452,7 @@
 
   .skeleton {
     border-radius: 6px;
-    background: linear-gradient(90deg, rgb(255 255 255 / 0.04) 0%, rgb(255 255 255 / 0.09) 40%, rgb(255 255 255 / 0.04) 80%);
+    background: linear-gradient(90deg, color-mix(in oklab, var(--c-tint) 5%, transparent) 0%, color-mix(in oklab, var(--c-tint) 10%, transparent) 40%, color-mix(in oklab, var(--c-tint) 5%, transparent) 80%);
     background-size: 300% 100%;
     animation: var(--animate-shimmer);
   }

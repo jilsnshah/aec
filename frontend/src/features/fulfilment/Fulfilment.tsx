@@ -39,9 +39,8 @@ export function Fulfilment() {
   const totals = report.data?.totals
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3 pl-0 max-lg:overflow-y-auto max-md:p-2">
+    <div className="flex h-full min-h-0 flex-col gap-4 px-6 pt-1 pb-5 max-lg:overflow-y-auto max-md:gap-2 max-md:p-2">
       <header className="pane relative flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 overflow-hidden px-5 py-4">
-        <div className="pointer-events-none absolute -top-20 left-[20%] h-40 w-[40%] rounded-full bg-sky/[0.06] blur-3xl" />
         <div className="relative">
           <h1 className="text-[18px] font-semibold tracking-[-0.02em]">Fulfilment</h1>
           <p className="text-[12.5px] text-fg-3">Everything customers are still owed, oldest order first</p>
@@ -54,7 +53,7 @@ export function Fulfilment() {
         </div>
         <div className="relative ml-auto flex flex-wrap items-center gap-2 max-md:ml-0">
           {customerName ? (
-            <span className="flex h-7 items-center gap-1.5 rounded-full bg-sky/10 pr-1 pl-2.5 text-[12px] font-medium text-sky ring-1 ring-sky/20">
+            <span className="flex h-7 items-center gap-1.5 rounded-full bg-peri/25 pr-1 pl-2.5 text-[12px] font-medium text-sky">
               {customerName}
               <button
                 className="grid size-5 place-items-center rounded-full hover:bg-sky/20"

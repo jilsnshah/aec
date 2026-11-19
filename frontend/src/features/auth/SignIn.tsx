@@ -5,7 +5,6 @@ import { ArrowRight } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
 import { Logo } from '@/app/Logo'
-import { Aurora } from '@/ui/Aurora'
 import { Button, Field, Notice } from '@/ui/core'
 
 export function SignIn() {
@@ -29,35 +28,56 @@ export function SignIn() {
   }
 
   return (
-    <main className="relative grid h-full place-items-center overflow-hidden bg-ink-950 px-4">
-      <Aurora />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgb(255_255_255/0.025)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.025)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
-      <motion.form
-        onSubmit={submit}
-        noValidate
-        initial={{ opacity: 0, y: 14, scale: 0.98 }}
+    <main className="relative grid h-full place-items-center overflow-y-auto px-4 py-6">
+      <motion.div
+        initial={{ opacity: 0, y: 14, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-[380px] rounded-2xl bg-ink-850/80 p-8 shadow-[0_40px_120px_-30px_rgb(0_0_0/0.9),0_0_0_1px_rgb(255_255_255/0.08)] backdrop-blur-xl"
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        className="grid w-full max-w-[880px] grid-cols-[1.05fr_1fr] gap-4 max-md:max-w-[400px] max-md:grid-cols-1"
       >
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-sky/50 to-transparent" />
-        <Logo size={40} />
-        <h1 className="mt-5 text-[22px] font-semibold tracking-[-0.022em]">Sign in to AEC Desk</h1>
-        <p className="mt-1 text-[13px] text-fg-3">Sales, purchasing and stock for your business.</p>
-        <div className="mt-6 space-y-4">
-          {error ? <Notice tone="bad">{error}</Notice> : null}
-          <Field label="Username">
-            {(props) => <input {...props} className="field h-10" autoFocus autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} />}
-          </Field>
-          <Field label="Password">
-            {(props) => <input {...props} className="field h-10" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
-          </Field>
-          <Button type="submit" kind="primary" className="mt-2 h-10 w-full" busy={busy} disabled={!username || !password}>
-            Continue <ArrowRight size={15} />
-          </Button>
-        </div>
-      </motion.form>
-      <p className="absolute bottom-6 text-[11.5px] text-fg-4">AEC Desk · Business Manager</p>
+        <section className="pane-contrast relative flex min-h-[460px] flex-col justify-between overflow-hidden p-9 max-md:hidden">
+          <div className="flex items-center gap-2.5">
+            <Logo size={30} tile="fill-[#fff]" />
+            <span className="text-[19px] font-bold tracking-[-0.035em]">AEC Desk</span>
+          </div>
+          <div className="flex h-[150px] items-end gap-3" aria-hidden="true">
+            {[52, 74, 60, 92, 70, 84].map((height, index) => (
+              <motion.span
+                key={index}
+                className="relative flex-1 overflow-hidden rounded-[12px] bg-peri"
+                initial={{ height: 0 }}
+                animate={{ height: `${height}%` }}
+                transition={{ duration: 0.9, delay: 0.2 + index * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <motion.span className="absolute inset-x-0 bottom-0 rounded-[12px] bg-blue" initial={{ height: 0 }} animate={{ height: `${30 + ((index * 17) % 35)}%` }} transition={{ duration: 0.9, delay: 0.6 + index * 0.07, ease: [0.22, 1, 0.36, 1] }} />
+              </motion.span>
+            ))}
+          </div>
+          <div>
+            <h2 className="text-[26px] leading-tight font-semibold tracking-[-0.03em]">Sales, purchasing and stock in one place.</h2>
+            <p className="mt-2 text-[13px] opacity-55">Know what is owed, what is ready and what to buy, every day.</p>
+          </div>
+        </section>
+        <form onSubmit={submit} noValidate className="pane flex flex-col justify-center p-9 max-md:p-7">
+          <div className="md:hidden">
+            <Logo size={36} />
+          </div>
+          <h1 className="text-[26px] font-semibold tracking-[-0.03em] max-md:mt-5">Welcome back</h1>
+          <p className="mt-1 text-[13px] text-fg-3">Sign in to continue to AEC Desk.</p>
+          <div className="mt-7 space-y-4">
+            {error ? <Notice tone="bad">{error}</Notice> : null}
+            <Field label="Username">
+              {(props) => <input {...props} className="field h-11" autoFocus autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} />}
+            </Field>
+            <Field label="Password">
+              {(props) => <input {...props} className="field h-11" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+            </Field>
+            <Button type="submit" kind="primary" className="mt-3 h-11 w-full" busy={busy} disabled={!username || !password}>
+              Continue <ArrowRight size={15} />
+            </Button>
+          </div>
+        </form>
+      </motion.div>
     </main>
   )
 }

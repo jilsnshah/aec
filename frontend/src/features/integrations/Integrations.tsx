@@ -131,7 +131,7 @@ export function Integrations() {
   const on: Partial<Record<SectionKey, boolean>> = data.data ? { ai: data.data.ai.enabled, whatsapp: data.data.whatsapp.enabled, email: data.data.email.enabled, tally: data.data.tally.enabled } : {}
 
   return (
-    <div className="flex h-full min-h-0 gap-3 p-3 pl-0 max-lg:flex-col max-md:p-2">
+    <div className="flex h-full min-h-0 gap-4 px-6 pt-1 pb-5 max-lg:flex-col max-md:gap-2 max-md:p-2">
       <nav className="pane flex w-[290px] shrink-0 flex-col gap-5 overflow-y-auto p-3 max-lg:max-h-[220px] max-lg:w-full">
         <div className="px-2 pt-1">
           <h1 className="text-[16px] font-semibold tracking-[-0.015em]">Integrations</h1>
@@ -144,9 +144,9 @@ export function Integrations() {
               <button
                 key={item.key}
                 onClick={() => navigate(`/integrations/${item.key}`)}
-                className={cn('relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors', current === item.key ? 'bg-sky/[0.09] ring-1 ring-sky/20 ring-inset' : 'hover:bg-white/[0.035]')}
+                className={cn('relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors', current === item.key ? 'bg-peri/[0.18]' : 'hover:bg-white/[0.035]')}
               >
-                <span className={cn('grid size-8 place-items-center rounded-lg bg-ink-700 ring-1 ring-white/8', current === item.key ? 'text-sky' : 'text-fg-2')}>{item.icon}</span>
+                <span className={cn('grid size-8 place-items-center rounded-full bg-peri/20', current === item.key ? 'text-sky' : 'text-fg-2')}>{item.icon}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px] font-medium">{item.label}</span>
                   <span className="block truncate text-[11.5px] text-fg-3">{item.hint}</span>
@@ -179,9 +179,8 @@ export function Integrations() {
 function PaneHeader({ icon, title, body, integration, onToggle, busy, extra }: { icon: ReactNode; title: string; body: string; integration?: IntegrationOut; onToggle?: (value: boolean) => void; busy?: boolean; extra?: ReactNode }) {
   return (
     <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-6 py-5">
-      <div className="pointer-events-none absolute -top-24 right-[-10%] h-48 w-[60%] rounded-full bg-sky/[0.07] blur-3xl" />
       <div className="relative flex items-center gap-4">
-        <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-b from-ink-600 to-ink-700 text-sky ring-1 ring-white/10">{icon}</span>
+        <span className="grid size-11 place-items-center rounded-full bg-peri/25 text-sky">{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="text-[18px] font-semibold tracking-[-0.02em]">{title}</h2>

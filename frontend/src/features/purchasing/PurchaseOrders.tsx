@@ -69,7 +69,7 @@ export function PurchaseOrders() {
                   <span className="ml-auto shrink-0">{po.expected_delivery_date ? `due ${fmtDate(po.expected_delivery_date)}` : fmtDate(po.created_at)}</span>
                 </div>
                 <div className="mt-2 flex items-center gap-2.5">
-                  <Meter parts={[{ label: 'Received', value: n(po.total_received), color: '#7cc4ff' }, { label: 'Due', value: n(po.total_remaining), color: 'rgba(255,255,255,0.08)' }]} />
+                  <Meter parts={[{ label: 'Received', value: n(po.total_received), color: 'var(--color-blue)' }, { label: 'Due', value: n(po.total_remaining), color: 'var(--color-peri-2)' }]} />
                   <PurchaseBadge status={po.status} />
                 </div>
               </ListRow>
@@ -214,7 +214,7 @@ function PurchaseInspector({ id }: { id: string }) {
                   <td className="r num">{fmtAmount(item.unit_cost)}</td>
                   <td className="r num">{fmtQty(item.quantity_ordered)}</td>
                   <td>
-                    <Meter parts={[{ label: 'Received', value: n(item.quantity_received), color: '#7cc4ff' }]} total={n(item.quantity_ordered)} />
+                    <Meter parts={[{ label: 'Received', value: n(item.quantity_received), color: 'var(--color-blue)' }]} total={n(item.quantity_ordered)} />
                     <div className="mt-1 text-[11px] text-fg-3">
                       {fmtQty(item.quantity_received)} in · {fmtQty(item.quantity_remaining)} due
                     </div>

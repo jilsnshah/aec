@@ -25,52 +25,55 @@ inside panes scroll.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ ◼ AEC    Sales Orders            ⌕ Search or jump…  ⌘K     ＋ New   ◯ │  title bar (glass)
-├────┬──────────────────────┬───────────────────────────────────────────┤
-│ ⌂  │ Orders        13     │  SO-2026-000011            Deliver  ⋯     │
-│ ⇄  │ ⌕ filter  [Open ▾]   │  Mixwell Builders · placed 7 Nov          │
-│ ── │ ┌──────────────────┐ │  ┌─────┬─────┬─────┬─────┐                │
-│ ✉  │ │▌SO-…011  ₹38,600 │ │  │ 68  │ 26  │ 10  │ 13  │  figures       │
-│ ▤  │ │ Mixwell  ▮▮▮▯▯   │ │  └─────┴─────┴─────┴─────┘                │
-│ ☺  │ ├──────────────────┤ │  Lines · Deliveries · Profit · Tally      │  tabs
-│ ── │ │ SO-…010   ₹160   │ │  …                                        │
-│ ▦  │ │ Hillcrest ▮▮▮▮▮  │ │                                           │
-│    │ └──────────────────┘ │                                           │
-└────┴──────────────────────┴───────────────────────────────────────────┘
- dock   list pane (scrolls)   inspector (scrolls)
+│ ◆ AEC Desk  (Home)(Fulfilment 7) Enquiries Orders …  Settings  ⌕ ☾ [+ New] ◯ │
+├───────────────────────────────────────────────────────────────────────┤
+│ ╭──────────────────╮  ╭─────────────────────────────────────────────╮ │
+│ │ Orders       13  │  │ SO-2026-000011                 Deliver  ⋯   │ │
+│ │ ⌕ filter (All)…  │  │ Mixwell Builders · placed 7 Nov             │ │
+│ │ SO-…011 ₹38,600  │  │  68 │ 26 │ 10 │ 13          figures         │ │
+│ │ SO-…010   ₹160   │  │ Lines · Deliveries · Profit · Tally         │ │
+│ ╰──────────────────╯  ╰─────────────────────────────────────────────╯ │
+└───────────────────────────────────────────────────────────────────────┘
+  list card (scrolls)     inspector card (scrolls)
 ```
 
-* **Dock** (left, 76 px): module icons with short labels, grouped Sales,
-  Purchasing, Stock. A live count on Fulfilment.
-* **Title bar**: module name, global search / command palette (⌘K), a
-  "New" menu for every create action, account menu.
-* **Split view** for every record module: a compact list on the left (search,
-  status filter, sort) and an inspector on the right with tabs. Selecting a
-  row never leaves the screen; the URL follows the selection so links and the
-  back button still work.
-* **Sheets** for create and edit: they drop from the title bar like a macOS
-  sheet, with the form on the left and a live summary on the right.
-* **Home**: a bento board that fits one screen — headline figures, a sales
-  chart, a to-do queue and recent activity.
-* **Fulfilment**: a board with three lanes — Ready, On order, Short — each
-  card carrying its one next action (Deliver, Receive, Buy).
-* **Integrations**: a settings window — list of connections on the left,
-  one form on the right.
+* **Top bar**: the wordmark, every module as a pill with a black pill that
+  glides to the open one (a live count on Fulfilment), then search (⌘K),
+  light/dark switch, a "New" menu for every create action and the account
+  menu. Below 1280 px the pills move to their own row and scroll sideways.
+* **Split view** for every record module: a list card on the left (search,
+  status filter) and an inspector card on the right with tabs. Selecting a
+  row never leaves the screen; the URL follows the selection.
+* **Sheets** for create and edit drop from the top, form on the left and a
+  live summary on the right.
+* **Home**: a board of rounded cards that fits one screen: three figure
+  cards; a gauge of how much owed stock is in hand; a black "gross profit"
+  card; a two-tone bar chart of booked against delivered sales; a table of
+  recent orders (with To buy and To receive tabs); a dot chart of orders on
+  each of the last seven days.
+* **Fulfilment**: a board with three lanes (Ready, On order, Short), each card
+  carrying its one next action (Deliver, Receive, Buy).
+* **Integrations**: a settings window, connections on the left and one form on
+  the right.
 
 ## Look
 
-Black, white and light blue only; professional and calm.
+Light blue, black and white; professional and calm. Two themes share one set
+of names: `:root` is light, `[data-theme='dark']` swaps the values
+(`src/styles/app.css`). The choice is kept per computer; until one is made the
+system setting decides.
 
-* Surfaces: `#0a0b0d` window, `#101216` panes, `#16191e` raised, hairlines at
-  7 % white. Text white with three greys. Accent light blue `#7cc4ff`; primary
-  buttons solid blue `#2f80ed` with white text.
-* Status colours are muted and only carry meaning (short = red, warnings =
-  amber, done = soft green).
-* Artistic touches, kept quiet: a frosted title bar, a soft light-blue aurora
-  behind Home's headline, a selection highlight that glides between rows,
-  figures that count up, a chart that draws in, sheets that spring open.
-  No neon, no glow, no gradient text.
-* Inter (variable, self-hosted), tabular figures everywhere numbers line up.
+* Light: a soft periwinkle canvas (`#dfe5f6`), white cards with 22 px corners
+  and a faint shadow, near-black text. The one strong surface per screen is
+  black. Primary buttons and the active pill are black.
+* Dark: near-black canvas, charcoal cards, white primary buttons and pill; the
+  strong card turns deep blue.
+* Data colours: periwinkle `#8ea7f3` and royal blue `#1f4fe6`, used together
+  as in the bars, gauge and dots. Status pills are light fills with coloured
+  text (blue open, green delivered, red short).
+* Plus Jakarta Sans (variable, self-hosted), tabular figures where numbers
+  line up. Motion stays quiet: gliding pills and highlights, figures that count
+  up, bars and gauge that grow in, sheets that spring open. No neon, no glow.
 
 ## Stack
 

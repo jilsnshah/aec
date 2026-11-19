@@ -25,7 +25,7 @@ export interface Module {
 /** The modules, in the order the business works: sell, buy, keep stock. */
 export const MODULES: Module[] = [
   { to: '/', label: 'Home', short: 'Home', icon: Home, group: 'main', keywords: 'dashboard overview' },
-  { to: '/fulfilment', label: 'Fulfilment', short: 'Fulfil', icon: PackageCheck, group: 'main', keywords: 'deliver ready short on order' },
+  { to: '/fulfilment', label: 'Fulfilment', short: 'Fulfilment', icon: PackageCheck, group: 'main', keywords: 'deliver ready short on order' },
   { to: '/enquiries', label: 'Enquiries', short: 'Enquiries', icon: MessageSquareQuote, group: 'sales', keywords: 'quote deal' },
   { to: '/orders', label: 'Sales Orders', short: 'Orders', icon: ReceiptText, group: 'sales', keywords: 'so sell' },
   { to: '/customers', label: 'Customers', short: 'Customers', icon: Users, group: 'sales', keywords: 'client buyer' },
@@ -34,7 +34,7 @@ export const MODULES: Module[] = [
   { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor' },
   { to: '/products', label: 'Products', short: 'Products', icon: Boxes, group: 'stock', keywords: 'sku item stock' },
   { to: '/stock-in', label: 'Stock In', short: 'Stock in', icon: PackagePlus, group: 'stock', keywords: 'receipt without po adhoc' },
-  { to: '/integrations', label: 'Integrations', short: 'Connect', icon: Plug, group: 'settings', keywords: 'ai whatsapp email tally settings' },
+  { to: '/integrations', label: 'Integrations', short: 'Settings', icon: Plug, group: 'settings', keywords: 'ai whatsapp email tally settings' },
 ]
 
 export const moduleFor = (pathname: string) =>

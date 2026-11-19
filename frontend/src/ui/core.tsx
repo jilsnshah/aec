@@ -41,7 +41,7 @@ export function Tip({ label, children, side = 'top' }: { label: ReactNode; child
         <RadixTooltip.Content
           side={side}
           sideOffset={8}
-          className="z-[200] rounded-md bg-ink-700 px-2.5 py-1.5 text-[12px] font-medium text-fg shadow-[0_8px_24px_rgb(0_0_0/0.5),inset_0_0_0_1px_rgb(255_255_255/0.08)] animate-fade"
+          className="z-[200] rounded-lg bg-contrast px-2.5 py-1.5 text-[12px] font-medium text-on-contrast animate-fade"
         >
           {label}
         </RadixTooltip.Content>
@@ -111,9 +111,9 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       checked={checked}
       onCheckedChange={onChange}
       aria-label={label}
-      className="relative h-[22px] w-[38px] shrink-0 rounded-full bg-white/12 transition-colors data-[state=checked]:bg-blue"
+      className="relative h-[22px] w-[38px] shrink-0 rounded-full bg-white/15 transition-colors data-[state=checked]:bg-blue"
     >
-      <RadixSwitch.Thumb className="block size-[18px] translate-x-[2px] rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.4)] transition-transform duration-200 data-[state=checked]:translate-x-[18px]" />
+      <RadixSwitch.Thumb className="block size-[18px] translate-x-[2px] rounded-full bg-[#fff] shadow-[0_1px_3px_rgb(0_0_0/0.3)] transition-transform duration-200 data-[state=checked]:translate-x-[18px]" />
     </RadixSwitch.Root>
   )
 }
@@ -121,16 +121,16 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 /* ---------------------------------------------------------------- badges */
 export type Tone = 'sky' | 'steel' | 'ok' | 'warn' | 'bad' | 'muted'
 const TONE: Record<Tone, string> = {
-  sky: 'bg-sky/12 text-sky ring-sky/20',
-  steel: 'bg-steel/12 text-steel ring-steel/20',
-  ok: 'bg-ok/12 text-ok ring-ok/20',
-  warn: 'bg-warn/12 text-warn ring-warn/20',
-  bad: 'bg-bad/12 text-bad ring-bad/22',
-  muted: 'bg-white/6 text-fg-2 ring-white/8',
+  sky: 'bg-peri/25 text-sky ring-transparent',
+  steel: 'bg-steel/14 text-steel ring-transparent',
+  ok: 'bg-ok/15 text-ok ring-transparent',
+  warn: 'bg-warn/15 text-warn ring-transparent',
+  bad: 'bg-bad/13 text-bad ring-transparent',
+  muted: 'bg-white/7 text-fg-2 ring-transparent',
 }
 export function Badge({ tone = 'muted', dot, children, title }: { tone?: Tone; dot?: boolean; children: ReactNode; title?: string }) {
   return (
-    <span title={title} className={cn('inline-flex h-[21px] shrink-0 items-center gap-1.5 rounded-full px-2 text-[11.5px] font-semibold whitespace-nowrap ring-1 ring-inset', TONE[tone])}>
+    <span title={title} className={cn('inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-semibold whitespace-nowrap ring-1 ring-inset', TONE[tone])}>
       {dot ? <span className="size-1.5 rounded-full bg-current" /> : null}
       {children}
     </span>
@@ -181,7 +181,7 @@ export function Meter({ parts, total, className }: { parts: MeterPart[]; total?:
 export function Empty({ icon, title, body, action, className }: { icon?: ReactNode; title: string; body?: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex flex-col items-center justify-center px-6 py-12 text-center animate-fade', className)}>
-      {icon ? <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-white/5 text-fg-2 ring-1 ring-white/8">{icon}</div> : null}
+      {icon ? <div className="mb-4 grid size-12 place-items-center rounded-full bg-peri/20 text-sky">{icon}</div> : null}
       <div className="text-[14.5px] font-semibold">{title}</div>
       {body ? <p className="mt-1 max-w-[42ch] text-[13px] text-fg-3">{body}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
@@ -227,7 +227,7 @@ export function Avatar({ name, size = 30 }: { name: string; size?: number }) {
     .join('')
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-full bg-gradient-to-b from-ink-600 to-ink-700 font-semibold text-fg-2 ring-1 ring-white/8"
+      className="grid shrink-0 place-items-center rounded-full bg-peri/30 font-semibold text-sky"
       style={{ width: size, height: size, fontSize: size * 0.36 }}
       aria-hidden="true"
     >

@@ -63,7 +63,7 @@ export function Picker({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="z-[180] w-[max(var(--radix-popover-trigger-width),340px)] overflow-hidden rounded-xl bg-ink-750 shadow-[0_24px_60px_-12px_rgb(0_0_0/0.85),0_0_0_1px_rgb(255_255_255/0.09)] data-[state=open]:animate-[pop_160ms_var(--ease-out-quint)_both]"
+          className="z-[180] w-[max(var(--radix-popover-trigger-width),340px)] overflow-hidden rounded-xl bg-ink-750 shadow-pop data-[state=open]:animate-[pop_160ms_var(--ease-out-quint)_both]"
         >
           <Command>
             <Command.Input autoFocus placeholder="Search…" className="h-10 w-full border-b border-white/8 bg-transparent px-3.5 text-[13px] outline-none placeholder:text-fg-4" />
