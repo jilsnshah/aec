@@ -374,11 +374,21 @@ class EnquiryLineCreate(BaseModel):
 
 
 class EnquiryCreate(BaseModel):
-    customer_id: uuid.UUID
+    customer_id: Optional[uuid.UUID] = Field(default=None, description="Leave empty for someone not yet a customer and give sender_name/phone/email.")
+    sender_name: Optional[str] = Field(default=None, max_length=255)
+    sender_phone: Optional[str] = Field(default=None, max_length=32)
+    sender_email: Optional[str] = Field(default=None, max_length=255)
     notes: Optional[str] = None
     contact_id: Optional[uuid.UUID] = Field(default=None, description="The customer's contact who placed it.")
     delivery_address_id: Optional[uuid.UUID] = Field(default=None, description="The customer's delivery site.")
     items: List[EnquiryLineCreate] = Field(min_length=1)
+
+
+class EnquiryCustomerIn(BaseModel):
+    """Who an enquiry is from: an existing customer, or a new one."""
+
+    customer_id: Optional[uuid.UUID] = None
+    new_customer: Optional["CustomerCreate"] = None
 
 
 class EnquiryUpdate(BaseModel):
@@ -412,10 +422,13 @@ class EnquiryItemOut(ORMModel):
 class EnquiryOut(ORMModel):
     id: uuid.UUID
     enquiry_number: str
-    customer_id: uuid.UUID
+    customer_id: Optional[uuid.UUID] = None
     contact_id: Optional[uuid.UUID] = None
     delivery_address_id: Optional[uuid.UUID] = None
-    customer: CustomerRef
+    customer: Optional[CustomerRef] = None
+    sender_name: Optional[str] = None
+    sender_phone: Optional[str] = None
+    sender_email: Optional[str] = None
     notes: Optional[str] = None
     status: EnquiryStatus
     created_at: datetime

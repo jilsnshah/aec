@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { SignIn } from '@/features/auth/SignIn'
 import { AuthGate } from './auth'
+import { PublicEnquiry } from '@/features/public/PublicEnquiry'
 import { Shell } from './Shell'
 
 const AssistantPage = lazy(() => import('@/features/assistant/Assistant').then((module) => ({ default: module.AssistantPage })))
@@ -17,12 +18,16 @@ const Orders = lazy(() => import('@/features/orders/Orders').then((module) => ({
 const Products = lazy(() => import('@/features/products/Products').then((module) => ({ default: module.Products })))
 const PurchaseOrders = lazy(() => import('@/features/purchasing/PurchaseOrders').then((module) => ({ default: module.PurchaseOrders })))
 const Receipts = lazy(() => import('@/features/receipts/Receipts').then((module) => ({ default: module.Receipts })))
+const CustomerGroups = lazy(() => import('@/features/pricing/CustomerGroups').then((module) => ({ default: module.CustomerGroups })))
 const PriceLists = lazy(() => import('@/features/pricing/PriceLists').then((module) => ({ default: module.PriceLists })))
 const StockCount = lazy(() => import('@/features/stock/StockCount').then((module) => ({ default: module.StockCount })))
 const StockIn = lazy(() => import('@/features/stockin/StockIn').then((module) => ({ default: module.StockIn })))
 const Suppliers = lazy(() => import('@/features/suppliers/Suppliers').then((module) => ({ default: module.Suppliers })))
 
 export function App() {
+  // A customer's own enquiry page: opened from their link, no sign-in.
+  const publicLink = window.location.pathname.match(/^\/e\/([A-Za-z0-9_-]+)\/?$/)
+  if (publicLink) return <PublicEnquiry token={publicLink[1]} />
   return (
     <AuthGate signIn={<SignIn />}>
       <Routes>
@@ -43,6 +48,7 @@ export function App() {
           <Route path="stock-in" element={<StockIn />} />
           <Route path="stock-count" element={<StockCount />} />
           <Route path="price-lists" element={<PriceLists />} />
+          <Route path="customer-groups" element={<CustomerGroups />} />
           <Route path="integrations/:section?" element={<Integrations />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

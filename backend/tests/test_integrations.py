@@ -176,21 +176,18 @@ def test_meta_verification_echoes_the_challenge_only_with_the_right_token(client
     assert bad.status_code == 403
 
 
-def test_a_whatsapp_enquiry_becomes_an_enquiry(client, wired, make_product):
+def test_a_whatsapp_enquiry_from_an_unknown_number_waits_for_a_customer(client, wired, make_product):
     cement = make_product("Cement, 50kg bag", sku="CEM-50", mrp="380.00")
     make_product("Steel rod, 12mm", sku="STL-12", mrp="520.00")
     enable_ai(client)
     enable_whatsapp(client)
     wired.append([
-        call("find_customers", {"query": "9876543210"}, "c1"),
-        call("create_customer", {"name": "Ravi Builders", "phone": "+919876543210"}, "c2"),
-        call("search_products", {"query": "cement"}, "c3"),
+        call("search_products", {"query": "cement"}, "c1"),
         call("create_enquiry", lambda messages: {
-            "customer_id": json.loads([m for m in messages if isinstance(m, ToolMessage)][1].content)["id"],
             "lines": [{"product_id": last_result(messages)[0]["id"], "quantity": 40}],
             "notes": "40 bags of cement, asked for the rate.",
-        }, "c4"),
-        AIMessage(content="ENQUIRY: 40 bags of cement for Ravi Builders."),
+        }, "c2"),
+        AIMessage(content="ENQUIRY: 40 bags of cement."),
     ])
 
     response = client.post("/api/integrations/whatsapp/webhook", json=whatsapp_payload())
@@ -198,15 +195,37 @@ def test_a_whatsapp_enquiry_becomes_an_enquiry(client, wired, make_product):
 
     message = client.get("/api/integrations/messages").json()["items"][0]
     assert message["status"] == "enquiry_created", message
-    assert message["sender"] == "+919876543210"
-    assert message["summary"] == "40 bags of cement for Ravi Builders."
-
     enquiry = client.get("/api/enquiries/{}".format(message["enquiry_id"])).json()
-    assert enquiry["source"] == "whatsapp" and enquiry["source_detail"] == "+919876543210"
-    assert enquiry["customer"]["name"] == "Ravi Builders"
+    # Nobody on file has this number: no customer was made up.
+    assert enquiry["customer_id"] is None and enquiry["sender_phone"] == "+919876543210"
+    assert enquiry["source"] == "whatsapp"
     assert [(i["product_id"], D(i["quantity"])) for i in enquiry["items"]] == [(str(cement.id), D(40))]
-    # Priced from the product master, exactly as a typed-in enquiry is.
     assert D(enquiry["total_amount"]) == D("15200.00")
+    assert client.get("/api/customers").json()["total"] == 0
+
+    # It cannot become an order until someone says who it is.
+    blocked = client.post("/api/enquiries/{}/convert".format(enquiry["id"]))
+    assert blocked.status_code == 422 and blocked.json()["details"]["customer_needed"] is True
+    converted = client.post("/api/enquiries/{}/convert".format(enquiry["id"]), json={"new_customer": {"name": "Ravi Builders"}})
+    assert converted.status_code == 201, converted.text
+    customer = client.get("/api/customers").json()["items"][0]
+    assert customer["name"] == "Ravi Builders" and customer["phone"] == "+919876543210"
+
+
+def test_a_whatsapp_enquiry_from_a_known_number_is_matched_by_the_number(client, wired, make_product, make_customer):
+    make_product("Cement, 50kg bag", sku="CEM-50", mrp="380.00")
+    known = make_customer("Ravi Builders", phone="98765 43210")
+    enable_ai(client)
+    enable_whatsapp(client)
+    wired.append([
+        call("search_products", {"query": "cement"}, "c1"),
+        call("create_enquiry", lambda messages: {"lines": [{"product_id": last_result(messages)[0]["id"], "quantity": 5}], "notes": "rate?"}, "c2"),
+        AIMessage(content="ENQUIRY: 5 bags."),
+    ])
+    client.post("/api/integrations/whatsapp/webhook", json=whatsapp_payload())
+    message = client.get("/api/integrations/messages").json()["items"][0]
+    enquiry = client.get("/api/enquiries/{}".format(message["enquiry_id"])).json()
+    assert enquiry["customer"]["id"] == str(known.id)
 
 
 def test_a_message_that_is_not_an_enquiry_records_nothing(client, wired):

@@ -52,6 +52,9 @@ def create_enquiry(payload: schemas.EnquiryCreate, db: Session = Depends(get_db)
         notes=payload.notes,
         contact_id=payload.contact_id,
         delivery_address_id=payload.delivery_address_id,
+        sender_name=payload.sender_name,
+        sender_phone=payload.sender_phone,
+        sender_email=payload.sender_email,
     )
     return enquiry_service.to_view(enquiry)
 
@@ -86,6 +89,7 @@ def update_enquiry(
 def convert_enquiry(
     enquiry_id: uuid.UUID,
     background: BackgroundTasks,
+    payload: Optional[schemas.EnquiryCustomerIn] = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
     override: bool = Query(default=False, description="Admin approval of an order on hold (needs override_reason)."),
@@ -98,7 +102,13 @@ def convert_enquiry(
     order entered directly. Converting the same enquiry twice returns 409 and
     never creates a second order.
     """
+    if payload and (payload.customer_id or payload.new_customer):
+        enquiry_service.assign_customer(db, enquiry_id, payload.customer_id, payload.new_customer.model_dump() if payload.new_customer else None)
     enquiry = enquiry_service.get_enquiry(db, enquiry_id)
+    if enquiry.status.value == "OPEN" and enquiry.customer_id is None:
+        from ..errors import ValidationError
+
+        raise ValidationError("This enquiry is from an unknown sender: choose or add the customer first.", {"customer_needed": True})
     if enquiry.status.value == "OPEN":
         controls.enforce(db, enquiry.customer_id, [
             {"product_id": item.product_id, "quantity_ordered": item.quantity, "unit_price": item.mrp_snapshot, "discount_percent": item.discount_percent}
@@ -106,10 +116,22 @@ def convert_enquiry(
     result = enquiry_service.convert_enquiry(db, enquiry_id)
     for sync_id in tally_sync.queue_sales_order(db, result["order"]):
         background.add_task(tally_sync.process, sync_id)
+    from ..services import notifications
+
+    background.add_task(notifications.order_placed, result["order"].id)
     return {
         "enquiry": enquiry_service.to_view(result["enquiry"]),
         "order": _detail(db, result["order"]),
     }
+
+
+@router.post("/{enquiry_id}/customer", response_model=schemas.EnquiryOut)
+def assign_customer(enquiry_id: uuid.UUID, payload: schemas.EnquiryCustomerIn, db: Session = Depends(get_db)):
+    """Say who an enquiry from an unknown sender is from: customer_id of an
+    existing customer, or new_customer details to create one. The sender's
+    number and email are added to that customer so they are recognised next time."""
+    enquiry = enquiry_service.assign_customer(db, enquiry_id, payload.customer_id, payload.new_customer.model_dump() if payload.new_customer else None)
+    return enquiry_service.to_view(enquiry)
 
 
 @router.post("/{enquiry_id}/mark-lost", response_model=schemas.EnquiryOut)

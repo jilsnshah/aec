@@ -161,19 +161,17 @@ class CallTools:
         if not items:
             return {"error": "No items."}
         customer_id = self.customer_id
-        if customer_id is None:
-            from ..services import customers as customer_service
-
-            name = (args.get("caller_name") or "").strip() or "Phone caller {}".format(self.number or "")
-            customer = customer_service.create_customer(session, name=name, phone=self.number)
-            customer_id, self.customer_id, self.customer_name = customer.id, customer.id, customer.name
         # Start from the caller's price list, like a quote typed in the app.
         resolved = {line["product_id"]: line for line in pricelists.resolve(session, customer_id, [{"product_id": i["product_id"], "quantity": i["quantity"]} for i in items])["lines"]}
         for item in items:
             hit = resolved.get(item["product_id"])
             if hit:
                 item["discount_percent"] = str(hit["discount_percent"])
-        enquiry = enquiry_service.create_enquiry(session, customer_id, items, notes=args.get("notes") or None, source="phone", source_detail=self.number)
+        # A caller not on file stays an unknown sender (name and number kept);
+        # a person assigns or creates the customer later.
+        enquiry = enquiry_service.create_enquiry(session, customer_id, items, notes=args.get("notes") or None, source="phone",
+                                                 source_detail=self.number, sender_name=(args.get("caller_name") or "").strip() or None,
+                                                 sender_phone=self.number)
         self.enquiry_id = enquiry.id
         return {"enquiry": enquiry.enquiry_number, "total": float(enquiry_service.enquiry_total(enquiry)),
                 "say": "Tell the caller the enquiry number and that the team will confirm price and delivery shortly."}

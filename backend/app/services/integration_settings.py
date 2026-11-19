@@ -119,6 +119,10 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             # requires an approved template with a document header).
             "send_invoices": False,
             "invoice_template": "",
+            # An approved text template sent when an order is placed: body
+            # variables are customer name, order number, total, items.
+            "send_order_confirmations": False,
+            "order_template": "",
             "template_language": "en",
             "country_code": "91",
             "graph_version": "v23.0",
@@ -132,6 +136,9 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "company": "",
             "sync_sales_orders": True,
             "create_invoices": True,
+            # "order": one invoice for the whole order when it is placed.
+            # "delivery": an invoice for what each delivery carries.
+            "invoice_on": "order",
             "sync_purchase_orders": True,
             "customer_group": "Sundry Debtors",
             "supplier_group": "Sundry Creditors",
@@ -319,6 +326,8 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
         if isinstance(default, bool) and not isinstance(config.get(key), bool):
             config[key] = str(config.get(key)).lower() in ("1", "true", "yes", "on")
     if name == TALLY:
+        if config.get("invoice_on", "order") not in ("order", "delivery"):
+            raise ValidationError("Invoice on must be order or delivery.")
         if config["tax_mode"] not in TAX_MODES:
             raise ValidationError("Tax must be none, CGST + SGST, or IGST.")
         try:

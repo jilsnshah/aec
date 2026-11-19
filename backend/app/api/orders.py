@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..database import get_db
 from ..models import User
-from ..services import controls
+from ..services import controls, notifications
 from ..services import orders as order_service
 from .auth import require_user
 from ..services import tally_sync
@@ -68,6 +68,7 @@ def create_order(
     # the customer -- after the response, so placing the order stays fast.
     for sync_id in tally_sync.queue_sales_order(db, order):
         background.add_task(tally_sync.process, sync_id)
+    background.add_task(notifications.order_placed, order.id)
     return _detail(db, order)
 
 
@@ -134,3 +135,16 @@ def create_return(order_id: uuid.UUID, payload: ReturnIn, db: Session = Depends(
 @router.get("/{order_id}/returns")
 def order_returns(order_id: uuid.UUID, db: Session = Depends(get_db)):
     return return_service.list_returns(db, order_id=order_id)
+
+
+
+@router.get("/{order_id}/confirmation")
+def confirmation_preview(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    """The order confirmation text, as it would go on WhatsApp."""
+    return notifications.confirmation_text(order_service.get_order(db, order_id))
+
+
+@router.post("/{order_id}/send-confirmation")
+def send_confirmation(order_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Send the order confirmation on WhatsApp now (needs the approved template)."""
+    return notifications.send_order_confirmation(db, order_id, user)

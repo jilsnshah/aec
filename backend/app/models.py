@@ -192,6 +192,11 @@ class Customer(Base, TimestampMixin):
     price_list_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="SET NULL", name="fk_customers_price_list"), nullable=True
     )
+    #: Secret token for the customer's own enquiry page (/e/<token>); None = no link.
+    portal_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    #: A flat discount for this customer on everything (their own price
+    #: lines, price list and groups may still give a better price).
+    discount_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
     #: Tax identity and the ledger this party is posted to in Tally (kept
     #: once set, so renaming here never creates a second ledger there).
     gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, index=True)
@@ -558,12 +563,20 @@ class CustomerEnquiry(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     enquiry_number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
-    customer_id: Mapped[uuid.UUID] = mapped_column(
+    #: None while the sender is not yet a known customer (a message from a
+    #: number or email not on file). Set when someone assigns the customer,
+    #: at the latest when the enquiry becomes an order.
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("customers.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    #: Who sent it, as received (name, phone, email): kept even after the
+    #: customer is known.
+    sender_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sender_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    sender_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
     )
@@ -597,7 +610,7 @@ class CustomerEnquiry(Base, TimestampMixin):
     #: Who sent it, for captured enquiries (a phone number or an email address).
     source_detail: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    customer: Mapped["Customer"] = relationship()
+    customer: Mapped[Optional["Customer"]] = relationship()
     items: Mapped[List["CustomerEnquiryItem"]] = relationship(
         back_populates="enquiry",
         cascade="all, delete-orphan",
@@ -1567,6 +1580,10 @@ class PriceList(Base):
     valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Set for a customer's own special prices (not a shared list).
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE", name="fk_price_lists_customer"), nullable=True, unique=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -1733,3 +1750,44 @@ class ProductUnit(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(32), nullable=False)
     #: How many base units one of this unit holds.
     factor: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+
+
+class CustomerGroup(Base, TimestampMixin):
+    """A group of customers, filled automatically by rules (orders in the last
+    year, spend, years with us, payment behaviour, city...) and/or by hand.
+    Members get the group's price list; a customer in several groups gets the
+    best price for each product."""
+
+    __tablename__ = "customer_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: [{"field": "spend_12m", "op": ">=", "value": 500000}, ...]
+    rules: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    #: "all" rules must match, or "any" one of them.
+    match: Mapped[str] = mapped_column(String(3), nullable=False, default="all")
+    price_list_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="SET NULL", name="fk_customer_groups_price_list"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    member_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_computed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    price_list: Mapped[Optional["PriceList"]] = relationship()
+
+
+class CustomerGroupMember(Base):
+    """A customer in a group: added by the rules, by hand, or kept out by hand."""
+
+    __tablename__ = "customer_group_members"
+    __table_args__ = (
+        UniqueConstraint("group_id", "customer_id", name="uq_group_members"),
+        CheckConstraint("source IN ('rule', 'manual', 'excluded')", name="ck_group_members_source"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    group_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customer_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(10), nullable=False, default="rule")
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

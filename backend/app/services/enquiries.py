@@ -127,6 +127,9 @@ def _enquiry_filter(
                 CustomerEnquiry.customer_id.in_(
                     select(Customer.id).where(func.lower(Customer.name).like(pattern))
                 ),
+                func.lower(func.coalesce(CustomerEnquiry.sender_name, "")).like(pattern),
+                func.lower(func.coalesce(CustomerEnquiry.sender_email, "")).like(pattern),
+                func.coalesce(CustomerEnquiry.sender_phone, "").like(pattern),
             )
         )
     return stmt
@@ -218,13 +221,16 @@ def _load_products(session: Session, product_ids: Iterable[uuid.UUID]) -> Dict[u
 
 def create_enquiry(
     session: Session,
-    customer_id: uuid.UUID,
+    customer_id: Optional[uuid.UUID],
     items: Iterable[Dict[str, Any]],
     notes: Optional[str] = None,
     source: str = "manual",
     source_detail: Optional[str] = None,
     contact_id: Optional[uuid.UUID] = None,
     delivery_address_id: Optional[uuid.UUID] = None,
+    sender_name: Optional[str] = None,
+    sender_phone: Optional[str] = None,
+    sender_email: Optional[str] = None,
 ) -> CustomerEnquiry:
     """Open an enquiry, pricing each line from the product master's MRP.
 
@@ -235,24 +241,42 @@ def create_enquiry(
 
     try:
         begin_write(session)
-        customer = get_customer(session, customer_id)
-        if not customer.is_active:
-            raise ValidationError(
-                "Customer '{}' is archived; reactivate them before taking an enquiry.".format(
-                    customer.name
+        customer = None
+        if customer_id is not None:
+            customer = get_customer(session, customer_id)
+            if not customer.is_active:
+                raise ValidationError(
+                    "Customer '{}' is archived; reactivate them before taking an enquiry.".format(
+                        customer.name
+                    )
                 )
-            )
+        else:
+            if not ((sender_name or "").strip() or (sender_phone or "").strip() or (sender_email or "").strip()):
+                raise ValidationError("Choose the customer, or give the sender's name, phone or email.")
+            # Who sent it is decided here, by exact match on any phone number or
+            # email on file -- never guessed. No match: the enquiry waits as
+            # "unknown sender" until someone assigns the customer.
+            from . import parties
+
+            for finder, value in ((parties.find_by_phone, sender_phone), (parties.find_by_email, sender_email)):
+                if value and customer is None:
+                    kind, party = finder(session, value)
+                    if kind == "customer" and party is not None and party.is_active:
+                        customer = party
         products = _load_products(session, [line["product_id"] for line in cleaned])
 
         enquiry = CustomerEnquiry(
             enquiry_number=next_document_number(session, ENQUIRY_COUNTER, "ENQ"),
-            customer_id=customer.id,
+            customer_id=customer.id if customer else None,
             notes=notes,
             status=EnquiryStatus.OPEN,
             source=source,
             source_detail=source_detail,
-            contact_id=order_service.check_party_link(session, customer.id, contact_id, "contact"),
-            delivery_address_id=order_service.check_party_link(session, customer.id, delivery_address_id, "address"),
+            sender_name=(sender_name or "").strip() or None,
+            sender_phone=(sender_phone or "").strip() or None,
+            sender_email=(sender_email or "").strip() or None,
+            contact_id=order_service.check_party_link(session, customer.id, contact_id, "contact") if customer else None,
+            delivery_address_id=order_service.check_party_link(session, customer.id, delivery_address_id, "address") if customer else None,
         )
         session.add(enquiry)
         session.flush()
@@ -413,6 +437,11 @@ def convert_enquiry(session: Session, enquiry_id: uuid.UUID) -> Dict[str, Any]:
                 },
             )
         _require_open(enquiry, "converted")
+        if enquiry.customer_id is None:
+            raise ValidationError(
+                "Enquiry {} is from an unknown sender: choose or add the customer first.".format(enquiry.enquiry_number),
+                details={"customer_needed": True},
+            )
 
         if not enquiry.items:
             raise ValidationError(
@@ -496,6 +525,9 @@ def to_view(enquiry: CustomerEnquiry) -> Dict[str, Any]:
         "contact_id": enquiry.contact_id,
         "delivery_address_id": enquiry.delivery_address_id,
         "customer": enquiry.customer,
+        "sender_name": enquiry.sender_name,
+        "sender_phone": enquiry.sender_phone,
+        "sender_email": enquiry.sender_email,
         "notes": enquiry.notes,
         "status": enquiry.status,
         "created_at": enquiry.created_at,
@@ -571,3 +603,71 @@ def quotation(session: Session, enquiry_id: uuid.UUID, valid_days: int = 7):
         footer="Prices are per unit, before GST, and subject to stock at the time of order. "
                "This quotation is valid for {} days from its date.".format(valid_days),
     )
+
+
+def assign_customer(session: Session, enquiry_id: uuid.UUID, customer_id: Optional[uuid.UUID] = None,
+                    new_customer: Optional[Dict[str, Any]] = None) -> CustomerEnquiry:
+    """Say who an enquiry from an unknown sender is from: an existing customer,
+    or a new one created from the details given. The sender's phone number and
+    email are added to that customer, so their next message is recognised."""
+    from . import customers as customer_service
+    from . import parties
+
+    enquiry = get_enquiry(session, enquiry_id)
+    _require_open(enquiry, "changed")
+    if (customer_id is None) == (not new_customer):
+        raise ValidationError("Choose an existing customer or give the new customer's details (one, not both).")
+    if new_customer:
+        fields = dict(new_customer)
+        fields.setdefault("phone", enquiry.sender_phone)
+        fields.setdefault("email", enquiry.sender_email)
+        if not (fields.get("name") or "").strip():
+            fields["name"] = enquiry.sender_name or ""
+        customer = customer_service.create_customer(session, **fields)
+    else:
+        customer = get_customer(session, customer_id)
+        if not customer.is_active:
+            raise ValidationError("Customer '{}' is archived.".format(customer.name))
+    begin_write(session)
+    try:
+        enquiry = get_enquiry(session, enquiry_id)
+        enquiry.customer_id = customer.id
+        for kind, value in (("phone", enquiry.sender_phone), ("email", enquiry.sender_email)):
+            if not value:
+                continue
+            owner = parties.owner_of_point(session, kind, value)
+            if owner is None:
+                normalized = parties.norm_phone(value) if kind == "phone" else parties.norm_email(value)
+                if normalized:
+                    session.add(parties.ContactPoint(customer_id=customer.id, kind=kind, value=value, normalized=normalized,
+                                                     label="from {}".format(enquiry.source), is_whatsapp=enquiry.source == "whatsapp" and kind == "phone"))
+        session.flush()
+        parties._mirror(session, "customer", session.get(Customer, customer.id))
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return get_enquiry(session, enquiry_id)
+
+
+def apply_best_prices(session: Session, enquiry_id: uuid.UUID) -> Dict[str, Any]:
+    """Re-price an open enquiry at the customer's best prices."""
+    from . import pricelists
+
+    enquiry = get_enquiry(session, enquiry_id)
+    _require_open(enquiry, "re-priced")
+    if enquiry.customer_id is None:
+        raise ValidationError("Assign the customer first: prices depend on who they are.", details={"customer_needed": True})
+    resolved = {line["product_id"]: line for line in pricelists.resolve(
+        session, enquiry.customer_id, [{"product_id": item.product_id, "quantity": str(item.quantity)} for item in enquiry.items])["lines"]}
+    changes = []
+    lines = []
+    for item in enquiry.items:
+        hit = resolved.get(item.product_id)
+        new = Decimal(str(hit["discount_percent"])) if hit else item.discount_percent
+        if new != item.discount_percent:
+            changes.append({"product": item.product.name, "from": float(item.discount_percent), "to": float(new), "rule": hit["rule"] if hit else None})
+        lines.append({"product_id": item.product_id, "quantity": item.quantity, "discount_percent": new})
+    if changes:
+        update_enquiry(session, enquiry_id, {"items": lines})
+    return {"changed": changes, "enquiry": to_view(get_enquiry(session, enquiry_id))}

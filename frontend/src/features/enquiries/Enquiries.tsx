@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, FileText, Flame, Hourglass, Layers, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ShieldCheck, Sparkles, Target, ThumbsDown, Trophy, XCircle } from 'lucide-react'
+import { AssignCustomer } from './AssignCustomer'
+import { groups } from '@/api/groups'
+import { BadgePercent } from 'lucide-react'
+import { CheckCircle2, FileText, UserRoundX, Link2, Flame, Hourglass, Layers, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ShieldCheck, Sparkles, Target, ThumbsDown, Trophy, XCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { records } from '@/api/records'
 import { useAssistant } from '@/features/assistant/store'
@@ -18,11 +21,13 @@ import { Menu, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { EnquirySheet } from './EnquirySheet'
 
-type EnquiryChip = 'OPEN' | 'hot' | 'ageing' | 'whatsapp' | 'CONVERTED' | 'LOST' | 'all'
+type EnquiryChip = 'OPEN' | 'unknown' | 'hot' | 'ageing' | 'whatsapp' | 'CONVERTED' | 'LOST' | 'all'
 
 function SourceBadge({ source, detail }: { source: string; detail: string | null }) {
   if (source === 'whatsapp') return <Badge tone="sky" title={detail ?? undefined}><MessageCircle size={11} /> WhatsApp</Badge>
   if (source === 'email') return <Badge tone="steel" title={detail ?? undefined}><Mail size={11} /> Email</Badge>
+  if (source === 'link') return <Badge tone="sky" title="Sent from the customer's own link"><Link2 size={11} /> Their link</Badge>
+  if (source === 'phone') return <Badge tone="steel" title={detail ?? undefined}><Phone size={11} /> Phone call</Badge>
   return null
 }
 
@@ -38,6 +43,7 @@ export function Enquiries() {
   const test = (key: EnquiryChip, enquiry: (typeof all)[number]) => {
     const p = priority.get(enquiry.id)
     if (key === 'all') return true
+    if (key === 'unknown') return enquiry.status === 'OPEN' && !enquiry.customer
     if (key === 'hot') return enquiry.status === 'OPEN' && (p?.score ?? 0) >= 60
     if (key === 'ageing') return enquiry.status === 'OPEN' && (p?.days_idle ?? 0) >= (funnel.data?.stale_days ?? 7)
     if (key === 'whatsapp') return enquiry.status === 'OPEN' && enquiry.source !== 'manual'
@@ -47,6 +53,7 @@ export function Enquiries() {
   const items = all.filter((enquiry) => test(chip, enquiry)).sort((a, b) => (chip !== 'CONVERTED' && chip !== 'LOST' ? (priority.get(b.id)?.score ?? -1) - (priority.get(a.id)?.score ?? -1) : 0))
   const chips: Chip<EnquiryChip>[] = [
     { key: 'OPEN', label: 'Open', icon: Layers, count: count('OPEN') },
+    { key: 'unknown', label: 'New senders', icon: UserRoundX, count: count('unknown'), hot: count('unknown') > 0 },
     { key: 'hot', label: 'Hot', icon: Flame, count: count('hot'), hot: count('hot') > 0 },
     { key: 'ageing', label: 'Going cold', icon: Hourglass, count: count('ageing'), hot: count('ageing') > 0 },
     { key: 'whatsapp', label: 'From messages', icon: MessageCircle, count: count('whatsapp') },
@@ -127,7 +134,8 @@ export function Enquiries() {
                   <span className="num ml-auto text-[13px] font-medium">{fmtMoney(enquiry.total_amount)}</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-[12px] text-fg-3">
-                  <span className="truncate">{enquiry.customer.name}</span>
+                  <span className="truncate">{enquiry.customer?.name ?? enquiry.sender_name ?? enquiry.sender_phone ?? enquiry.sender_email ?? 'Unknown sender'}</span>
+                  {!enquiry.customer ? <Badge tone="bad"><UserRoundX size={11} /> New sender</Badge> : null}
                   <span className="ml-auto shrink-0">{fmtDate(enquiry.created_at)}</span>
                 </div>
                 <div className="mt-2 flex items-center gap-1.5">
@@ -157,7 +165,8 @@ export function Enquiries() {
 function EnquiryInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const enquiry = useOne('enquiries', api.enquiries.get, id)
-  const contact = useOne('customers', api.customers.get, enquiry.data?.customer.id)
+  const contact = useOne('customers', api.customers.get, enquiry.data?.customer?.id ?? undefined)
+  const [assigning, setAssigning] = useState<null | 'assign' | 'convert'>(null)
   const { ask } = useAssistant()
   const funnel = useQuery({ queryKey: ['insights', 'enquiries'], queryFn: insights.enquiries })
   const check = useQuery({
@@ -165,14 +174,15 @@ function EnquiryInspector({ id }: { id: string }) {
     enabled: enquiry.data?.status === 'OPEN',
     queryFn: () =>
       records.checkOrder({
-        customer_id: enquiry.data!.customer.id,
+        customer_id: enquiry.data!.customer?.id ?? null,
         items: enquiry.data!.items.map((item) => ({ product_id: item.product_id, quantity_ordered: n(item.quantity), unit_price: n(item.mrp_snapshot), discount_percent: n(item.discount_percent) })),
       }),
   })
-  const phone = contact.data?.phone ?? null
+  const phone = contact.data?.phone ?? enquiry.data?.sender_phone ?? null
   const [editing, setEditing] = useState(false)
   const confirm = useConfirm()
   const convert = useAction((approval?: string) => api.enquiries.convert(id, approval), { success: (result) => `Won — ${result.order.order_number} placed`, quiet: true })
+  const applyPrices = useAction(() => groups.applyPrices(id), { success: (r) => (r.changed.length ? `${r.changed.length} line${r.changed.length === 1 ? '' : 's'} re-priced: ` + r.changed.map((c) => `${c.product} ${c.from}% → ${c.to}%`).join(', ') : 'Already at the best prices') })
   const lose = useAction((reason: string | null) => api.enquiries.markLost(id, reason), { success: 'Marked as lost' })
 
   if (enquiry.isPending) return <Spinner />
@@ -181,7 +191,9 @@ function EnquiryInspector({ id }: { id: string }) {
   const open = data.status === 'OPEN'
   const pct = n(data.mrp_total) > 0 ? (n(data.discount_total) / n(data.mrp_total)) * 100 : 0
 
+  const who = data.customer?.name ?? data.sender_name ?? data.sender_phone ?? data.sender_email ?? 'Unknown sender'
   async function askConvert() {
+    if (!data.customer) return setAssigning('convert')
     const answer = await confirm.ask({ title: `Close ${data.enquiry_number} as won?`, body: `A sales order for ${fmtMoney(data.total_amount)} is placed at the agreed prices, and stock is taken at once.`, confirm: 'Place the order' })
     if (answer.ok) convert.mutate(undefined, { onSuccess: (result) => navigate(`/orders/${result.order.id}`) })
   }
@@ -203,9 +215,13 @@ function EnquiryInspector({ id }: { id: string }) {
         }
         meta={
           <>
-            <Link to={`/customers/${data.customer_id}`} className="text-sky hover:text-sky-2">
-              {data.customer.name}
-            </Link>{' '}
+            {data.customer ? (
+              <Link to={`/customers/${data.customer_id}`} className="text-sky hover:text-sky-2">
+                {data.customer.name}
+              </Link>
+            ) : (
+              <span className="font-semibold text-fg">{who} (not a customer yet)</span>
+            )}{' '}
             · opened {fmtDateTime(data.created_at)}
             {data.source_detail ? ` · from ${data.source_detail}` : ''}
           </>
@@ -218,7 +234,7 @@ function EnquiryInspector({ id }: { id: string }) {
                   <a className="btn btn-icon" href={`tel:${phone}`} aria-label="Call customer" title="Call">
                     <Phone size={15} />
                   </a>
-                  <a className="btn btn-icon" href={`https://wa.me/${phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Hello ${data.customer.name}, following up on your enquiry ${data.enquiry_number}.`)}`} target="_blank" rel="noreferrer" aria-label="WhatsApp customer" title="WhatsApp">
+                  <a className="btn btn-icon" href={`https://wa.me/${phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Hello ${who}, following up on your enquiry ${data.enquiry_number}.`)}`} target="_blank" rel="noreferrer" aria-label="WhatsApp customer" title="WhatsApp">
                     <MessageCircle size={15} />
                   </a>
                 </>
@@ -226,9 +242,14 @@ function EnquiryInspector({ id }: { id: string }) {
               <a className="btn" href={`/api/enquiries/${id}/quotation.pdf`} target="_blank" rel="noreferrer">
                 <FileText size={14} /> Quote PDF
               </a>
-              <Button kind="quiet" icon={<Sparkles size={14} />} onClick={() => ask(`Draft a WhatsApp quote reply to ${data.customer.name} for enquiry ${data.enquiry_number} (id ${id}): list each product with quantity and quoted price, the total, availability from current stock, and a polite close. Keep it short and ready to send.`)}>
+              <Button kind="quiet" icon={<Sparkles size={14} />} onClick={() => ask(`Draft a WhatsApp quote reply to ${who} for enquiry ${data.enquiry_number} (id ${id}): list each product with quantity and quoted price, the total, availability from current stock, and a polite close. Keep it short and ready to send.`)}>
                 Draft quote reply
               </Button>
+              {data.customer ? (
+                <Button icon={<BadgePercent size={14} />} busy={applyPrices.isPending} onClick={() => applyPrices.mutate(undefined)} title="Use the best of the customer's own prices, discount, price list and groups">
+                  Apply best prices
+                </Button>
+              ) : null}
               <Button icon={<Pencil size={14} />} onClick={() => setEditing(true)} disabled={!data.is_editable}>
                 Edit
               </Button>
@@ -254,6 +275,19 @@ function EnquiryInspector({ id }: { id: string }) {
           ) : null
         }
       />
+      {!data.customer && open ? (
+        <div className="shrink-0 px-6 pt-4">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#0b0b0c] px-4 py-3 text-[13px] text-[#fff]">
+            <UserRoundX size={16} />
+            <span className="min-w-0 flex-1">
+              <b>New sender.</b> {[data.sender_name, data.sender_phone, data.sender_email].filter(Boolean).join(' · ') || 'No details'} is not on file. Choose or add the customer before it becomes an order.
+            </span>
+            <button onClick={() => setAssigning('assign')} className="btn btn-sm shrink-0 bg-blue! text-[#0b0b0c]!">
+              <Link2 size={13} /> Assign customer
+            </button>
+          </div>
+        </div>
+      ) : null}
       {data.status === 'CONVERTED' ? (
         <div className="shrink-0 px-6 pt-4">
           <Notice tone="ok">Won on {fmtDateTime(data.converted_at)} — became {data.sales_order_number}. The deal is read-only; the order holds the agreed prices.</Notice>
@@ -281,7 +315,7 @@ function EnquiryInspector({ id }: { id: string }) {
             )}
           </div>
         ) : null}
-        {open ? <WinPanel priority={funnel.data?.priorities.find((row) => row.enquiry_id === id)} warnings={check.data?.warnings ?? []} checked={Boolean(check.data)} onAsk={() => ask(`What discount can I offer on enquiry ${data.enquiry_number} (id ${id}) and still keep a healthy margin? Use product_prices for cost and what ${data.customer.name} paid before.`)} /> : null}
+        {open ? <WinPanel priority={funnel.data?.priorities.find((row) => row.enquiry_id === id)} warnings={check.data?.warnings ?? []} checked={Boolean(check.data)} onAsk={() => ask(`What discount can I offer on enquiry ${data.enquiry_number} (id ${id}) and still keep a healthy margin? Use product_prices for cost and what ${who} paid before.`)} /> : null}
         <table className="grid-table">
           <thead>
             <tr>
@@ -322,6 +356,15 @@ function EnquiryInspector({ id }: { id: string }) {
         ) : null}
       </div>
       <EnquirySheet open={editing} onClose={() => setEditing(false)} editing={data} />
+      <AssignCustomer
+        enquiry={data}
+        open={assigning !== null}
+        onClose={() => setAssigning(null)}
+        then={assigning === 'convert' ? 'Assign and continue' : undefined}
+        onDone={() => {
+          if (assigning === 'convert') convert.mutate(undefined, { onSuccess: (result) => navigate(`/orders/${result.order.id}`) })
+        }}
+      />
       {confirm.element}
     </>
   )

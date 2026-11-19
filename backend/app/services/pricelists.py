@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -65,7 +65,7 @@ def _load(session: Session, list_id: uuid.UUID) -> PriceList:
 
 
 def list_all(session: Session, include_inactive: bool = False) -> List[Dict[str, Any]]:
-    stmt = select(PriceList).options(joinedload(PriceList.items).joinedload(PriceListItem.product)).order_by(PriceList.name)
+    stmt = select(PriceList).options(joinedload(PriceList.items).joinedload(PriceListItem.product)).where(PriceList.customer_id.is_(None)).order_by(PriceList.name)
     if not include_inactive:
         stmt = stmt.where(PriceList.is_active.is_(True))
     return [view(row, session) for row in session.execute(stmt).unique().scalars()]
@@ -132,13 +132,54 @@ def _active(price_list: PriceList) -> bool:
     return price_list.is_active and (price_list.valid_from is None or price_list.valid_from <= now) and (price_list.valid_until is None or price_list.valid_until >= now)
 
 
+def _line_rule(price_list: PriceList, product: Product, qty: Decimal) -> Optional[Tuple[Decimal, str]]:
+    """The discount (off MRP) a list gives a product at a quantity, and why."""
+    mrp = product.mrp or Decimal("0")
+    breaks = sorted((i for i in price_list.items if i.product_id == product.id and i.min_quantity <= qty), key=lambda i: i.min_quantity, reverse=True)
+    if breaks:
+        best = breaks[0]
+        suffix = " from {:g}".format(float(best.min_quantity)) if best.min_quantity else ""
+        if best.price is not None:
+            pct = (Decimal("1") - best.price / mrp) * 100 if mrp > 0 else Decimal("0")
+            return pct, "fixed price{}".format(suffix)
+        return best.discount_percent, "{:g}% off{}".format(float(best.discount_percent), suffix)
+    if price_list.discount_percent:
+        return price_list.discount_percent, "{:g}% off everything".format(float(price_list.discount_percent))
+    return None
+
+
+def sources_for(session: Session, customer: Optional[Customer]) -> List[Tuple[str, Any]]:
+    """Everything that can price a customer's order, each with a label:
+    their own prices, their flat discount, their price list, their groups."""
+    if customer is None:
+        return []
+    from . import groups as group_service
+
+    out: List[Tuple[str, Any]] = []
+    own = session.execute(select(PriceList).where(PriceList.customer_id == customer.id)).scalar_one_or_none()
+    if own is not None and _active(own):
+        out.append(("Own prices", own))
+    if customer.discount_percent:
+        out.append(("Customer discount", customer.discount_percent))
+    if customer.price_list_id:
+        assigned = _load(session, customer.price_list_id)
+        if _active(assigned):
+            out.append((assigned.name, assigned))
+    for group in group_service.groups_of(session, customer.id):
+        if group.price_list_id:
+            group_list = _load(session, group.price_list_id)
+            if _active(group_list) and all(src is not group_list for _, src in out):
+                out.append(("{} (group)".format(group.name), group_list))
+    return out
+
+
 def resolve(session: Session, customer_id: Optional[uuid.UUID], lines: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
-    """The price each line gets for this customer: the best quantity break on
-    their list, else the list discount, else MRP. Returned as a discount off
-    MRP (what order lines carry) and as a net price."""
+    """The best price each line gets for this customer: of their own product
+    prices, their flat discount, their price list and the price lists of every
+    group they are in, the lowest net price wins. Returned as a discount off
+    MRP (what order lines carry) and a net price, with where it came from."""
     customer = session.get(Customer, customer_id) if customer_id else None
-    price_list = _load(session, customer.price_list_id) if customer and customer.price_list_id else None
-    usable = price_list is not None and _active(price_list)
+    sources = sources_for(session, customer)
     out = []
     for line in lines:
         product = session.get(Product, uuid.UUID(str(line["product_id"])))
@@ -146,22 +187,69 @@ def resolve(session: Session, customer_id: Optional[uuid.UUID], lines: Iterable[
             continue
         qty = _d(line.get("quantity"), "Quantity") or Decimal("0")
         mrp = product.mrp or Decimal("0")
-        rule = "MRP"
-        pct = Decimal("0")
-        if usable:
-            breaks = sorted((i for i in price_list.items if i.product_id == product.id and i.min_quantity <= qty), key=lambda i: i.min_quantity, reverse=True)
-            if breaks:
-                best = breaks[0]
-                if best.price is not None:
-                    pct = (Decimal("1") - best.price / mrp) * 100 if mrp > 0 else Decimal("0")
-                    rule = "{}: fixed price{}".format(price_list.name, " from {:g}".format(float(best.min_quantity)) if best.min_quantity else "")
-                else:
-                    pct = best.discount_percent
-                    rule = "{}: {:g}% off{}".format(price_list.name, float(pct), " from {:g}".format(float(best.min_quantity)) if best.min_quantity else "")
-            elif price_list.discount_percent:
-                pct = price_list.discount_percent
-                rule = "{}: list discount {:g}%".format(price_list.name, float(pct))
-        pct = max(Decimal("0"), min(Decimal("100"), pct)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        best_pct, best_rule, options = Decimal("0"), "MRP", []
+        for label, source in sources:
+            found = (source, "{:g}% off everything".format(float(source))) if isinstance(source, Decimal) else _line_rule(source, product, qty)
+            if found is None:
+                continue
+            pct, why = found
+            options.append({"source": label, "discount_percent": float(round(pct, 2)), "rule": why})
+            if pct > best_pct:
+                best_pct, best_rule = pct, "{}: {}".format(label, why)
+        pct = max(Decimal("0"), min(Decimal("100"), best_pct)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         out.append({"product_id": product.id, "mrp": float(mrp), "discount_percent": float(pct),
-                    "net_price": float((mrp * (1 - pct / 100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)), "rule": rule})
-    return {"price_list": price_list.name if price_list else None, "price_list_active": usable, "lines": out}
+                    "net_price": float((mrp * (1 - pct / 100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)), "rule": best_rule,
+                    "options": options})
+    names = [label for label, _ in sources]
+    return {"price_list": ", ".join(names) if names else None, "price_list_active": bool(sources), "sources": names, "lines": out}
+
+
+# ---------------------------------------------------------------------------
+# A customer's own pricing
+# ---------------------------------------------------------------------------
+
+
+def customer_pricing(session: Session, customer_id: uuid.UUID) -> Dict[str, Any]:
+    from . import groups as group_service
+
+    customer = session.get(Customer, customer_id)
+    if customer is None:
+        raise NotFoundError("Customer not found.")
+    own = session.execute(select(PriceList).where(PriceList.customer_id == customer_id)).scalar_one_or_none()
+    assigned = _load(session, customer.price_list_id) if customer.price_list_id else None
+    return {
+        "customer_id": customer_id,
+        "discount_percent": float(customer.discount_percent) if customer.discount_percent is not None else None,
+        "price_list": {"id": assigned.id, "name": assigned.name, "discount_percent": float(assigned.discount_percent)} if assigned else None,
+        "own_items": view(own)["items"] if own else [],
+        "groups": [{"id": g.id, "name": g.name, "price_list_id": g.price_list_id, "price_list_name": g.price_list.name if g.price_list else None}
+                   for g in group_service.groups_of(session, customer_id)],
+    }
+
+
+def save_customer_pricing(session: Session, customer_id: uuid.UUID, discount_percent: Any = ..., items: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Set a customer's flat discount and/or their own product prices."""
+    begin_write(session)
+    try:
+        customer = session.get(Customer, customer_id)
+        if customer is None:
+            raise NotFoundError("Customer not found.")
+        if discount_percent is not ...:
+            pct = _d(discount_percent, "Discount")
+            if pct is not None and not Decimal("0") <= pct <= Decimal("100"):
+                raise ValidationError("The discount must be between 0 and 100%.")
+            customer.discount_percent = pct if pct else None
+        if items is not None:
+            own = session.execute(select(PriceList).where(PriceList.customer_id == customer_id)).scalar_one_or_none()
+            if own is None:
+                own = PriceList(name="Own prices · {} · {}".format(customer.name[:40], str(customer.id)[:8]), customer_id=customer_id, discount_percent=Decimal("0"))
+                session.add(own)
+                session.flush()
+            session.commit()
+            save(session, {"name": own.name, "discount_percent": "0", "items": items}, own.id)
+            return customer_pricing(session, customer_id)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return customer_pricing(session, customer_id)

@@ -20,6 +20,7 @@ from .api import (
     controls,
     customers,
     enquiries,
+    groups,
     finance,
     fulfilment,
     insights,
@@ -29,6 +30,7 @@ from .api import (
     parties,
     pricelists,
     products,
+    public,
     purchasing,
     records,
     tasks,
@@ -121,8 +123,11 @@ app.add_middleware(
 signed_in = [Depends(require_user)]
 app.include_router(auth.router)
 app.include_router(integrations.webhooks)
+# A customer's own enquiry page: protected by its secret link, not by sign-in.
+app.include_router(public.router)
 for router in (
     parties.router,
+    groups.router,
     products.router,
     customers.router,
     enquiries.router,

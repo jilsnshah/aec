@@ -42,6 +42,8 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
         { key: 'send_invoices', label: 'Send each invoice to the customer on WhatsApp', kind: 'check' },
         { key: 'access_token', label: 'Access token', kind: 'secret', hint: 'A permanent system-user token with whatsapp_business_messaging.' },
         { key: 'invoice_template', label: 'Invoice template name', placeholder: 'invoice_pdf', hint: 'A utility template with a document header.' },
+        { key: 'send_order_confirmations', label: 'Send an order confirmation when an order is placed', kind: 'check' },
+        { key: 'order_template', label: 'Order confirmation template name', placeholder: 'order_confirmed', hint: 'A utility text template; body variables: {{1}} customer, {{2}} order number, {{3}} total, {{4}} items.' },
         { key: 'template_language', label: 'Template language', placeholder: 'en' },
         { key: 'country_code', label: 'Default country code', placeholder: '91' },
         { key: 'graph_version', label: 'Graph API version', placeholder: 'v23.0' },
@@ -76,7 +78,8 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
       title: 'What to sync',
       fields: [
         { key: 'sync_sales_orders', label: 'Sales orders become Sales Order vouchers', kind: 'check' },
-        { key: 'create_invoices', label: 'Invoice each sales order in Tally (its number is used on the PDF)', kind: 'check' },
+        { key: 'create_invoices', label: 'Create invoices in Tally (their numbers are used on the PDF)', kind: 'check' },
+        { key: 'invoice_on', label: 'When to invoice', kind: 'select', options: [{ value: 'order', label: 'When the order is placed (whole order)' }, { value: 'delivery', label: 'On each delivery (what that truck carried)' }], hint: 'Invoicing on delivery bills partial deliveries correctly.' },
         { key: 'sync_purchase_orders', label: 'Placed purchase orders become Purchase Order vouchers', kind: 'check' },
       ],
     },

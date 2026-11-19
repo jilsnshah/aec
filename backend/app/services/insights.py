@@ -832,7 +832,7 @@ def enquiry_funnel(session: Session, period: Optional[str] = None, start: Option
                         "enquiry_id": enquiry.id,
                         "enquiry_number": enquiry.enquiry_number,
                         "customer_id": enquiry.customer_id,
-                        "customer_name": enquiry.customer.name,
+                        "customer_name": enquiry.customer.name if enquiry.customer else (enquiry.sender_name or enquiry.sender_phone or "Unknown sender"),
                         "value": value,
                         "days_idle": idle,
                         "age_days": (now - enquiry.created_at.astimezone(_zone())).days,
@@ -879,7 +879,9 @@ def enquiry_funnel(session: Session, period: Optional[str] = None, start: Option
             reasons.append("can be supplied from stock now")
         priorities.append({
             "enquiry_id": enquiry.id, "enquiry_number": enquiry.enquiry_number, "customer_id": enquiry.customer_id,
-            "customer_name": enquiry.customer.name, "phone": enquiry.customer.phone, "value": value, "age_days": age,
+            "customer_name": enquiry.customer.name if enquiry.customer else (enquiry.sender_name or "Unknown sender"),
+            "phone": enquiry.customer.phone if enquiry.customer else enquiry.sender_phone, "value": value, "age_days": age,
+            "unknown_sender": enquiry.customer_id is None,
             "days_idle": idle, "in_stock": in_stock, "score": round(min(score, 100)), "reasons": reasons,
             "has_open_follow_up": enquiry.id in open_task_enquiries,
         })

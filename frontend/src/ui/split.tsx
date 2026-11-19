@@ -71,7 +71,7 @@ export function ListPane({
       <header className="shrink-0 space-y-3 px-5 pt-5 pb-3">
         <div className="flex items-center gap-2.5">
           <ModuleTile size={34} />
-          <h1 className="text-[18px] font-semibold tracking-[-0.02em]">{title}</h1>
+          <h1 className="min-w-0 truncate text-[18px] font-semibold tracking-[-0.02em]" title={title}>{title}</h1>
           {count !== undefined ? <span className="num rounded-full bg-white/7 px-2 py-px text-[11.5px] font-medium text-fg-2">{count}</span> : null}
           <div className="ml-auto flex items-center gap-1">{actions}</div>
         </div>

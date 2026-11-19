@@ -26,7 +26,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..errors import DomainError
-from . import customers as customer_service
 from . import enquiries as enquiry_service
 from . import products as product_service
 
@@ -46,9 +45,8 @@ If it is not an enquiry, call no tools and answer with one line starting with \
 "NOT_ENQUIRY:" and the reason.
 
 If it is an enquiry:
-1. Find the customer with find_customers, searching by the sender's phone number \
-(the last 10 digits) or email address, then by name. If nobody matches, create the \
-customer with create_customer using the sender's name and contact details.
+1. You do not identify the customer: the system matches the sender's number or \
+email to a customer on file, and leaves the enquiry for a person if it is unknown.
 2. Find each product the customer wants with search_products. Customers write \
 loosely ("cement bags", "12mm rods"), so search with a single key word, and call \
 search_products with an empty query to see the whole catalogue when a search finds \
@@ -127,61 +125,38 @@ def build_tools(session: Session, context: InboundContext) -> list:
         )
 
     @tool
-    def find_customers(query: str) -> str:
-        """Find existing customers whose name, phone number or email contains
-        the query. Returns id, name, phone and email for each match."""
-        context.tool_calls.append("find_customers")
-        rows = customer_service.list_customers(session, search=query.strip(), limit=10)
-        return _rows(
-            [{"id": row.id, "name": row.name, "phone": row.phone, "email": row.email} for row in rows]
-        )
-
-    @tool
-    def create_customer(name: str, phone: Optional[str] = None, email: Optional[str] = None) -> str:
-        """Create a new customer when find_customers found nobody. Returns the
-        new customer's id."""
-        context.tool_calls.append("create_customer")
-        try:
-            customer = customer_service.create_customer(
-                session,
-                name=name,
-                phone=phone,
-                email=email,
-                notes="Added automatically from a {} message.".format(context.channel),
-            )
-        except DomainError as exc:
-            return "Error: {}".format(exc.message)
-        context.customer_id = customer.id
-        return json.dumps({"id": str(customer.id), "name": customer.name})
-
-    @tool
-    def create_enquiry(customer_id: str, lines: List[EnquiryLine], notes: str) -> str:
-        """Record the sales enquiry: the customer, the products with quantities,
-        and short notes. Call it once per message."""
+    def create_enquiry(lines: List[EnquiryLine], notes: str) -> str:
+        """Record the sales enquiry: the products with quantities, and short
+        notes. Call it once per message. Who sent it is filled in for you."""
         context.tool_calls.append("create_enquiry")
         if context.enquiry_id is not None:
             return "Error: an enquiry ({}) was already recorded for this message.".format(
                 context.enquiry_number
             )
+        is_email = context.channel == "email"
         try:
+            # The sender is matched to a customer by the enquiry service, by
+            # exact phone number or email -- not by the model.
             enquiry = enquiry_service.create_enquiry(
                 session,
-                customer_id=uuid.UUID(customer_id),
+                customer_id=None,
                 items=[{"product_id": line.product_id, "quantity": str(line.quantity)} for line in lines],
                 notes=notes,
                 source=context.channel,
                 source_detail=context.sender,
+                sender_name=context.sender_name,
+                sender_phone=None if is_email else context.sender,
+                sender_email=context.sender if is_email else None,
             )
-        except ValueError:
-            return "Error: '{}' is not a customer id.".format(customer_id)
         except DomainError as exc:
             return "Error: {}".format(exc.message)
         context.enquiry_id = enquiry.id
         context.enquiry_number = enquiry.enquiry_number
         context.customer_id = enquiry.customer_id
-        return json.dumps({"enquiry_number": enquiry.enquiry_number, "lines": len(enquiry.items)})
+        return json.dumps({"enquiry_number": enquiry.enquiry_number, "lines": len(enquiry.items),
+                           "customer": enquiry.customer.name if enquiry.customer else "unknown sender (a person will assign the customer)"})
 
-    return [search_products, find_customers, create_customer, create_enquiry]
+    return [search_products, create_enquiry]
 
 
 class NotConfigured(Exception):

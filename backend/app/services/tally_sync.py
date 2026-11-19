@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 SALES_ORDER = "sales_order"
 SALES_INVOICE = "sales_invoice"
+#: An invoice for one delivery (when Tally is set to invoice on delivery).
+DELIVERY_INVOICE = "delivery_invoice"
 PURCHASE_ORDER = "purchase_order"
 #: Automatic attempts before a failure waits for a person.
 MAX_ATTEMPTS = 5
@@ -79,7 +81,7 @@ def queue_sales_order(session: Session, order: SalesOrder) -> List[uuid.UUID]:
     ids = []
     if config.config["sync_sales_orders"]:
         ids.append(_queue(session, SALES_ORDER, order.id, order.order_number))
-    if config.config["create_invoices"]:
+    if config.config["create_invoices"] and config.config.get("invoice_on", "order") == "order":
         ids.append(_queue(
             session, SALES_INVOICE, order.id, order.order_number,
             notify=bool(send.enabled and send.config.get("send_invoices")),
@@ -102,6 +104,47 @@ def queue_purchase_order(session: Session, order: PurchaseOrder) -> List[uuid.UU
 # ---------------------------------------------------------------------------
 # Building what goes to Tally
 # ---------------------------------------------------------------------------
+
+def queue_delivery(session: Session, delivery_id: uuid.UUID) -> List[uuid.UUID]:
+    """Queue the invoice for one delivery, when Tally invoices on delivery."""
+    from ..models import CustomerDelivery
+
+    config = settings_service.get(session, settings_service.TALLY)
+    if not (config.enabled and config.config["create_invoices"] and config.config.get("invoice_on") == "delivery"):
+        return []
+    begin_write(session)
+    delivery = session.get(CustomerDelivery, delivery_id)
+    if delivery is None:
+        return []
+    send = settings_service.get(session, settings_service.WHATSAPP)
+    row_id = _queue(session, DELIVERY_INVOICE, delivery.id, delivery.delivery_number,
+                    notify=bool(send.enabled and send.config.get("send_invoices")))
+    session.commit()
+    return [row_id] if row_id else []
+
+
+def _delivery(session: Session, delivery_id: uuid.UUID):
+    from sqlalchemy.orm import joinedload
+
+    from ..models import CustomerDelivery, CustomerDeliveryItem, SalesOrderItem
+
+    delivery = session.execute(
+        select(CustomerDelivery).where(CustomerDelivery.id == delivery_id)
+        .options(joinedload(CustomerDelivery.items).joinedload(CustomerDeliveryItem.order_item).joinedload(SalesOrderItem.product),
+                 joinedload(CustomerDelivery.sales_order), joinedload(CustomerDelivery.customer))
+    ).unique().scalar_one_or_none()
+    if delivery is None:
+        raise NotFoundError("Delivery not found.")
+    return delivery
+
+
+def _delivery_lines(delivery) -> List[tally.Line]:
+    return [
+        tally.Line(item=line.order_item.product.name, unit=line.order_item.product.unit_of_measure, quantity=line.quantity,
+                   rate=line.order_item.unit_price_net, amount=_cents(line.order_item.unit_price_net * line.quantity))
+        for line in delivery.items if line.quantity > 0
+    ]
+
 
 def _sales_lines(order: SalesOrder) -> List[tally.Line]:
     return [
@@ -138,6 +181,32 @@ def ledger_name(party) -> str:
 
 
 def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tally.TallyClient) -> None:
+    if row.kind == DELIVERY_INVOICE:
+        delivery = _delivery(session, row.entity_id)
+        order = delivery.sales_order
+        ledger = ledger_name(delivery.customer)
+        client.ensure_ledger(ledger, config["customer_group"], delivery.customer.phone, delivery.customer.email)
+        lines = _delivery_lines(delivery)
+        for line in delivery.items:
+            client.ensure_stock_item(line.order_item.product.name, line.order_item.product.unit_of_measure)
+        linked = session.execute(
+            select(TallySync).where(TallySync.kind == SALES_ORDER, TallySync.entity_id == order.id, TallySync.status == "synced")
+        ).scalar_one_or_none()
+        subtotal = sum((line.amount for line in lines), Decimal("0"))
+        result = client.create_voucher(
+            config["sales_invoice_type"], _local_day(delivery.created_at), ledger, config["sales_ledger"], lines,
+            party_is_debit=True, godown=config["godown"], reference=delivery.delivery_number,
+            narration="Delivery {} against {}".format(delivery.delivery_number, order.order_number),
+            order_number=order.order_number if linked else None, taxes=sales_taxes(config, subtotal),
+        )
+        number = None
+        if result.master_id:
+            try:
+                number = client.voucher_number(result.master_id)
+            except tally.TallyError:
+                number = None
+        row.tally_number = number or delivery.delivery_number
+        return
     if row.kind in (SALES_ORDER, SALES_INVOICE):
         from .orders import get_order
 
@@ -246,7 +315,7 @@ def process(sync_id: uuid.UUID) -> None:
             row.synced_at = datetime.now(timezone.utc)
             session.commit()
             logger.info("Synced %s %s to Tally as %s", row.kind, row.reference, row.tally_number)
-        if row.kind == SALES_INVOICE and row.notify_status == "pending":
+        if row.kind in (SALES_INVOICE, DELIVERY_INVOICE) and row.notify_status == "pending":
             _send_invoice(session, row)
     finally:
         session.close()
@@ -254,6 +323,19 @@ def process(sync_id: uuid.UUID) -> None:
 
 def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
     from .orders import get_order
+
+    if row.kind == DELIVERY_INVOICE:
+        delivery = _delivery(session, row.entity_id)
+        config = settings_service.get(session, settings_service.TALLY).config
+        lines = [invoice_pdf.InvoiceLine(l.item, l.quantity, l.unit, l.rate, l.amount) for l in _delivery_lines(delivery)]
+        subtotal = sum((line.amount for line in lines), Decimal("0"))
+        return invoice_pdf.Invoice(
+            number=row.tally_number or delivery.delivery_number, on=_local_day(row.synced_at or delivery.created_at),
+            order_number="{} (delivery {})".format(delivery.sales_order.order_number, delivery.delivery_number),
+            seller_name=config["seller_name"], seller_address=config["seller_address"], seller_gstin=config["seller_gstin"],
+            seller_phone=config["seller_phone"], customer_name=delivery.customer.name, customer_address=delivery.customer.address,
+            customer_phone=delivery.customer.phone, lines=lines, taxes=sales_taxes(config, subtotal),
+        )
 
     order = get_order(session, row.entity_id)
     config = settings_service.get(session, settings_service.TALLY).config
@@ -360,10 +442,20 @@ def retry(session: Session, sync_id: uuid.UUID) -> TallySync:
 
 
 def invoice_for_order(session: Session, order_id: uuid.UUID) -> Optional[TallySync]:
-    return session.execute(
+    """The order's invoice; when invoicing on delivery, its latest delivery's."""
+    row = session.execute(
         select(TallySync).where(TallySync.kind == SALES_INVOICE, TallySync.entity_id == order_id,
                                 TallySync.status == "synced")
     ).scalar_one_or_none()
+    if row is not None:
+        return row
+    from ..models import CustomerDelivery
+
+    return session.execute(
+        select(TallySync).join(CustomerDelivery, CustomerDelivery.id == TallySync.entity_id)
+        .where(TallySync.kind == DELIVERY_INVOICE, CustomerDelivery.sales_order_id == order_id, TallySync.status == "synced")
+        .order_by(TallySync.synced_at.desc())
+    ).scalars().first()
 
 
 def for_entity(session: Session, entity_id: uuid.UUID) -> List[TallySync]:

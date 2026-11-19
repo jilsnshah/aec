@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import schemas
@@ -24,7 +24,7 @@ def order_fulfilment(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.post("/orders/{order_id}/deliveries", response_model=schemas.DeliveryResult, status_code=201)
 def create_delivery(
-    order_id: uuid.UUID, payload: schemas.DeliveryRequest, db: Session = Depends(get_db)
+    order_id: uuid.UUID, payload: schemas.DeliveryRequest, background: BackgroundTasks, db: Session = Depends(get_db)
 ):
     """Hand reserved goods to the customer.
 
@@ -32,7 +32,7 @@ def create_delivery(
     outstanding. Physical stock falls, the reservation is released and the cost
     of goods is taken from the FIFO cost layers -- all in one transaction.
     """
-    return delivery_service.create_delivery(
+    result = delivery_service.create_delivery(
         db,
         order_id=order_id,
         lines=[line.model_dump() for line in payload.lines],
@@ -40,6 +40,12 @@ def create_delivery(
         notes=payload.notes,
         idempotency_key=payload.idempotency_key,
     )
+    # When Tally invoices on delivery, this delivery gets its own invoice.
+    from ..services import tally_sync
+
+    for sync_id in tally_sync.queue_delivery(db, uuid.UUID(str(result["delivery_id"]))):
+        background.add_task(tally_sync.process, sync_id)
+    return result
 
 
 @router.get("/deliveries", response_model=schemas.Page[schemas.DeliveryRow])

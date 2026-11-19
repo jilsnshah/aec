@@ -931,6 +931,29 @@ week raise alerts.
 Where data is too thin (bought-together needs 20+ multi-product orders; trends
 need at least 5 units a month) the screens say so rather than guess.
 
+## How a sale flows now
+
+1. **Enquiry.** Typed in; from WhatsApp, email or a phone call (AI reads it);
+   or sent by the customer from **their own link** (`/e/<token>`, made on the
+   customer page: their products and prices, no sign-in). **Who sent it is
+   decided by code**: the sender's number or email is matched exactly against
+   every number and email on file. No match: the enquiry waits as a
+   **new sender**, keeping their name, number and email.
+2. **Prices.** Each line starts at the customer's **best price** from their own
+   discount, their own product prices, their price list, and the price list of
+   every **smart group** they are in (rules over orders, spend, years with us,
+   payment behaviour, city...). "Apply best prices" re-prices an enquiry.
+3. **Order.** Converting needs a customer: for a new sender, choose an
+   existing customer or create one; their number and email are linked so the
+   next message is recognised. Credit, discount and margin holds apply.
+4. **Confirmation.** If switched on (Settings → WhatsApp), an approved
+   template confirms the order on WhatsApp; it can also be sent from the order.
+5. **Tally and invoice.** The order goes to Tally; the invoice is made when the
+   order is placed or, if chosen (Settings → Tally → When to invoice), for each
+   delivery. The invoice PDF can go to the customer on WhatsApp.
+6. **Deliver and collect.** Deliveries (partial allowed), payments, reminders,
+   returns.
+
 ## Customers and suppliers as complete records
 
 Each customer and supplier owns child records, as in Odoo, ERPNext and

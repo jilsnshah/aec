@@ -134,6 +134,10 @@ def timeline(session: Session, customer_id=None, supplier_id=None, product_id=No
             events.append(_event(payment.paid_on, "payment", "Payment {}".format(payment.number), payment.method, None, _f(payment.amount)))
         for ret in session.execute(select(SalesReturn).where(SalesReturn.sales_order_id == order_id)).scalars():
             events.append(_event(ret.created_at, "return", "Return {}".format(ret.number), ret.note or "", None, -_f(ret.amount)))
+        from ..models import AuditEvent
+
+        for audit in session.execute(select(AuditEvent).where(AuditEvent.entity_id == str(order_id), AuditEvent.action.like("whatsapp_%"))).scalars():
+            events.append(_event(audit.at, "message" if audit.action.endswith("sent") else "cancel", "WhatsApp confirmation " + ("sent" if audit.action.endswith("sent") else "not sent"), audit.summary))
         if order.cancelled_at:
             events.append(_event(order.cancelled_at, "cancel", "Cancelled", ""))
         tasks = select(Task).where(Task.sales_order_id == order_id)

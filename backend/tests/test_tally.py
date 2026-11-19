@@ -324,3 +324,24 @@ def test_importing_masters_from_tally(db, client, monkeypatch):
 
     again = tally_import.run(db, source)
     assert (again.products, again.customers, again.suppliers, again.skipped) == (0, 0, 0, 4)
+
+
+def test_invoicing_on_delivery_bills_each_delivery(client, fakes, catalogue):
+    fake_tally, fake_meta = fakes
+    cement, customer, _ = catalogue
+    connect(client, invoice_on="delivery")
+    send_invoices(client)
+    order = place_order(client, customer, cement, qty="10")
+    rows = syncs(client)
+    assert "sales_invoice" not in rows and rows["sales_order"]["status"] == "synced"
+    detail = client.get("/api/orders/{}".format(order["id"])).json()
+    line = detail["items"][0]
+    delivered = client.post("/api/orders/{}/deliveries".format(order["id"]), json={"lines": [{"order_item_id": line["id"], "quantity": "4"}]})
+    assert delivered.status_code == 201, delivered.text
+    rows = syncs(client)
+    assert rows["delivery_invoice"]["status"] == "synced" and rows["delivery_invoice"]["notify_status"] == "sent"
+    invoice = fake_tally.voucher("Sales")
+    item = invoice.find("ALLINVENTORYENTRIES.LIST")
+    assert item.findtext("ACTUALQTY") == "4 bags"  # only what this delivery carried
+    pdf = client.get("/api/integrations/invoices/{}.pdf".format(order["id"]))
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")

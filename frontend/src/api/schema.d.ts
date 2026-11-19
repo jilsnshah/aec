@@ -607,6 +607,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enquiries/{enquiry_id}/customer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Customer
+         * @description Say who an enquiry from an unknown sender is from: customer_id of an
+         *     existing customer, or new_customer details to create one. The sender's
+         *     number and email are added to that customer so they are recognised next time.
+         */
+        post: operations["assign_customer_api_enquiries__enquiry_id__customer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enquiries/{enquiry_id}/mark-lost": {
         parameters: {
             query?: never;
@@ -3334,9 +3356,15 @@ export interface components {
         EnquiryCreate: {
             /**
              * Customer Id
-             * Format: uuid
+             * @description Leave empty for someone not yet a customer and give sender_name/phone/email.
              */
-            customer_id: string;
+            customer_id?: string | null;
+            /** Sender Name */
+            sender_name?: string | null;
+            /** Sender Phone */
+            sender_phone?: string | null;
+            /** Sender Email */
+            sender_email?: string | null;
             /** Notes */
             notes?: string | null;
             /**
@@ -3351,6 +3379,15 @@ export interface components {
             delivery_address_id?: string | null;
             /** Items */
             items: components["schemas"]["EnquiryLineCreate"][];
+        };
+        /**
+         * EnquiryCustomerIn
+         * @description Who an enquiry is from: an existing customer, or a new one.
+         */
+        EnquiryCustomerIn: {
+            /** Customer Id */
+            customer_id?: string | null;
+            new_customer?: components["schemas"]["CustomerCreate"] | null;
         };
         /** EnquiryItemOut */
         EnquiryItemOut: {
@@ -3405,16 +3442,19 @@ export interface components {
             id: string;
             /** Enquiry Number */
             enquiry_number: string;
-            /**
-             * Customer Id
-             * Format: uuid
-             */
-            customer_id: string;
+            /** Customer Id */
+            customer_id?: string | null;
             /** Contact Id */
             contact_id?: string | null;
             /** Delivery Address Id */
             delivery_address_id?: string | null;
-            customer: components["schemas"]["CustomerRef"];
+            customer?: components["schemas"]["CustomerRef"] | null;
+            /** Sender Name */
+            sender_name?: string | null;
+            /** Sender Phone */
+            sender_phone?: string | null;
+            /** Sender Email */
+            sender_email?: string | null;
             /** Notes */
             notes?: string | null;
             status: components["schemas"]["EnquiryStatus"];
@@ -7492,7 +7532,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EnquiryCustomerIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {
@@ -7501,6 +7545,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnquiryConversionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_customer_api_enquiries__enquiry_id__customer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnquiryCustomerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnquiryOut"];
                 };
             };
             /** @description Validation Error */

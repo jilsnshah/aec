@@ -1,3 +1,5 @@
+import { CustomerLink } from '@/features/public/CustomerLink'
+import { CustomerPricing } from '@/features/pricing/CustomerPricing'
 import { PartyContactsAside, PartyProfile } from '@/features/parties/PartyProfile'
 import { MergeSheet } from '@/features/parties/MergeSheet'
 import { GitMerge } from 'lucide-react'
@@ -382,6 +384,7 @@ function CustomerInspector({ id }: { id: string }) {
           tabs={[
             { value: 'overview', label: 'Overview' },
             { value: 'profile', label: 'Profile' },
+            { value: 'pricing', label: 'Pricing' },
             { value: 'owed', label: 'To deliver', count: data.outstanding.length },
             { value: 'orders', label: 'Orders', count: data.orders.length },
             { value: 'enquiries', label: 'Enquiries', count: enquiries.data?.total },
@@ -390,6 +393,9 @@ function CustomerInspector({ id }: { id: string }) {
             { value: 'followups', label: 'Follow-ups' },
           ]}
         >
+          <TabPanel value="pricing">
+            <CustomerPricing customerId={id} />
+          </TabPanel>
           <TabPanel value="profile">
             <PartyProfile kind="customer" id={id} />
           </TabPanel>
@@ -500,6 +506,7 @@ function CustomerInspector({ id }: { id: string }) {
         <aside className="w-[270px] shrink-0 space-y-4 overflow-y-auto border-l border-white/7 p-5 max-xl:hidden">
           <div className="eyebrow">Contact</div>
           <PartyContactsAside kind="customer" id={id} />
+          <CustomerLink customerId={id} name={data.name} phone={data.phone} />
           <Contact icon={<MapPin size={14} />} value={data.address} />
           <Button
             small

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { parties } from '@/api/parties'
+import { http } from '@/api/client'
 import {
   AlertTriangle,
   Ban,
@@ -19,6 +20,7 @@ import {
   Plus,
   ReceiptText,
   Repeat2,
+  Send,
   Undo2,
   Scissors,
   ShoppingCart,
@@ -262,6 +264,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
   const [delivering, setDelivering] = useState(false)
   const [buying, setBuying] = useState(false)
   const [returning, setReturning] = useState(false)
+  const sendConfirmation = useAction(() => http.post<{ to: string }>(`/api/orders/${id}/send-confirmation`), { success: (r) => `Confirmation sent to ${r.to}` })
   const confirm = useConfirm()
   const cancel = useAction((reason: string | null) => api.orders.cancel(id, reason), { success: 'Order cancelled' })
   const cancelRest = useAction((reason: string | null) => api.orders.cancelRemaining(id, reason), { success: 'The rest of the order was cancelled' })
@@ -327,6 +330,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
                 { label: 'Open customer', icon: <UserRound size={14} />, onSelect: () => (window.location.href = `/customers/${data.customer_id}`) },
                 { label: 'Repeat this order', icon: <Repeat2 size={14} />, onSelect: () => onRepeat(id) },
                 { label: 'Record a return', icon: <Undo2 size={14} />, onSelect: () => setReturning(true), disabled: totals.delivered === 0 },
+                { label: 'Send order confirmation (WhatsApp template)', icon: <Send size={14} />, onSelect: () => sendConfirmation.mutate(undefined) },
                 { label: 'Send update on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(update)}`, '_blank'), disabled: !phone },
                 { label: 'Cancel what is left', icon: <Scissors size={14} />, onSelect: () => askCancel(true), disabled: !open || totals.delivered === 0, danger: true, separator: true },
                 { label: 'Cancel order', icon: <Ban size={14} />, onSelect: () => askCancel(false), disabled: !open || totals.delivered > 0, danger: true },

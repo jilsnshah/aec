@@ -205,6 +205,34 @@ def send_invoice(
     return messages[0].get("id") or ""
 
 
+def send_template(config: Dict[str, Any], access_token: str, to: str, template: str, body_parameters: List[str]) -> str:
+    """Send an approved text template (no attachment), e.g. an order
+    confirmation. Returns the WhatsApp message id."""
+    base = "{}/{}/{}".format(GRAPH, config.get("graph_version") or "v23.0", config["phone_number_id"])
+    try:
+        with http_factory() as client:
+            message = client.post(
+                base + "/messages",
+                headers={"Authorization": "Bearer " + access_token},
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": to,
+                    "type": "template",
+                    "template": {
+                        "name": template,
+                        "language": {"code": config.get("template_language") or "en"},
+                        "components": [{"type": "body", "parameters": [{"type": "text", "text": text} for text in body_parameters]}],
+                    },
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
+    if message.status_code >= 400:
+        raise SendError("WhatsApp refused the message: " + _graph_error(message))
+    messages = message.json().get("messages") or [{}]
+    return messages[0].get("id") or ""
+
+
 def template_status(config: Dict[str, Any], access_token: str) -> str:
     """Whether Meta has approved the invoice template: APPROVED, PENDING, REJECTED..."""
     waba = config.get("business_account_id")

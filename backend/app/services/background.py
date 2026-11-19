@@ -12,11 +12,11 @@ import threading
 from typing import Callable, List, Optional
 
 from ..config import get_settings
-from . import email_inbox, tally_sync
+from . import email_inbox, groups, tally_sync
 
 logger = logging.getLogger(__name__)
 
-JOBS: List[Callable[[], int]] = [email_inbox.poll_once, tally_sync.process_due]
+JOBS: List[Callable[[], int]] = [email_inbox.poll_once, tally_sync.process_due, groups.recompute_if_due]
 
 
 class Poller:
