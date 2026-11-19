@@ -5,12 +5,14 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
-from ..services import tally_sync
+from ..models import User
+from ..services import controls, tally_sync
+from .auth import require_user
 from ..services import enquiries as enquiry_service
 from .orders import _detail
 from .pagination import PageParams, page_params
@@ -57,6 +59,16 @@ def get_enquiry(enquiry_id: uuid.UUID, db: Session = Depends(get_db)):
     return enquiry_service.to_view(enquiry_service.get_enquiry(db, enquiry_id))
 
 
+@router.get("/{enquiry_id}/quotation.pdf")
+def quotation_pdf(enquiry_id: uuid.UUID, valid_days: int = Query(default=7, ge=1, le=90), db: Session = Depends(get_db)):
+    """The enquiry as a quotation PDF to send to the customer."""
+    from ..services import invoice_pdf
+
+    quote = enquiry_service.quotation(db, enquiry_id, valid_days)
+    return Response(content=invoice_pdf.render(quote), media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="Quotation-{}.pdf"'.format(quote.number)})
+
+
 @router.patch("/{enquiry_id}", response_model=schemas.EnquiryOut)
 def update_enquiry(
     enquiry_id: uuid.UUID, payload: schemas.EnquiryUpdate, db: Session = Depends(get_db)
@@ -69,7 +81,14 @@ def update_enquiry(
 
 
 @router.post("/{enquiry_id}/convert", response_model=schemas.EnquiryConversionResult, status_code=201)
-def convert_enquiry(enquiry_id: uuid.UUID, background: BackgroundTasks, db: Session = Depends(get_db)):
+def convert_enquiry(
+    enquiry_id: uuid.UUID,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    override: bool = Query(default=False, description="Admin approval of an order on hold (needs override_reason)."),
+    override_reason: Optional[str] = Query(default=None),
+):
     """Win the deal: create the sales order and close the enquiry.
 
     The order is created by the Phase 1 service in the same transaction, so
@@ -77,6 +96,11 @@ def convert_enquiry(enquiry_id: uuid.UUID, background: BackgroundTasks, db: Sess
     order entered directly. Converting the same enquiry twice returns 409 and
     never creates a second order.
     """
+    enquiry = enquiry_service.get_enquiry(db, enquiry_id)
+    if enquiry.status.value == "OPEN":
+        controls.enforce(db, enquiry.customer_id, [
+            {"product_id": item.product_id, "quantity_ordered": item.quantity, "unit_price": item.mrp_snapshot, "discount_percent": item.discount_percent}
+            for item in enquiry.items], user, override, override_reason, "enquiry {}".format(enquiry.enquiry_number))
     result = enquiry_service.convert_enquiry(db, enquiry_id)
     for sync_id in tally_sync.queue_sales_order(db, result["order"]):
         background.add_task(tally_sync.process, sync_id)

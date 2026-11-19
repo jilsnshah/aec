@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Check, Copy, FileText, History, Inbox, Mail, MessageCircle, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
+import { AuditPane, ControlsPane } from './ControlsPane'
+import { Check, Copy, FileText, History, Inbox, Mail, MessageCircle, RefreshCw, ShieldCheck, Sparkles, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -115,12 +116,14 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
   ],
 }
 
-type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'messages' | 'syncs' | 'assistant_log'
+type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'controls' | 'audit' | 'messages' | 'syncs' | 'assistant_log'
 const SECTIONS: { key: SectionKey; label: string; hint: string; icon: ReactNode; group: string }[] = [
   { key: 'ai', label: 'AI · Gemini', hint: 'Assistant and message reading', icon: <Sparkles size={16} />, group: 'Connections' },
   { key: 'whatsapp', label: 'WhatsApp', hint: 'Messages in, invoices out', icon: <MessageCircle size={16} />, group: 'Connections' },
   { key: 'email', label: 'Email', hint: 'Read a sales mailbox', icon: <Mail size={16} />, group: 'Connections' },
   { key: 'tally', label: 'Tally', hint: 'Vouchers and invoices', icon: <FileText size={16} />, group: 'Connections' },
+  { key: 'controls', label: 'Order controls', hint: 'Credit, discount and margin holds', icon: <ShieldCheck size={16} />, group: 'Business rules' },
+  { key: 'audit', label: 'Audit log', hint: 'Approvals, adjustments, returns', icon: <History size={16} />, group: 'Activity' },
   { key: 'messages', label: 'Received messages', hint: 'What came in, what AI did', icon: <Inbox size={16} />, group: 'Activity' },
   { key: 'syncs', label: 'Tally sync log', hint: 'What went to Tally', icon: <RefreshCw size={16} />, group: 'Activity' },
   { key: 'assistant_log', label: 'Assistant activity', hint: 'Every tool the assistant ran', icon: <History size={16} />, group: 'Activity' },
@@ -140,7 +143,7 @@ export function Integrations() {
           <h1 className="text-[16px] font-semibold tracking-[-0.015em]">Integrations</h1>
           <p className="text-[12px] text-fg-3">Turn WhatsApp and email into enquiries; keep Tally in step.</p>
         </div>
-        {['Connections', 'Activity'].map((group) => (
+        {['Connections', 'Business rules', 'Activity'].map((group) => (
           <div key={group}>
             <div className="eyebrow px-2 pb-2">{group}</div>
             {SECTIONS.filter((item) => item.group === group).map((item) => (
@@ -167,6 +170,10 @@ export function Integrations() {
           <Empty title="Settings could not be loaded" />
         ) : current === 'ai' ? (
           <AiPane data={data.data} />
+        ) : current === 'controls' ? (
+          <ControlsPane data={data.data} />
+        ) : current === 'audit' ? (
+          <AuditPane />
         ) : current === 'messages' ? (
           <MessagesPane />
         ) : current === 'syncs' ? (

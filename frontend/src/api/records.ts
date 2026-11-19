@@ -5,7 +5,7 @@ import type { Statement } from './finance'
  *  order checks, payment status per order, supplier scorecards and purchase
  *  suggestions. */
 
-export type EventKind = 'order' | 'cancel' | 'enquiry' | 'won' | 'lost' | 'delivery' | 'payment' | 'purchase' | 'receipt' | 'in' | 'out' | 'task' | 'done'
+export type EventKind = 'return' | 'order' | 'cancel' | 'enquiry' | 'won' | 'lost' | 'delivery' | 'payment' | 'purchase' | 'receipt' | 'in' | 'out' | 'task' | 'done'
 export interface TimelineEvent {
   at: string
   kind: EventKind
@@ -123,4 +123,100 @@ export const records = {
   orderPayments: () => http.get<Record<string, OrderPayment>>('/api/records/order-payments'),
   supplierScorecard: (id: string) => http.get<SupplierScorecard>(`/api/records/suppliers/${id}/scorecard`),
   purchaseSuggestions: () => http.get<PurchaseSuggestions>('/api/records/purchase-suggestions'),
+}
+
+/* ------------------------------------------------------------ stock adjustments */
+export interface Adjustment {
+  id: string
+  number: string
+  count_number: string | null
+  product_id: string
+  product_name: string
+  product_sku: string
+  unit: string
+  reason: string
+  reason_label: string
+  system_quantity: number
+  counted_quantity: number | null
+  quantity_change: number
+  unit_cost: number
+  value_change: number
+  released_to_short: number
+  note: string | null
+  created_at: string
+}
+export interface CountRow {
+  product_id: string
+  name: string
+  sku: string
+  unit: string
+  category: string | null
+  system_quantity: number
+  reserved: number
+  average_cost: number
+  last_counted: string | null
+}
+export interface AdjustmentLineIn {
+  product_id: string
+  counted_quantity?: string
+  quantity_change?: string
+  reason?: string
+  unit_cost?: string
+  note?: string
+}
+export interface PostResult {
+  count_number: string | null
+  checked: number
+  adjusted: number
+  matched: number
+  value_change: number
+  released_to_short: number
+  adjustments: Adjustment[]
+}
+
+export const stock = {
+  adjustments: (query: { product_id?: string; reason?: string; count_number?: string; limit?: number } = {}) =>
+    http.get<{ items: Adjustment[]; total: number; by_reason: { reason: string; label: string; count: number; value_change: number }[] }>('/api/stock-adjustments', query),
+  countSheet: (category?: string) => http.get<{ products: CountRow[]; reasons: Record<string, string> }>('/api/stock-adjustments/count-sheet', { category }),
+  post: (body: { lines: AdjustmentLineIn[]; as_count?: boolean }) => http.post<PostResult>('/api/stock-adjustments', body),
+}
+
+/* ------------------------------------------------------------ sales returns */
+export interface ReturnableLine {
+  order_item_id: string
+  product_id: string
+  product_name: string
+  unit: string
+  delivered: number
+  returned: number
+  returnable: number
+  unit_price_net: number
+}
+export interface SalesReturn {
+  id: string
+  number: string
+  sales_order_id: string
+  order_number: string
+  customer_id: string
+  customer_name: string
+  reason: string
+  reason_label: string
+  note: string | null
+  amount: number
+  restocked_cost: number
+  created_at: string
+  lines: { order_item_id: string; product_id: string; product_name: string; unit: string; quantity: number; unit_price_net: number; amount: number; restock: boolean; unit_cost: number }[]
+}
+export const returns = {
+  returnable: (orderId: string) => http.get<{ lines: ReturnableLine[]; reasons: Record<string, string> }>(`/api/orders/${orderId}/returnable`),
+  forOrder: (orderId: string) => http.get<{ items: SalesReturn[] }>(`/api/orders/${orderId}/returns`),
+  create: ({ orderId, ...body }: { orderId: string; reason: string; note?: string; lines: { order_item_id: string; quantity: string; restock: boolean }[] }) =>
+    http.post<SalesReturn>(`/api/orders/${orderId}/returns`, body),
+}
+
+export const controlsApi = {
+  check: (body: { customer_id?: string | null; items: { product_id: string; quantity_ordered: number; unit_price?: number | null; discount_percent?: number }[] }) =>
+    http.post<{ mode: 'off' | 'warn' | 'block'; holds: { kind: string; text: string }[]; warnings: OrderWarning[] }>('/api/controls/check', body),
+  audit: (query: { limit?: number; action?: string; entity_id?: string } = {}) =>
+    http.get<{ events: { id: string; at: string; user: string | null; action: string; entity: string; entity_id: string | null; summary: string }[] }>('/api/audit', query),
 }

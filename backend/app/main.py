@@ -14,8 +14,10 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .api import (
+    adjustments,
     ai,
     auth,
+    controls,
     customers,
     enquiries,
     finance,
@@ -134,6 +136,8 @@ for router in (
     finance.router,
     workspace.router,
     records.router,
+    adjustments.router,
+    controls.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

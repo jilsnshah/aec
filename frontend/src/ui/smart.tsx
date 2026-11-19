@@ -22,11 +22,14 @@ import {
   PackageMinus,
   PackagePlus,
   ScanLine,
+  ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   ThumbsDown,
   Trophy,
   Truck,
+  Undo2,
   type LucideIcon,
 } from 'lucide-react'
 import { records, type EventKind, type OrderPayment, type OrderWarning, type TimelineFor } from '@/api/records'
@@ -231,6 +234,7 @@ export function WarningList({ warnings }: { warnings: OrderWarning[] }) {
 
 /* ------------------------------------------------------------ timeline */
 const EVENT: Record<EventKind, LucideIcon> = {
+  return: Undo2,
   order: ShoppingCart,
   cancel: Ban,
   enquiry: MessageSquareQuote,
@@ -374,5 +378,49 @@ export function ScanButton({ label, prompt, small }: { label: string; prompt: st
         {busy ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />} {label}
       </button>
     </>
+  )
+}
+
+/* ------------------------------------------------------------ holds */
+export interface Hold {
+  kind: string
+  text: string
+}
+/** The holds in an error from placing an order, if a control stopped it. */
+export function holdFrom(error: unknown): { holds: Hold[]; can_override: boolean } | null {
+  const detail = (error as { detail?: { code?: string; details?: { holds?: Hold[]; can_override?: boolean } } } | null)?.detail
+  if (!detail || detail.code !== 'on_hold') return null
+  return { holds: detail.details?.holds ?? [], can_override: Boolean(detail.details?.can_override) }
+}
+
+/** An order stopped by credit, discount or margin controls; an admin can
+ *  approve it with a reason (recorded in the audit log). */
+export function HoldPanel({ error, busy, onApprove }: { error: unknown; busy?: boolean; onApprove: (reason: string) => void }) {
+  const hold = holdFrom(error)
+  const [reason, setReason] = useState('')
+  if (!hold) return null
+  return (
+    <div className="space-y-3 rounded-2xl bg-[#0b0b0c] p-4 text-[#fff]">
+      <div className="flex items-center gap-2 text-[13.5px] font-semibold">
+        <ShieldAlert size={16} /> Needs approval before it can be placed
+      </div>
+      <ul className="space-y-1 text-[12.5px] opacity-90">
+        {hold.holds.map((item) => (
+          <li key={item.kind + item.text} className="flex gap-2">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {item.text}
+          </li>
+        ))}
+      </ul>
+      {hold.can_override ? (
+        <div className="flex gap-2">
+          <input className="field min-w-0 flex-1 text-fg" placeholder="Why approve it? (recorded in the audit log)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <button disabled={!reason.trim() || busy} onClick={() => onApprove(reason.trim())} className="btn shrink-0 bg-blue! text-[#0b0b0c]!">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />} Approve and place
+          </button>
+        </div>
+      ) : (
+        <p className="text-[12px] opacity-75">Ask an admin to approve it, or change the order (lower the discount, take a payment first).</p>
+      )}
+    </div>
   )
 }

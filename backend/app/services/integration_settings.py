@@ -28,6 +28,8 @@ AI = "ai"
 WHATSAPP = "whatsapp"
 EMAIL = "email"
 TALLY = "tally"
+CONTROLS = "controls"
+CREDIT_MODES = ("off", "warn", "block")
 
 TAX_MODES = ("none", "cgst_sgst", "igst")
 
@@ -81,6 +83,19 @@ def default_model() -> str:
 
 #: Per integration: default plain settings, and the names of its credentials.
 DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    # Business controls checked when an order is placed. "block" stops the
+    # order unless an admin overrides it with a reason; "warn" only reports.
+    CONTROLS: {
+        "config": {
+            "credit_check": "warn",
+            "block_on_overdue": True,
+            "overdue_grace_days": 0,
+            "max_discount_percent": 0,
+            "min_margin_percent": 0,
+            "block_below_cost": False,
+        },
+        "secrets": [],
+    },
     # "enabled" switches on reading WhatsApp and email into enquiries; the
     # assistant is available whenever Gemini is reachable and "assistant" is on.
     AI: {
@@ -317,6 +332,17 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
         if url and not url.startswith(("http://", "https://")):
             raise ValidationError("The Tally server address must start with http:// or https://.")
         config["server_url"] = url
+    if name == CONTROLS:
+        if config["credit_check"] not in CREDIT_MODES:
+            raise ValidationError("Credit check must be off, warn or block.")
+        for key, high in (("overdue_grace_days", 365), ("max_discount_percent", 100), ("min_margin_percent", 100)):
+            try:
+                number = float(config[key] or 0)
+            except (TypeError, ValueError):
+                raise ValidationError("{} must be a number.".format(key.replace("_", " ")))
+            if not 0 <= number <= high:
+                raise ValidationError("{} must be between 0 and {}.".format(key.replace("_", " "), high))
+            config[key] = int(number) if key == "overdue_grace_days" else number
     if name == WHATSAPP:
         config["country_code"] = "".join(ch for ch in str(config["country_code"]) if ch.isdigit())
     if name == EMAIL:

@@ -49,6 +49,10 @@ export function Suppliers() {
   const owedTotal = payables.data?.totals.open ?? 0
   const owedOverdue = payables.data?.totals.overdue ?? 0
   useEffect(() => {
+    // A quick filter that hides the open record moves to the first one shown.
+    if (route.id && items.length > 0 && !items.some((row) => row.id === route.id) && window.innerWidth >= 1024) route.select(items[0].id)
+  }, [chip]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { History, ShieldCheck, Sparkles, TrendingDown } from 'lucide-react'
 import { errorText } from '@/api/client'
-import { records } from '@/api/records'
+import { controlsApi, records } from '@/api/records'
 import { useDebounced } from '@/lib/route'
 import { useAssistant } from '@/features/assistant/store'
-import { WarningList } from '@/ui/smart'
+import { HoldPanel, WarningList, holdFrom } from '@/ui/smart'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import type { OrderDetailOut } from '@/api/types'
@@ -25,7 +25,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [notes, setNotes] = useState('')
   const [tried, setTried] = useState(false)
-  const create = useAction(api.orders.create, { success: (order) => `${order.order_number} placed`, quiet: true })
+  const create = useAction(({ body, approval }: { body: Parameters<typeof api.orders.create>[0]; approval?: string }) => api.orders.create(body, approval), { success: (order) => `${order.order_number} placed`, quiet: true })
 
   useEffect(() => {
     if (!open) return
@@ -60,14 +60,24 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
         items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) })),
       }),
   })
+  const gate = useQuery({
+    queryKey: ['controls', 'check', draft],
+    enabled: open && chosen.length > 0,
+    queryFn: () =>
+      controlsApi.check({
+        customer_id: customer || null,
+        items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: n(line.quantity), discount_percent: n(line.discount), unit_price: n(products.byId.get(line.product_id)?.mrp) })),
+      }),
+  })
+  const holds = gate.data?.holds ?? []
   const warnings = check.data?.warnings ?? []
   const checkLines = check.data?.lines ?? []
 
-  function submit() {
+  function submit(approval?: string) {
     setTried(true)
     if (errors.length > 0) return
     create.mutate(
-      { customer_id: customer, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, discount_percent: line.discount || '0', unit_price: null })) },
+      { approval, body: { customer_id: customer, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, discount_percent: line.discount || '0', unit_price: null })) } },
       {
         onSuccess: (order) => {
           onClose()
@@ -101,6 +111,11 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
             <div className="eyebrow mb-2 flex items-center gap-1.5">
               <ShieldCheck size={12} /> Order check
             </div>
+            {holds.length ? (
+              <div className="mb-2 rounded-xl bg-[#0b0b0c] px-3 py-2 text-[12.5px] text-[#fff]">
+                <b>Needs approval</b> ({gate.data?.mode === 'block' ? 'credit control is set to block' : 'pricing limits'}): an admin can approve it when placing.
+              </div>
+            ) : null}
             {chosen.length === 0 ? (
               <p className="text-[12px] text-fg-3">Credit limit, margin, discount and stock are checked as you add lines.</p>
             ) : warnings.length ? (
@@ -168,14 +183,14 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button kind="primary" busy={create.isPending} onClick={submit}>
+          <Button kind="primary" busy={create.isPending} onClick={() => submit()}>
             Place order
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        {create.error ? <Notice tone="bad">{errorText(create.error)}</Notice> : null}
+        {create.error && holdFrom(create.error) ? <HoldPanel error={create.error} busy={create.isPending} onApprove={(reason) => submit(reason)} /> : create.error ? <Notice tone="bad">{errorText(create.error)}</Notice> : null}
         {tried && errors.length > 0 ? <Notice tone="bad">{errors.join('\n')}</Notice> : null}
         <Field label="Customer">
           {(props) => (

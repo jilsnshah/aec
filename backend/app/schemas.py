@@ -1221,6 +1221,7 @@ class IntegrationsOut(BaseModel):
     whatsapp: IntegrationOut
     email: IntegrationOut
     tally: IntegrationOut
+    controls: IntegrationOut
     #: Only models the server holds credentials for.
     models: List[AiModelOut]
     #: "Google Gemini" when credentials exist, else empty. Never the credentials.

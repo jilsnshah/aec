@@ -38,7 +38,7 @@ from ..models import (
     Supplier,
     utcnow,
 )
-from ..numeric import money
+from ..numeric import ZERO_MONEY, money
 from .common import count_matching, next_document_number, windowed
 
 METHODS = ("cash", "bank", "upi", "cheque", "card", "other")
@@ -135,6 +135,10 @@ def void_payment(session: Session, payment_id: uuid.UUID, reason: Optional[str])
         raise ConflictError("This payment is already void.")
     payment.voided_at = utcnow()
     payment.void_reason = (reason or "").strip() or "No reason given"
+    from .controls import log
+
+    log(session, None, "payment_void", "payment", str(payment.id),
+        "Voided {} of {:,.2f}: {}".format(payment.number, payment.amount, payment.void_reason))
     session.commit()
     return payment
 
@@ -238,7 +242,14 @@ def _paid(session: Session, direction: str) -> Dict[uuid.UUID, Decimal]:
     rows = session.execute(
         select(party, func.sum(Payment.amount)).where(Payment.direction == direction, Payment.voided_at.is_(None)).group_by(party)
     ).all()
-    return {party_id: money(total or 0) for party_id, total in rows}
+    paid = {party_id: money(total or 0) for party_id, total in rows}
+    if direction == "in":
+        # Credit notes (sales returns) settle invoices like payments do.
+        from . import returns
+
+        for customer_id, credit in returns.credits_by_customer(session).items():
+            paid[customer_id] = paid.get(customer_id, ZERO_MONEY) + credit
+    return paid
 
 
 def _match(documents: List[Dict[str, Any]], paid: Decimal, terms: int) -> Tuple[List[Dict[str, Any]], Decimal]:
@@ -355,7 +366,12 @@ def statement(session: Session, party: str, party_id: uuid.UUID) -> Dict[str, An
             (Payment.customer_id if receivable else Payment.supplier_id) == party_id, Payment.voided_at.is_(None)
         ).order_by(Payment.paid_on)
     ).scalars().all()
-    paid_total = sum((p.amount for p in payments), ZERO)
+    credits = []
+    if receivable:
+        from ..models import SalesReturn
+
+        credits = session.execute(select(SalesReturn).where(SalesReturn.customer_id == party_id).order_by(SalesReturn.created_at)).scalars().all()
+    paid_total = sum((p.amount for p in payments), ZERO) + sum((c.amount for c in credits), ZERO)
     matched, advance = _match(documents, paid_total, record.payment_terms_days or 0)
     entries = [
         {"date": doc["date"], "kind": "invoice" if receivable else "bill", "number": doc["number"], "id": doc["id"],
@@ -366,6 +382,10 @@ def statement(session: Session, party: str, party_id: uuid.UUID) -> Dict[str, An
         {"date": _local_day(p.paid_on), "kind": "payment", "number": p.number, "id": p.id, "order_id": p.sales_order_id or p.purchase_order_id,
          "order_number": None, "debit": 0.0, "credit": _f(p.amount), "method": p.method, "reference": p.reference}
         for p in payments
+    ] + [
+        {"date": _local_day(c.created_at), "kind": "credit_note", "number": c.number, "id": c.id, "order_id": c.sales_order_id,
+         "order_number": None, "debit": 0.0, "credit": _f(c.amount), "method": "return", "reference": c.note}
+        for c in credits
     ]
     entries.sort(key=lambda entry: (entry["date"], 0 if entry["kind"] != "payment" else 1))
     balance = 0.0

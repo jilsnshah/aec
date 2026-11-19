@@ -17,6 +17,7 @@ import {
   Plus,
   ReceiptText,
   Repeat2,
+  Undo2,
   Scissors,
   ShoppingCart,
   Truck,
@@ -39,6 +40,8 @@ import { TallyPanel } from '@/features/integrations/TallyPanel'
 import { PurchaseSheet } from '@/features/purchasing/PurchaseSheet'
 import { DeliverSheet } from './DeliverSheet'
 import { OrderSheet } from './OrderSheet'
+import { ReturnSheet } from './ReturnSheet'
+import { returns as returnsApi } from '@/api/records'
 
 export function lineParts(item: { quantity_fulfilled: string; quantity_reserved: string; quantity_incoming: string; quantity_unallocated: string }) {
   return [
@@ -117,6 +120,10 @@ export function Orders() {
   useEffect(() => {
     if (list.data && chip === 'open' && count('open') === 0) setChip('all')
   }, [list.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // A quick filter that hides the open record moves to the first one shown.
+    if (route.id && items.length > 0 && !items.some((row) => row.id === route.id) && window.innerWidth >= 1024) route.select(items[0].id)
+  }, [chip]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -251,6 +258,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
   const [tab, setTab] = useState('lines')
   const [delivering, setDelivering] = useState(false)
   const [buying, setBuying] = useState(false)
+  const [returning, setReturning] = useState(false)
   const confirm = useConfirm()
   const cancel = useAction((reason: string | null) => api.orders.cancel(id, reason), { success: 'Order cancelled' })
   const cancelRest = useAction((reason: string | null) => api.orders.cancelRemaining(id, reason), { success: 'The rest of the order was cancelled' })
@@ -311,6 +319,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
                 { label: 'Open invoice PDF', icon: <FileText size={14} />, onSelect: () => window.open(api.integrations.invoiceUrl(id), '_blank') },
                 { label: 'Open customer', icon: <UserRound size={14} />, onSelect: () => (window.location.href = `/customers/${data.customer_id}`) },
                 { label: 'Repeat this order', icon: <Repeat2 size={14} />, onSelect: () => onRepeat(id) },
+                { label: 'Record a return', icon: <Undo2 size={14} />, onSelect: () => setReturning(true), disabled: totals.delivered === 0 },
                 { label: 'Send update on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(update)}`, '_blank'), disabled: !phone },
                 { label: 'Cancel what is left', icon: <Scissors size={14} />, onSelect: () => askCancel(true), disabled: !open || totals.delivered === 0, danger: true, separator: true },
                 { label: 'Cancel order', icon: <Ban size={14} />, onSelect: () => askCancel(false), disabled: !open || totals.delivered > 0, danger: true },
@@ -360,6 +369,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
         </TabPanel>
       </Tabs>
       <DeliverSheet orderId={id} open={delivering} onClose={() => setDelivering(false)} />
+      <ReturnSheet orderId={id} orderNumber={data.order_number} open={returning} onClose={() => setReturning(false)} />
       <PurchaseSheet
         open={buying}
         onClose={() => setBuying(false)}
@@ -452,11 +462,30 @@ export function Legend() {
 
 function DeliveriesTab({ id }: { id: string }) {
   const fulfilment = useOne('fulfilment', api.orders.fulfilment, id)
+  const credit = useQuery({ queryKey: ['returns', 'order', id], queryFn: () => returnsApi.forOrder(id) })
   if (fulfilment.isPending) return <Spinner />
   const deliveries = fulfilment.data?.deliveries ?? []
-  if (deliveries.length === 0) return <Empty icon={<Truck size={20} />} title="Nothing delivered yet" body="Deliveries appear here as the truck leaves." />
+  const back = credit.data?.items ?? []
+  if (deliveries.length === 0 && !back.length) return <Empty icon={<Truck size={20} />} title="Nothing delivered yet" body="Deliveries appear here as the truck leaves." />
   return (
     <div className="space-y-2 p-4">
+      {back.map((r) => (
+        <div key={r.id} className="card flex items-center gap-3 p-4">
+          <span className="grid size-8 place-items-center rounded-lg bg-[#0b0b0c] text-[#fff]">
+            <Undo2 size={15} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="num text-[13px] font-semibold">
+              {r.number} · returned {r.lines.map((line) => `${fmtQty(line.quantity)} ${line.product_name}${line.restock ? '' : ' (damaged)'}`).join(', ')}
+            </div>
+            <div className="text-[12px] text-fg-3">
+              {fmtDateTime(r.created_at)} · {r.reason_label}
+              {r.note ? ` · ${r.note}` : ''}
+            </div>
+          </div>
+          <span className="num text-[13px] font-semibold">−{fmtMoney(r.amount)}</span>
+        </div>
+      ))}
       {deliveries.map((delivery) => (
         <div key={delivery.id} className="card p-4">
           <div className="flex items-center gap-2">

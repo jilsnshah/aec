@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Flame, Hourglass, Layers, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ShieldCheck, Sparkles, Target, ThumbsDown, Trophy, XCircle } from 'lucide-react'
+import { CheckCircle2, FileText, Flame, Hourglass, Layers, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ShieldCheck, Sparkles, Target, ThumbsDown, Trophy, XCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { records } from '@/api/records'
 import { useAssistant } from '@/features/assistant/store'
-import { AiStrip, PageGuide, QuickChips, WarningList, type Chip } from '@/ui/smart'
+import { AiStrip, HoldPanel, PageGuide, QuickChips, WarningList, holdFrom, type Chip } from '@/ui/smart'
+import { errorText } from '@/api/client'
 import { useQuery } from '@tanstack/react-query'
 import { insights } from '@/api/insights'
 import { api } from '@/api/endpoints'
@@ -57,6 +58,10 @@ export function Enquiries() {
   useEffect(() => {
     if (list.data && chip === 'OPEN' && count('OPEN') === 0) setChip('all')
   }, [list.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // A quick filter that hides the open record moves to the first one shown.
+    if (route.id && items.length > 0 && !items.some((row) => row.id === route.id) && window.innerWidth >= 1024) route.select(items[0].id)
+  }, [chip]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,7 +172,7 @@ function EnquiryInspector({ id }: { id: string }) {
   const phone = contact.data?.phone ?? null
   const [editing, setEditing] = useState(false)
   const confirm = useConfirm()
-  const convert = useAction(() => api.enquiries.convert(id), { success: (result) => `Won — ${result.order.order_number} placed` })
+  const convert = useAction((approval?: string) => api.enquiries.convert(id, approval), { success: (result) => `Won — ${result.order.order_number} placed`, quiet: true })
   const lose = useAction((reason: string | null) => api.enquiries.markLost(id, reason), { success: 'Marked as lost' })
 
   if (enquiry.isPending) return <Spinner />
@@ -218,6 +223,9 @@ function EnquiryInspector({ id }: { id: string }) {
                   </a>
                 </>
               ) : null}
+              <a className="btn" href={`/api/enquiries/${id}/quotation.pdf`} target="_blank" rel="noreferrer">
+                <FileText size={14} /> Quote PDF
+              </a>
               <Button kind="quiet" icon={<Sparkles size={14} />} onClick={() => ask(`Draft a WhatsApp quote reply to ${data.customer.name} for enquiry ${data.enquiry_number} (id ${id}): list each product with quantity and quoted price, the total, availability from current stock, and a polite close. Keep it short and ready to send.`)}>
                 Draft quote reply
               </Button>
@@ -233,7 +241,10 @@ function EnquiryInspector({ id }: { id: string }) {
                     <MoreHorizontal size={16} />
                   </Button>
                 }
-                items={[{ label: 'Mark as lost', icon: <ThumbsDown size={14} />, onSelect: askLost, danger: true }]}
+                items={[
+                  { label: 'Quotation PDF', icon: <FileText size={14} />, onSelect: () => window.open(`/api/enquiries/${id}/quotation.pdf`, '_blank') },
+                  { label: 'Mark as lost', icon: <ThumbsDown size={14} />, onSelect: askLost, danger: true, separator: true },
+                ]}
               />
             </>
           ) : data.sales_order_id ? (
@@ -261,6 +272,15 @@ function EnquiryInspector({ id }: { id: string }) {
         ]}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {convert.error ? (
+          <div className="px-6 pt-4">
+            {holdFrom(convert.error) ? (
+              <HoldPanel error={convert.error} busy={convert.isPending} onApprove={(reason) => convert.mutate(reason, { onSuccess: (result) => navigate(`/orders/${result.order.id}`) })} />
+            ) : (
+              <Notice tone="bad">{errorText(convert.error)}</Notice>
+            )}
+          </div>
+        ) : null}
         {open ? <WinPanel priority={funnel.data?.priorities.find((row) => row.enquiry_id === id)} warnings={check.data?.warnings ?? []} checked={Boolean(check.data)} onAsk={() => ask(`What discount can I offer on enquiry ${data.enquiry_number} (id ${id}) and still keep a healthy margin? Use product_prices for cost and what ${data.customer.name} paid before.`)} /> : null}
         <table className="grid-table">
           <thead>

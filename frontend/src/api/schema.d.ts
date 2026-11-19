@@ -243,6 +243,26 @@ export interface paths {
         patch: operations["update_enquiry_api_enquiries__enquiry_id__patch"];
         trace?: never;
     };
+    "/api/enquiries/{enquiry_id}/quotation.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quotation Pdf
+         * @description The enquiry as a quotation PDF to send to the customer.
+         */
+        get: operations["quotation_pdf_api_enquiries__enquiry_id__quotation_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enquiries/{enquiry_id}/convert": {
         parameters: {
             query?: never;
@@ -351,6 +371,49 @@ export interface paths {
         put?: never;
         /** Cancel Remaining */
         post: operations["cancel_remaining_api_orders__order_id__cancel_remaining_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/returnable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returnable Lines
+         * @description Each line of an order: delivered, already returned and still returnable.
+         */
+        get: operations["returnable_lines_api_orders__order_id__returnable_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Order Returns */
+        get: operations["order_returns_api_orders__order_id__returns_get"];
+        put?: never;
+        /**
+         * Create Return
+         * @description Record goods a customer sent back (a credit note). The value is credited
+         *     to the customer's account; lines with restock true go back into stock at the
+         *     cost they were delivered at.
+         */
+        post: operations["create_return_api_orders__order_id__returns_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1702,6 +1765,263 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/records/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Timeline
+         * @description Everything that happened to one customer, supplier, product or order,
+         *     newest first: orders, enquiries, deliveries, receipts, payments, stock
+         *     movements and follow-ups. Pass exactly one id.
+         */
+        get: operations["timeline_api_records_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/customers/{customer_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer Profile
+         * @description A customer's full picture: segment, lifetime value, order frequency,
+         *     average discount, enquiry win rate, money owed and credit used, monthly
+         *     spend for the last year and the products they buy most.
+         */
+        get: operations["customer_profile_api_records_customers__customer_id__profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/products/{product_id}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product Prices
+         * @description A product's selling price history (optionally to one customer), average
+         *     margin, cost from each supplier (lowest, highest, last) and top buyers.
+         */
+        get: operations["product_prices_api_records_products__product_id__prices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/order-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Order Check
+         * @description Check a draft order before placing it: credit limit and overdue money,
+         *     price below cost, thin margin, unusual discount, price lower than last
+         *     time, and stock shortfall. Changes nothing.
+         */
+        post: operations["order_check_api_records_order_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/order-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Order Payments
+         * @description Per order id: invoiced (delivered) value, paid, open, days overdue and a
+         *     status (paid, partly_paid, unpaid, overdue). Orders with no delivery are absent.
+         */
+        get: operations["order_payments_api_records_order_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/suppliers/{supplier_id}/scorecard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Supplier Scorecard
+         * @description A supplier's score (fill rate and on-time), late orders, and each product
+         *     bought from them with their last cost against the cheapest supplier.
+         */
+        get: operations["supplier_scorecard_api_records_suppliers__supplier_id__scorecard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/records/purchase-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Purchase Suggestions
+         * @description Products to buy now or soon, grouped by the supplier to buy from, with
+         *     estimated quantities and cost.
+         */
+        get: operations["purchase_suggestions_api_records_purchase_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Adjustments
+         * @description Stock adjustments, newest first, with totals by reason (value at cost).
+         */
+        get: operations["list_adjustments_api_stock_adjustments_get"];
+        put?: never;
+        /**
+         * Post Adjustments
+         * @description Post a stock count (counted quantities) or adjustments (plus or minus
+         *     with a reason). Decreases are valued at FIFO cost; if stock falls below what
+         *     is set aside, the newest orders become short. Increases are reserved for
+         *     customers already waiting.
+         */
+        post: operations["post_adjustments_api_stock_adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-adjustments/count-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count Sheet
+         * @description Products to count, with the quantity the books expect, what is set aside
+         *     for customers, average cost and when each was last counted.
+         */
+        get: operations["count_sheet_api_stock_adjustments_count_sheet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-adjustments/{adjustment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Adjustment */
+        get: operations["get_adjustment_api_stock_adjustments__adjustment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/controls/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check
+         * @description Which controls a draft order would trip: holds (block, or need an admin's
+         *     approval) and warnings. Changes nothing.
+         */
+        post: operations["check_api_controls_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit
+         * @description The audit log, newest first: control overrides, stock adjustments,
+         *     returns, voided payments.
+         */
+        get: operations["audit_api_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1730,6 +2050,47 @@ export interface components {
         ActionIn: {
             /** Model */
             model?: string | null;
+        };
+        /** AdjustmentIn */
+        AdjustmentIn: {
+            /** Lines */
+            lines: components["schemas"]["AdjustmentLine"][];
+            /**
+             * As Count
+             * @description Post as one physical stock count (shared count number).
+             * @default false
+             */
+            as_count: boolean;
+        };
+        /** AdjustmentLine */
+        AdjustmentLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Counted Quantity
+             * @description What is on the shelf (for a count).
+             */
+            counted_quantity?: string | null;
+            /**
+             * Quantity Change
+             * @description Plus or minus, when not counting.
+             */
+            quantity_change?: string | null;
+            /**
+             * Reason
+             * @description count, damaged, lost, expired, found, sample or correction.
+             */
+            reason?: string | null;
+            /**
+             * Unit Cost
+             * @description For increases; defaults to the average cost.
+             */
+            unit_cost?: string | null;
+            /** Note */
+            note?: string | null;
         };
         /** AiModelOut */
         AiModelOut: {
@@ -1765,7 +2126,7 @@ export interface components {
          * AllocationSource
          * @enum {string}
          */
-        AllocationSource: "ORDER_CREATION" | "STOCK_RECEIPT" | "GOODS_RECEIPT";
+        AllocationSource: "ORDER_CREATION" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "ADJUSTMENT";
         /** Body_upload_file_api_ai_files_post */
         Body_upload_file_api_ai_files_post: {
             /**
@@ -1786,6 +2147,33 @@ export interface components {
          * @enum {string}
          */
         CancellationKind: "FULL" | "REMAINING";
+        /** CheckIn */
+        CheckIn: {
+            /** Customer Id */
+            customer_id?: string | null;
+            /** Items */
+            items?: components["schemas"]["CheckLine"][];
+        };
+        /** CheckLine */
+        CheckLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Quantity Ordered
+             * @default 0
+             */
+            quantity_ordered: number;
+            /** Unit Price */
+            unit_price?: number | null;
+            /**
+             * Discount Percent
+             * @default 0
+             */
+            discount_percent: number;
+        };
         /** CommitmentCustomerSummary */
         CommitmentCustomerSummary: {
             /**
@@ -2328,6 +2716,33 @@ export interface components {
             /** Quantity */
             quantity: string;
         };
+        /** DraftIn */
+        DraftIn: {
+            /** Customer Id */
+            customer_id?: string | null;
+            /** Items */
+            items: components["schemas"]["DraftLine"][];
+        };
+        /** DraftLine */
+        DraftLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Quantity Ordered
+             * @default 0
+             */
+            quantity_ordered: number;
+            /** Unit Price */
+            unit_price?: number | null;
+            /**
+             * Discount Percent
+             * @default 0
+             */
+            discount_percent: number;
+        };
         /** EmailCheckOut */
         EmailCheckOut: {
             /** New Messages */
@@ -2823,6 +3238,7 @@ export interface components {
             whatsapp: components["schemas"]["IntegrationOut"];
             email: components["schemas"]["IntegrationOut"];
             tally: components["schemas"]["IntegrationOut"];
+            controls: components["schemas"]["IntegrationOut"];
             /** Models */
             models: components["schemas"]["AiModelOut"][];
             /**
@@ -2916,7 +3332,7 @@ export interface components {
          * MovementType
          * @enum {string}
          */
-        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT";
+        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT" | "SALES_RETURN";
         /** NegativePositionRow */
         NegativePositionRow: {
             /**
@@ -4441,6 +4857,34 @@ export interface components {
              */
             created_at: string;
         };
+        /** ReturnIn */
+        ReturnIn: {
+            /**
+             * Reason
+             * @description damaged, wrong_item, quality, excess or other.
+             */
+            reason: string;
+            /** Note */
+            note?: string | null;
+            /** Lines */
+            lines: components["schemas"]["ReturnLineIn"][];
+        };
+        /** ReturnLineIn */
+        ReturnLineIn: {
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: string;
+            /**
+             * Restock
+             * @description False when the goods are damaged and cannot be sold again.
+             * @default true
+             */
+            restock: boolean;
+        };
         /** SignIn */
         SignIn: {
             /** Username */
@@ -5692,9 +6136,46 @@ export interface operations {
             };
         };
     };
+    quotation_pdf_api_enquiries__enquiry_id__quotation_pdf_get: {
+        parameters: {
+            query?: {
+                valid_days?: number;
+            };
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     convert_enquiry_api_enquiries__enquiry_id__convert_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Admin approval of an order on hold (needs override_reason). */
+                override?: boolean;
+                override_reason?: string | null;
+            };
             header?: never;
             path: {
                 enquiry_id: string;
@@ -5802,7 +6283,11 @@ export interface operations {
     };
     create_order_api_orders_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Admin approval of an order on hold (needs override_reason). */
+                override?: boolean;
+                override_reason?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5921,6 +6406,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    returnable_lines_api_orders__order_id__returnable_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_returns_api_orders__order_id__returns_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_return_api_orders__order_id__returns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8415,6 +8997,405 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    timeline_api_records_timeline_get: {
+        parameters: {
+            query?: {
+                customer_id?: string | null;
+                supplier_id?: string | null;
+                product_id?: string | null;
+                order_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_profile_api_records_customers__customer_id__profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_prices_api_records_products__product_id__prices_get: {
+        parameters: {
+            query?: {
+                customer_id?: string | null;
+            };
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_check_api_records_order_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_payments_api_records_order_payments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    supplier_scorecard_api_records_suppliers__supplier_id__scorecard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purchase_suggestions_api_records_purchase_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_adjustments_api_stock_adjustments_get: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                reason?: string | null;
+                count_number?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_adjustments_api_stock_adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    count_sheet_api_stock_adjustments_count_sheet_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_adjustment_api_stock_adjustments__adjustment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_controls_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_api_audit_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                action?: string | null;
+                entity_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

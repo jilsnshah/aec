@@ -37,3 +37,10 @@ class AllocationError(ValidationError):
     """A stock-receipt allocation broke one of the compulsory settlement rules."""
 
     code = "allocation_error"
+
+
+class HoldError(ConflictError):
+    """A business control (credit, discount, margin) stops the action; an
+    admin may override it with a reason."""
+
+    code = "on_hold"

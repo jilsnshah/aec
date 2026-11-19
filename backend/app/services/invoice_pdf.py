@@ -38,6 +38,10 @@ class Invoice:
     customer_phone: Optional[str]
     lines: List[InvoiceLine]
     taxes: Sequence[Tuple[str, Decimal]]
+    #: For a quotation: the heading, the reference block and the closing note.
+    title: Optional[str] = None
+    meta: Optional[str] = None
+    footer: Optional[str] = None
 
     @property
     def subtotal(self) -> Decimal:
@@ -73,7 +77,7 @@ def render(invoice: Invoice) -> bytes:
 
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "TAX INVOICE" if invoice.taxes else "INVOICE", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, invoice.title or ("TAX INVOICE" if invoice.taxes else "INVOICE"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     top = pdf.get_y()
     pdf.multi_cell(95, 5, _latin("Bill to:\n{}{}{}".format(
@@ -83,7 +87,7 @@ def render(invoice: Invoice) -> bytes:
     )))
     left_bottom = pdf.get_y()
     pdf.set_xy(115, top)
-    pdf.multi_cell(0, 5, _latin("Invoice no: {}\nDate: {}\nOrder: {}".format(
+    pdf.multi_cell(0, 5, _latin(invoice.meta or "Invoice no: {}\nDate: {}\nOrder: {}".format(
         invoice.number, invoice.on.strftime("%d %b %Y"), invoice.order_number,
     )), align="R")
     pdf.set_y(max(left_bottom, pdf.get_y()) + 5)
@@ -114,5 +118,5 @@ def render(invoice: Invoice) -> bytes:
     pdf.ln(8)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(110, 110, 115)
-    pdf.multi_cell(0, 4, "This invoice is recorded in our books (Tally) under number {}.".format(_latin(invoice.number)))
+    pdf.multi_cell(0, 4, _latin(invoice.footer) if invoice.footer else "This invoice is recorded in our books (Tally) under number {}.".format(_latin(invoice.number)))
     return bytes(pdf.output())

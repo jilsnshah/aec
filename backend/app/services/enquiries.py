@@ -521,3 +521,41 @@ def to_view(enquiry: CustomerEnquiry) -> Dict[str, Any]:
         "discount_total": money(mrp_total - total),
         "total_amount": total,
     }
+
+
+def quotation(session: Session, enquiry_id: uuid.UUID, valid_days: int = 7):
+    """The enquiry as a quotation PDF document (the seller details come from
+    the Tally settings; prices are before tax)."""
+    from datetime import timedelta
+
+    from . import integration_settings as settings_service
+    from .invoice_pdf import Invoice, InvoiceLine
+
+    enquiry = get_enquiry(session, enquiry_id)
+    config = settings_service.get(session, settings_service.TALLY).config
+    created = enquiry.created_at.date()
+    lines = []
+    for item in enquiry.items:
+        label = item.product.name
+        if item.discount_percent and item.discount_percent > 0:
+            label = "{} (MRP {}, {}% off)".format(label, format(item.mrp_snapshot.quantize(Decimal("0.01")), "f"), format(item.discount_percent.normalize(), "f"))
+        lines.append(InvoiceLine(label, item.quantity, item.product.unit_of_measure, item.quoted_unit_price, item.line_total))
+    customer = enquiry.customer
+    return Invoice(
+        number=enquiry.enquiry_number,
+        on=created,
+        order_number="",
+        seller_name=config.get("seller_name") or "Quotation",
+        seller_address=config.get("seller_address") or "",
+        seller_gstin=config.get("seller_gstin") or "",
+        seller_phone=config.get("seller_phone") or "",
+        customer_name=customer.name,
+        customer_address=customer.address,
+        customer_phone=customer.phone,
+        lines=lines,
+        taxes=[],
+        title="QUOTATION",
+        meta="Quote no: {}\nDate: {}\nValid until: {}".format(enquiry.enquiry_number, created.strftime("%d %b %Y"), (created + timedelta(days=valid_days)).strftime("%d %b %Y")),
+        footer="Prices are per unit, before GST, and subject to stock at the time of order. "
+               "This quotation is valid for {} days from its date.".format(valid_days),
+    )

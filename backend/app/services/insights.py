@@ -203,7 +203,13 @@ def trading(session: Session, start: datetime, end: datetime) -> Dict[str, Any]:
         .join(PurchaseOrderItem, PurchaseOrderItem.purchase_order_id == PurchaseOrder.id)
         .where(PurchaseOrder.ordered_at >= start, PurchaseOrder.ordered_at < end)
     ).one()
-    revenue_f, cogs_f = _f(revenue), _f(cogs)
+    from . import returns as returns_service
+
+    credited = returns_service.totals_between(session, start, end)
+    # Returns net out of revenue; restocked units net out of cost of goods
+    # (damaged ones stay as cost: the goods are gone).
+    revenue_f = round(_f(revenue) - credited["amount"], 2)
+    cogs_f = round(_f(cogs) - credited["restocked_cost"], 2)
     profit = round(revenue_f - cogs_f, 2)
     decided = converted + lost
     return {
@@ -212,6 +218,8 @@ def trading(session: Session, start: datetime, end: datetime) -> Dict[str, Any]:
         "average_order_value": _f(Decimal(booked[1]) / booked[0]) if booked[0] else 0.0,
         "deliveries": deliveries,
         "revenue": revenue_f,
+        "returns_value": round(credited["amount"], 2),
+        "returns": credited["count"],
         "cost_of_goods": cogs_f,
         "gross_profit": profit,
         "margin_percent": _pct(profit, revenue_f),

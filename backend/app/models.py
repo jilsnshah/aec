@@ -88,6 +88,8 @@ class MovementType(str, enum.Enum):
     #: No new movements of this type are created.
     ORDER_FULFILMENT = "ORDER_FULFILMENT"
     ADJUSTMENT = "ADJUSTMENT"
+    #: Delivered goods a customer sent back in sellable condition.
+    SALES_RETURN = "SALES_RETURN"
 
 
 class AllocationSource(str, enum.Enum):
@@ -97,6 +99,8 @@ class AllocationSource(str, enum.Enum):
     STOCK_RECEIPT = "STOCK_RECEIPT"
     #: Stock that arrived on a purchase order and was settled against it.
     GOODS_RECEIPT = "GOODS_RECEIPT"
+    #: Stock found in a count or adjustment, settled against waiting orders.
+    ADJUSTMENT = "ADJUSTMENT"
 
 
 class PurchaseOrderStatus(str, enum.Enum):
@@ -1416,3 +1420,107 @@ class SavedView(Base):
     state_json: Mapped[str] = mapped_column(Text, nullable=False)
     shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class StockAdjustment(Base):
+    """A correction to physical stock: a count that differs from the books,
+    damage, loss, or stock found. Decreases draw from the oldest cost layers
+    (the loss is valued at cost); increases open a layer at the current
+    average cost. Adjustments posted together in one count share a
+    ``count_number``."""
+
+    __tablename__ = "stock_adjustments"
+    __table_args__ = (CheckConstraint("quantity_change <> 0", name="ck_adjustments_nonzero"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    count_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    system_quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    counted_quantity: Mapped[Optional[Decimal]] = mapped_column(Quantity, nullable=True)
+    quantity_change: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(UnitCost, nullable=False, default=Decimal("0.0000"))
+    value_change: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    released_to_short: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0.000"))
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+    product: Mapped["Product"] = relationship()
+
+
+class SalesReturn(Base):
+    """Goods a customer sent back: a credit note. Its value is credited to the
+    customer's account (settling their oldest invoices first). Lines returned
+    in sellable condition go back into stock at the cost they left at."""
+
+    __tablename__ = "sales_returns"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    sales_order_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(24), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    restocked_cost: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+    sales_order: Mapped["SalesOrder"] = relationship()
+    customer: Mapped["Customer"] = relationship()
+    items: Mapped[List["SalesReturnItem"]] = relationship(back_populates="sales_return", cascade="all, delete-orphan")
+
+
+class SalesReturnItem(Base):
+    __tablename__ = "sales_return_items"
+    __table_args__ = (CheckConstraint("quantity > 0", name="ck_return_items_quantity_positive"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    sales_return_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_returns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    order_item_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_order_items.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    unit_price_net: Mapped[Decimal] = mapped_column(UnitCost, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    restock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    unit_cost: Mapped[Decimal] = mapped_column(UnitCost, nullable=False, default=Decimal("0.0000"))
+
+    sales_return: Mapped["SalesReturn"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()
+
+
+class AuditEvent(Base):
+    """Who did what and when, for changes that matter: control overrides,
+    stock adjustments, returns, voided payments, settings. Append-only."""
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    action: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    entity: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

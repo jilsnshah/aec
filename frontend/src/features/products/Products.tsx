@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { insights, type ProductHealth } from '@/api/insights'
 import { useAssistant } from '@/features/assistant/store'
 import { motion } from 'motion/react'
-import { AlertTriangle, Archive, BadgePercent, Boxes, Check, ClipboardList, Clock, Download, Hourglass, Layers, MoreHorizontal, PackageX, PackagePlus, Pencil, Plus, ShoppingCart, Snail, Sparkles, Tag, TrendingDown, TrendingUp, Trophy, Truck, X } from 'lucide-react'
+import { AdjustSheet } from '@/features/stock/StockCount'
+import { AlertTriangle, Archive, ClipboardCheck, Scale, BadgePercent, Boxes, Check, ClipboardList, Clock, Download, Hourglass, Layers, MoreHorizontal, PackageX, PackagePlus, Pencil, Plus, ShoppingCart, Snail, Sparkles, Tag, TrendingDown, TrendingUp, Trophy, Truck, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { records } from '@/api/records'
 import { AiStrip, PageGuide, QuickChips, Stat, Timeline, type Chip } from '@/ui/smart'
@@ -312,7 +313,7 @@ function ProductInspector({ id }: { id: string }) {
   const product = useOne('product-inventory', api.products.inventory, id)
   const waiting = useOne('pending-orders', (pid: string) => api.products.pendingOrders(pid), id)
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') ?? 'overview')
-  const [sheet, setSheet] = useState<null | 'edit' | 'buy'>(null)
+  const [sheet, setSheet] = useState<null | 'edit' | 'buy' | 'adjust'>(null)
   const health = useQuery({ queryKey: ['insights', 'inventory'], queryFn: insights.inventory })
   const intel = health.data?.products.find((row) => row.product_id === id)
   const { ask } = useAssistant()
@@ -347,6 +348,8 @@ function ProductInspector({ id }: { id: string }) {
               }
               items={[
                 { label: 'Edit product', icon: <Pencil size={14} />, onSelect: () => setSheet('edit') },
+                { label: 'Adjust stock (damage, loss, found)', icon: <Scale size={14} />, onSelect: () => setSheet('adjust') },
+                { label: 'Count stock', icon: <ClipboardCheck size={14} />, onSelect: () => navigate('/stock-count') },
                 {
                   label: 'Archive',
                   icon: <Archive size={14} />,
@@ -502,6 +505,7 @@ function ProductInspector({ id }: { id: string }) {
         </TabPanel>
       </Tabs>
       <ProductSheet open={sheet === 'edit'} onClose={() => setSheet(null)} editing={data} />
+      <AdjustSheet open={sheet === 'adjust'} onClose={() => setSheet(null)} product={{ id, name: data.name, unit_of_measure: data.unit_of_measure, physical_stock: String(data.physical_stock) }} />
       <PurchaseSheet open={sheet === 'buy'} onClose={() => setSheet(null)} initial={{ lines: [{ product_id: id, quantity: String(Math.max(1, -stock)) }] }} onSaved={(po) => navigate(`/purchase-orders/${po.id}`)} />
       {confirm.element}
     </>

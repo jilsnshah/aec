@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..database import get_db
+from ..models import User
+from ..services import controls
 from ..services import orders as order_service
+from .auth import require_user
 from ..services import tally_sync
 from .pagination import PageParams, page_params
 
@@ -44,8 +47,15 @@ def list_orders(
 
 @router.post("", response_model=schemas.OrderDetailOut, status_code=201)
 def create_order(
-    payload: schemas.OrderCreate, background: BackgroundTasks, db: Session = Depends(get_db)
+    payload: schemas.OrderCreate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    override: bool = Query(default=False, description="Admin approval of an order on hold (needs override_reason)."),
+    override_reason: Optional[str] = Query(default=None),
 ):
+    lines = [item.model_dump() for item in payload.items]
+    controls.enforce(db, payload.customer_id, lines, user, override, override_reason, "a new order")
     order = order_service.create_order(
         db,
         customer_id=payload.customer_id,
@@ -82,3 +92,43 @@ def cancel_remaining(
 ):
     reason = payload.reason if payload else None
     return _detail(db, order_service.cancel_remaining(db, order_id, reason))
+
+
+# ---------------------------------------------------------------------------
+# Returns (credit notes)
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel as _BaseModel, Field as _Field  # noqa: E402
+
+from ..services import returns as return_service  # noqa: E402
+
+
+class ReturnLineIn(_BaseModel):
+    order_item_id: uuid.UUID
+    quantity: str
+    restock: bool = _Field(default=True, description="False when the goods are damaged and cannot be sold again.")
+
+
+class ReturnIn(_BaseModel):
+    reason: str = _Field(description="damaged, wrong_item, quality, excess or other.")
+    note: Optional[str] = None
+    lines: List[ReturnLineIn]
+
+
+@router.get("/{order_id}/returnable")
+def returnable_lines(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Each line of an order: delivered, already returned and still returnable."""
+    return {"lines": return_service.returnable(db, order_id), "reasons": return_service.REASONS}
+
+
+@router.post("/{order_id}/returns", status_code=201)
+def create_return(order_id: uuid.UUID, payload: ReturnIn, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Record goods a customer sent back (a credit note). The value is credited
+    to the customer's account; lines with restock true go back into stock at the
+    cost they were delivered at."""
+    record = return_service.create_return(db, order_id, [line.model_dump() for line in payload.lines], payload.reason, payload.note, user.id)
+    return return_service.view(record)
+
+
+@router.get("/{order_id}/returns")
+def order_returns(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    return return_service.list_returns(db, order_id=order_id)

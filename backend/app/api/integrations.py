@@ -33,6 +33,7 @@ def _all(db: Session) -> dict:
         "whatsapp": settings_service.view(settings_service.get(db, settings_service.WHATSAPP)),
         "email": settings_service.view(settings_service.get(db, settings_service.EMAIL)),
         "tally": settings_service.view(settings_service.get(db, settings_service.TALLY)),
+        "controls": settings_service.view(settings_service.get(db, settings_service.CONTROLS)),
         "models": models,
         # Where Gemini credentials come from, if anywhere. Never the credentials.
         "providers": [settings_service.PROVIDER_LABELS["gemini"]] if configured else [],

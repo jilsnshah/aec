@@ -49,7 +49,8 @@ export const api = {
     get: (id: string) => http.get<T.EnquiryOut>(`/api/enquiries/${id}`),
     create: (body: T.EnquiryCreate) => http.post<T.EnquiryOut>('/api/enquiries', body),
     update: (id: string, body: T.EnquiryUpdate) => http.patch<T.EnquiryOut>(`/api/enquiries/${id}`, body),
-    convert: (id: string) => http.post<T.EnquiryConversionResult>(`/api/enquiries/${id}/convert`),
+    convert: (id: string, approval?: string) =>
+      http.post<T.EnquiryConversionResult>(`/api/enquiries/${id}/convert${approval ? `?override=true&override_reason=${encodeURIComponent(approval)}` : ''}`),
     markLost: (id: string, reason: string | null) => http.post<T.EnquiryOut>(`/api/enquiries/${id}/mark-lost`, { reason }),
   },
 
@@ -58,7 +59,8 @@ export const api = {
       http.get<T.Page<T.OrderOut>>('/api/orders', query),
     get: (id: string) => http.get<T.OrderDetailOut>(`/api/orders/${id}`),
     fulfilment: (id: string) => http.get<T.OrderFulfilmentOut>(`/api/orders/${id}/fulfilment`),
-    create: (body: T.OrderCreate) => http.post<T.OrderDetailOut>('/api/orders', body),
+    create: (body: T.OrderCreate, approval?: string) =>
+      http.post<T.OrderDetailOut>(approval ? `/api/orders?override=true&override_reason=${encodeURIComponent(approval)}` : '/api/orders', body),
     cancel: (id: string, reason: string | null) => http.post<T.OrderDetailOut>(`/api/orders/${id}/cancel`, { reason }),
     cancelRemaining: (id: string, reason: string | null) =>
       http.post<T.OrderDetailOut>(`/api/orders/${id}/cancel-remaining`, { reason }),

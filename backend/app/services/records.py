@@ -34,6 +34,7 @@ from ..models import (
     PurchaseOrderStatus,
     SalesOrder,
     SalesOrderItem,
+    SalesReturn,
     StockMovement,
     StockReceipt,
     Supplier,
@@ -83,6 +84,8 @@ def timeline(session: Session, customer_id=None, supplier_id=None, product_id=No
         for payment in session.execute(select(Payment).where(Payment.customer_id == customer_id)).scalars():
             events.append(_event(payment.paid_on, "payment", "Paid {} ({})".format(payment.number, payment.method),
                                  "void: {}".format(payment.void_reason) if payment.voided_at else payment.reference or "", None, _f(payment.amount)))
+        for ret in session.execute(select(SalesReturn).where(SalesReturn.customer_id == customer_id)).scalars():
+            events.append(_event(ret.created_at, "return", "Returned goods ({})".format(ret.number), ret.note or "", "/orders/{}".format(ret.sales_order_id), -_f(ret.amount)))
         tasks = select(Task).where(Task.customer_id == customer_id)
     elif supplier_id:
         for po in session.execute(select(PurchaseOrder).where(PurchaseOrder.supplier_id == supplier_id)).scalars():
@@ -101,7 +104,7 @@ def timeline(session: Session, customer_id=None, supplier_id=None, product_id=No
     elif product_id:
         for movement in session.execute(select(StockMovement).where(StockMovement.product_id == product_id)).scalars():
             label = {"OPENING_STOCK": "Opening stock", "STOCK_RECEIPT": "Stock in", "GOODS_RECEIPT": "Goods received",
-                     "CUSTOMER_DELIVERY": "Delivered", "ORDER_FULFILMENT": "Delivered", "ADJUSTMENT": "Adjusted"}.get(movement.movement_type.value, movement.movement_type.value)
+                     "CUSTOMER_DELIVERY": "Delivered", "ORDER_FULFILMENT": "Delivered", "ADJUSTMENT": "Adjusted", "SALES_RETURN": "Returned by customer"}.get(movement.movement_type.value, movement.movement_type.value)
             qty = float(movement.quantity_change)
             events.append(_event(movement.created_at, "in" if qty > 0 else "out", "{} {:+g}".format(label, qty), movement.note or ""))
         rows = session.execute(
@@ -129,6 +132,8 @@ def timeline(session: Session, customer_id=None, supplier_id=None, product_id=No
             events.append(_event(delivery.created_at, "delivery", "Delivered {} ({:g} units)".format(delivery.delivery_number, float(qty)), delivery.reference or "", None, _f(value)))
         for payment in session.execute(select(Payment).where(Payment.sales_order_id == order_id)).scalars():
             events.append(_event(payment.paid_on, "payment", "Payment {}".format(payment.number), payment.method, None, _f(payment.amount)))
+        for ret in session.execute(select(SalesReturn).where(SalesReturn.sales_order_id == order_id)).scalars():
+            events.append(_event(ret.created_at, "return", "Return {}".format(ret.number), ret.note or "", None, -_f(ret.amount)))
         if order.cancelled_at:
             events.append(_event(order.cancelled_at, "cancel", "Cancelled", ""))
         tasks = select(Task).where(Task.sales_order_id == order_id)
