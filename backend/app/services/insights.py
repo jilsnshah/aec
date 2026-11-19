@@ -340,6 +340,15 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
             select(StockCostLayer.product_id, func.max(StockCostLayer.created_at)).group_by(StockCostLayer.product_id)
         ).all()
     )
+    # The latest price quoted on a purchase order, for products never received.
+    po_price: Dict[uuid.UUID, Decimal] = {}
+    for product_id, unit_cost in session.execute(
+        select(PurchaseOrderItem.product_id, PurchaseOrderItem.unit_cost)
+        .join(PurchaseOrder, PurchaseOrderItem.purchase_order_id == PurchaseOrder.id)
+        .where(PurchaseOrder.status != PurchaseOrderStatus.CANCELLED, PurchaseOrderItem.unit_cost > 0)
+        .order_by(PurchaseOrder.created_at)
+    ).all():
+        po_price[product_id] = unit_cost
     layers = defaultdict(list)
     for layer in session.execute(select(StockCostLayer).where(StockCostLayer.quantity_remaining > 0)).scalars():
         layers[layer.product_id].append(layer)
@@ -404,7 +413,11 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
             need = rate * TARGET_COVER_DAYS - float(position)
             reorder = max(0.0, need, -float(position))
             reorder = float(math.ceil(reorder)) if reorder else 0.0
-        unit_cost = _f(product.last_purchase_price) or (round(value / float(physical), 2) if physical > 0 else 0.0)
+        unit_cost = (
+            _f(product.last_purchase_price)
+            or (round(value / float(physical), 2) if physical > 0 else 0.0)
+            or _f(po_price.get(product.id))
+        )
         if reorder > 0:
             flags.append("reorder")
 
