@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Explorer } from './Explorer'
+import { ProductsTab } from './ProductsTab'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarPlus, Sparkles } from 'lucide-react'
@@ -18,7 +20,9 @@ import { useAssistant } from '@/features/assistant/store'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
+  { value: 'explore', label: 'Explorer' },
   { value: 'stock', label: 'Stock health' },
+  { value: 'products', label: 'Products' },
   { value: 'sales', label: 'Sales' },
   { value: 'enquiries', label: 'Enquiries' },
   { value: 'customers', label: 'Customers' },
@@ -33,6 +37,8 @@ const PERIODS: { value: Period; label: string }[] = [
 ]
 
 const ASK: Record<string, string> = {
+  explore: 'Look at sales over the last year by month, product, category and customer. What changed, what drove it, and what should I do? Use sales_explorer.',
+  products: 'Which products should we push, fix or drop? Use product_intelligence.',
   overview: 'Analyse how the business is doing this period against the last one. Explain what drove the change and what I should do next.',
   stock: 'Review stock health: what is short, what to reorder and how much, and which items are slow or dead and tying up capital. Recommend actions.',
   sales: 'Which products and customers drive revenue and profit, and where is margin weak? Recommend what to push or fix.',
@@ -69,6 +75,12 @@ export function Insights() {
         <Tabs value={tab} onChange={(value) => setParams({ tab: value })} tabs={TABS} className="min-h-0 flex-1">
           <TabPanel value="overview" className="p-5 pb-24">
             <OverviewTab period={period} />
+          </TabPanel>
+          <TabPanel value="explore" className="p-5 pb-24">
+            <Explorer />
+          </TabPanel>
+          <TabPanel value="products" className="p-5 pb-24">
+            <ProductsTab period={period} />
           </TabPanel>
           <TabPanel value="stock" className="p-5 pb-24">
             <StockTab />
@@ -181,72 +193,132 @@ function OverviewTab({ period }: { period: Period }) {
 
 /* ---------------------------------------------------------------- stock */
 
-const FLAG_TEXT: Record<string, string> = { short: 'Short', dead: 'Dead stock', slow: 'Slow', low_cover: 'Runs out soon', reorder: 'Reorder' }
+export const FLAG_TEXT: Record<string, string> = { short: 'Short', dead: 'Dead stock', slow: 'Slow', low_cover: 'Runs out soon', reorder: 'Reorder', below_minimum: 'Below minimum', rising_demand: 'Demand rising', falling_demand: 'Demand falling' }
+const AGE_KEYS = ['0-30', '31-60', '61-90', '90+'] as const
 
 function StockTab() {
   const { ask } = useAssistant()
+  const navigate = useNavigate()
   const data = useQuery({ queryKey: ['insights', 'inventory'], queryFn: insights.inventory })
+  const [age, setAge] = useState<(typeof AGE_KEYS)[number] | null>(null)
+  const [category, setCategory] = useState<string | null>(null)
   const rows = useMemo(
     () =>
-      (data.data?.products ?? []).map((row) => ({
-        ...row,
-        status: row.flags.map((flag) => FLAG_TEXT[flag]).join(', ') || 'Healthy',
-        aged_90: row.ages['90+']?.value ?? 0,
-      })),
-    [data.data],
+      (data.data?.products ?? [])
+        .filter((row) => (!age || row.ages[age].value > 0) && (!category || (row.category ?? '(none)') === category))
+        .map((row) => ({
+          ...row,
+          status: row.action.text,
+          aged_value: age ? row.ages[age].value : row.ages['90+']?.value ?? 0,
+        })),
+    [data.data, age, category],
   )
   if (data.isPending) return <Loading />
   if (!data.data) return <Empty title="Could not load stock health" />
   const t = data.data.totals
-  const ages: ChartBlock = {
-    type: 'chart',
-    id: 'ages',
-    chart: 'bar',
-    title: 'Stock value by age (days since received)',
-    x: { key: 'x', label: 'Age' },
-    series: [{ key: 'value', label: 'Value at cost' }],
-    unit: 'money',
-    rows: Object.entries(t.age_value).map(([bucket, value]) => ({ x: `${bucket} days`, value })),
-    total_rows: 4,
-  }
+  const all = data.data.products
+  const ids = (list: typeof all) => `/products?ids=${list.map((p) => p.product_id).join(',')}`
+  const toBuy = all.filter((p) => p.action.code === 'buy' || p.action.code === 'plan')
+  const toClear = all.filter((p) => p.action.code === 'liquidate' || p.action.code === 'do_not_reorder').sort((a, b) => b.liquidation_priority - a.liquidation_priority)
+  const ageTotal = AGE_KEYS.reduce((sum, key) => sum + (t.age_value[key] ?? 0), 0)
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-3 max-lg:grid-cols-2">
-        <Figure label="Stock value at cost" value={fmtMoney(t.stock_value)} hint={`${t.products} products`} />
+      <div className="grid grid-cols-5 gap-3 max-lg:grid-cols-2">
+        <Figure label="Stock value at cost" value={fmtMoney(t.stock_value)} hint={t.turnover_per_year ? `turns ${t.turnover_per_year}× a year` : `${t.products} products`} />
         <Figure label="Capital at risk" value={fmtMoney(t.capital_at_risk)} hint="slow or dead stock" strong />
-        <Figure label="To reorder" value={fmtMoney(t.reorder_value)} hint={`${t.reorder_products} products, ${data.data.thresholds.target_cover_days} days' cover`} />
-        <Figure label="Short or running out" value={t.short_quantity_products + t.low_cover_products} hint={`${t.short_quantity_products} short · ${t.low_cover_products} under ${data.data.thresholds.low_cover_days} days`} />
+        <Figure label="To reorder" value={fmtMoney(t.reorder_value)} hint={`${t.reorder_products} products · estimate`} />
+        <Figure label="Sales at risk" value={fmtMoney(t.sales_at_risk_value)} hint="sold, nothing behind it" />
+        <Figure label="Short or running out" value={t.short_quantity_products + t.low_cover_products} hint={`${t.short_quantity_products} short · ${t.low_cover_products} low cover`} />
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 max-lg:grid-cols-1">
-        <ChartView block={ages} />
+      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 max-lg:grid-cols-1">
+        <div className="card p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-[13px] font-semibold">Stock value by age (days since received)</span>
+            <span className="text-[11.5px] text-fg-3">{age ? `Showing ${age} days — click again to clear` : 'Click a band to filter the table'}</span>
+          </div>
+          <div className="space-y-2">
+            {AGE_KEYS.map((key) => {
+              const value = t.age_value[key] ?? 0
+              return (
+                <button key={key} onClick={() => setAge(age === key ? null : key)} className={cn('grid w-full grid-cols-[84px_1fr_110px] items-center gap-3 rounded-lg px-2 py-1.5 text-left text-[12.5px] hover:bg-white/[0.04]', age === key && 'ring-2 ring-blue')}>
+                  <span className="text-fg-2">{key} days</span>
+                  <span className="relative h-5 overflow-hidden rounded-md bg-white/[0.05]">
+                    <motion.span className="absolute inset-y-0 left-0 rounded-md" style={{ background: key === '90+' ? 'var(--color-solid)' : key === '61-90' ? 'var(--color-fg-3)' : 'var(--color-blue)' }} initial={{ width: 0 }} animate={{ width: `${ageTotal ? (value / ageTotal) * 100 : 0}%` }} />
+                  </span>
+                  <span className="num text-right font-medium">{fmtMoney(value)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
         <div className="card flex flex-col justify-between gap-3 p-4">
           <div>
             <div className="text-[13px] font-semibold">Turn this into action</div>
-            <p className="mt-1 text-[12.5px] text-fg-3">
-              The assistant can draft purchase orders for every reorder line, grouped by the supplier you last bought from, and suggest how to clear slow stock. You confirm each one.
-            </p>
+            <p className="mt-1 text-[12.5px] text-fg-3">Open the products behind each recommendation, already filtered, or let the assistant draft the purchase orders. Quantities are estimates from recent sales and lead times.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button kind="primary" small icon={<Sparkles size={13} />} onClick={() => ask('Prepare draft purchase orders for every product the stock-health report says to reorder, grouped by the supplier we last bought each from. Use the recommended quantities and last purchase prices, and show me the plan before proposing them.')}>
+            {toBuy.length ? (
+              <Button kind="primary" small onClick={() => navigate(ids(toBuy))}>
+                Review {toBuy.length} to buy
+              </Button>
+            ) : null}
+            {toClear.length ? (
+              <Button small onClick={() => navigate(ids(toClear))}>
+                Review {toClear.length} not to reorder
+              </Button>
+            ) : null}
+            <Button small icon={<Sparkles size={13} />} onClick={() => ask('Prepare draft purchase orders for every product the stock-health report says to buy, grouped by preferred (or last) supplier, with recommended quantities and last costs. Show the plan first, then propose them.')}>
               Draft purchase orders
             </Button>
-            <Button small icon={<Sparkles size={13} />} onClick={() => ask('Which slow or dead stock items tie up the most capital, and what should we do to clear them? Quantify it.')}>
-              Plan for slow stock
+            <Button small icon={<Sparkles size={13} />} onClick={() => ask('Which slow or dead stock ties up the most capital, how long would it take to clear at current sales, and what should we do — discount, bundle, return or stop buying? Quantify it.')}>
+              Plan to clear slow stock
             </Button>
           </div>
         </div>
       </div>
+      {t.categories.length > 1 || (t.categories[0] && t.categories[0].category !== '(none)') ? (
+        <div className="card overflow-x-auto">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th className="r">Products</th>
+                <th className="r">Value</th>
+                <th className="r">Over 90 days</th>
+                <th className="r">At risk</th>
+                <th className="r">To reorder</th>
+                <th className="r">Short</th>
+              </tr>
+            </thead>
+            <tbody>
+              {t.categories.map((c) => (
+                <tr key={c.category} onClick={() => setCategory(category === c.category ? null : c.category)} className={cn('cursor-pointer', category === c.category && 'bg-peri/[0.15]')}>
+                  <td className="font-medium">{c.category}</td>
+                  <td className="r num">{c.products}</td>
+                  <td className="r num">{fmtMoney(c.stock_value)}</td>
+                  <td className="r num">{fmtMoney(c.aged_90_value)}</td>
+                  <td className="r num">{fmtMoney(c.capital_at_risk)}</td>
+                  <td className="r num">{fmtMoney(c.reorder_value)}</td>
+                  <td className="r num">{c.short_products}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-[12px] text-fg-3">Give products a category (edit a product) to see stock and risk by category.</p>
+      )}
       <TableView
-        block={table('Every product', rows, [
+        block={table(age || category ? `Products${age ? ` with stock ${age} days old` : ''}${category ? ` in ${category}` : ''}` : 'Every product', rows, [
           ['name', 'Product', 'text', { id: 'product_id', route: '/products/' }],
-          ['status', 'Status', 'text'],
+          ['status', 'Recommendation', 'text'],
           ['free', 'Free', 'number'],
           ['on_order', 'On order', 'number'],
-          ['short', 'Short', 'number'],
           ['days_of_cover', 'Days of cover', 'number'],
+          ['order_by', 'Order by', 'date'],
           ['days_since_last_sale', 'Days since sale', 'number'],
           ['stock_value', 'Value', 'money'],
-          ['aged_90', 'Over 90 days', 'money'],
+          ['aged_value', age ? `${age} d value` : 'Over 90 days', 'money'],
           ['reorder_quantity', 'Reorder qty', 'number'],
         ])}
       />
@@ -392,17 +464,42 @@ function EnquiriesTab() {
 
 /* ---------------------------------------------------------------- customers and suppliers */
 
+const SEGMENTS: { key: string; label: string; body: string }[] = [
+  { key: 'champion', label: 'Champions', body: 'Buy often, recently, a lot' },
+  { key: 'loyal', label: 'Loyal', body: 'Repeat buyers, active' },
+  { key: 'new', label: 'New', body: 'First month or first order' },
+  { key: 'at_risk', label: 'At risk', body: 'Regulars gone quiet 2–4 months' },
+  { key: 'dormant', label: 'Dormant', body: 'No order for 60+ days' },
+  { key: 'occasional', label: 'Occasional', body: 'Buy now and then' },
+]
+
 function CustomersTab() {
-  const data = useQuery({ queryKey: ['insights', 'customers'], queryFn: insights.customers })
+  const { ask } = useAssistant()
+  const data = useQuery({ queryKey: ['insights', 'segments'], queryFn: insights.segments })
+  const [segment, setSegment] = useState<string | null>(null)
   if (data.isPending) return <Loading />
   if (!data.data) return <Empty title="Could not load customers" />
-  const top = data.data.customers.slice(0, 10)
+  const d = data.data
+  const rows = d.customers.filter((c) => !segment || c.segment === segment).map((c) => ({ ...c, segment_label: SEGMENTS.find((s) => s.key === c.segment)?.label ?? c.segment }))
+  const top = d.customers.slice(0, 10)
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3 max-lg:grid-cols-1">
-        <Figure label="Customers who ordered" value={data.data.customers.length} />
-        <Figure label="Top fifth's share of sales" value={data.data.top_share_percent !== null ? `${data.data.top_share_percent}%` : '—'} hint="concentration risk" strong />
-        <Figure label="Gone quiet" value={data.data.dormant.length} hint={`no order for ${data.data.dormant_days}+ days`} />
+      <div className="grid grid-cols-6 gap-3 max-lg:grid-cols-3">
+        {SEGMENTS.map((s) => (
+          <button key={s.key} onClick={() => setSegment(segment === s.key ? null : s.key)} className={cn('card lift p-3.5 text-left', segment === s.key && 'ring-2 ring-blue')}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-[12.5px] font-semibold">{s.label}</span>
+              <span className="num text-[20px] font-light">{d.segments[s.key as keyof typeof d.segments] ?? 0}</span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-fg-3">{s.body}</div>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-fg-3">
+        <span>Repeat rate: <b className="text-fg">{d.repeat_rate_percent ?? '—'}%</b> of customers ordered more than once.</span>
+        <Button small kind="quiet" icon={<Sparkles size={13} />} onClick={() => ask('Which customers should we contact this week and why — at-risk regulars, dormant customers worth winning back, and anyone with overdue payments? Plan follow-ups.')}>
+          Who should we call?
+        </Button>
       </div>
       {top.length ? (
         <ChartView
@@ -420,17 +517,19 @@ function CustomersTab() {
         />
       ) : null}
       <TableView
-        block={table('Customers by value', data.data.customers as unknown as Record<string, unknown>[], [
+        block={table(segment ? SEGMENTS.find((s) => s.key === segment)?.label ?? 'Customers' : 'Customers by value', rows as unknown as Record<string, unknown>[], [
           ['name', 'Customer', 'text', { id: 'customer_id', route: '/customers/' }],
+          ['segment_label', 'Segment', 'text'],
           ['orders', 'Orders', 'number'],
           ['booked_value', 'Booked', 'money'],
-          ['revenue', 'Delivered', 'money'],
-          ['outstanding_value', 'Still to deliver', 'money'],
-          ['open_enquiries', 'Open enquiries', 'number'],
+          ['average_days_between_orders', 'Days between orders', 'number'],
           ['days_since_last_order', 'Days since order', 'number'],
-          ['share_percent', 'Share', 'percent'],
+          ['estimated_annual_value', 'Est. annual value', 'money'],
+          ['open_receivable', 'Owes', 'money'],
+          ['overdue_receivable', 'Overdue', 'money'],
         ])}
       />
+      <p className="text-[12px] text-fg-3">{d.note}</p>
     </div>
   )
 }

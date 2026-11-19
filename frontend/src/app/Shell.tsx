@@ -1,9 +1,9 @@
 import { Command } from 'cmdk'
 import { motion } from 'motion/react'
-import { Suspense, useEffect, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, KeyRound, LogOut, Moon, Plus, Search, Sun } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Boxes, ChevronDown, History, KeyRound, ListChecks, LogOut, Moon, Plus, Search, SlidersHorizontal, Sparkles, Sun, Wallet } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useSummary } from '@/api/queries'
 import { cn } from '@/lib/cn'
@@ -56,6 +56,7 @@ export function Shell() {
         <Palette open={palette} onClose={() => setPalette(false)} />
         <AssistantDock />
         <AssistantShortcut />
+        <RecentTracker />
       </div>
     </AssistantProvider>
   )
@@ -70,6 +71,11 @@ function Page() {
       <Outlet />
     </motion.div>
   )
+}
+
+function RecentTracker() {
+  useRecentRecords()
+  return null
 }
 
 /** ⌘J / Ctrl J opens or closes the assistant from anywhere. */
@@ -252,6 +258,9 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
     if (!open) setQuery('')
   }, [open])
+  const assistant = useAssistant()
+  const client = useQueryClient()
+  const recent = useMemo(() => (open ? readRecent(client) : []), [open, client])
   if (!open) return null
 
   const go = (to: string) => {
@@ -288,6 +297,14 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
               {search.data.products.map((product) => item(`${product.sku} ${product.name} ${term}`, () => go(`/products/${product.id}`), <><span className="num w-[86px] truncate text-[12px] text-fg-3">{product.sku}</span>{product.name}</>))}
             </Command.Group>
           ) : null}
+          {recent.length ? (
+            <Command.Group heading="Recently viewed" className={group}>
+              {recent.map((entry) => item(`recent ${entry.label} ${entry.path}`, () => go(entry.path), <><History size={16} className="text-fg-3" />{entry.label}</>))}
+            </Command.Group>
+          ) : null}
+          <Command.Group heading="Actions" className={group}>
+            {ACTIONS.map((action) => item(`action ${action.label} ${action.keywords}`, () => go(action.to), <><action.icon size={16} className="text-fg-3" />{action.label}</>))}
+          </Command.Group>
           <Command.Group heading="Go to" className={group}>
             {MODULES.map((module) => {
               const Icon = module.icon
@@ -297,10 +314,68 @@ function Palette({ open, onClose }: { open: boolean; onClose: () => void }) {
           <Command.Group heading="Create" className={group}>
             {CREATE.map((entry) => item(`new ${entry.label}`, () => go(entry.to), <><Plus size={16} className="text-fg-3" />New {entry.label.toLowerCase()}</>))}
           </Command.Group>
+          {term.length >= 3 ? (
+            <Command.Group heading="Assistant" className={group}>
+              {item(`ask ${term}`, () => { onClose(); assistant.ask(query.trim()) }, <><Sparkles size={16} className="text-fg-3" />Ask the assistant: “{query.trim()}”</>)}
+            </Command.Group>
+          ) : null}
         </Command.List>
       </Command>
     </div>
   )
+}
+
+const ACTIONS = [
+  { label: 'Record money received', to: '/finance?tab=receivables&record=in', icon: ArrowDownLeft, keywords: 'payment collect receipt customer paid' },
+  { label: 'Record money paid', to: '/finance?tab=payables&record=out', icon: ArrowUpRight, keywords: 'payment supplier pay' },
+  { label: 'Plan a follow-up', to: '/tasks?new=1', icon: ListChecks, keywords: 'task reminder call' },
+  { label: 'See who owes money', to: '/finance?tab=receivables', icon: Wallet, keywords: 'receivables overdue collections' },
+  { label: 'Products to reorder', to: '/products?flag=reorder&sort=reorder', icon: Boxes, keywords: 'buy purchase low stock' },
+  { label: 'Slow and dead stock', to: '/products?flag=slow&sort=risk', icon: Boxes, keywords: 'ageing liquidate idle capital' },
+  { label: 'Explore sales', to: '/insights?tab=explore', icon: BarChart3, keywords: 'analytics report chart' },
+  { label: 'Customise Home', to: '/?customise=1', icon: SlidersHorizontal, keywords: 'dashboard widgets layout' },
+]
+
+const RECENT_KEY = 'aec-recent'
+const RECORD_LABELS: Record<string, { name: string; key: string; field: (data: Record<string, unknown>) => string | undefined }> = {
+  orders: { name: 'Order', key: 'orders', field: (d) => d.order_number as string },
+  enquiries: { name: 'Enquiry', key: 'enquiries', field: (d) => d.enquiry_number as string },
+  customers: { name: 'Customer', key: 'customers', field: (d) => d.name as string },
+  suppliers: { name: 'Supplier', key: 'suppliers', field: (d) => d.name as string },
+  products: { name: 'Product', key: 'product-inventory', field: (d) => d.name as string },
+  'purchase-orders': { name: 'Purchase order', key: 'purchase-orders', field: (d) => d.po_number as string },
+  receipts: { name: 'Goods receipt', key: 'goods-receipts', field: (d) => d.receipt_number as string },
+}
+
+/** Remember record pages as they are opened, for the palette. */
+export function useRecentRecords() {
+  const location = useLocation()
+  const client = useQueryClient()
+  useEffect(() => {
+    const [section, id] = location.pathname.split('/').filter(Boolean)
+    if (!id || !RECORD_LABELS[section]) return
+    const timer = window.setTimeout(() => {
+      const meta = RECORD_LABELS[section]
+      const data = client.getQueryData<Record<string, unknown>>([meta.key, 'one', id])
+      const label = `${meta.name} · ${(data && meta.field(data)) || id.slice(0, 8)}`
+      try {
+        const list: { path: string; label: string }[] = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+        const next = [{ path: `/${section}/${id}`, label }, ...list.filter((entry) => entry.path !== `/${section}/${id}`)].slice(0, 8)
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+      } catch {
+        /* storage unavailable */
+      }
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [location.pathname, client])
+}
+
+function readRecent(_client: unknown): { path: string; label: string }[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+  } catch {
+    return []
+  }
 }
 
 const ReceiptIcon = () => <span className="grid size-5 place-items-center rounded-full bg-peri/25 text-[10px] font-bold text-sky">#</span>

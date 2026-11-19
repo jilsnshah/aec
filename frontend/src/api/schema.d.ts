@@ -93,6 +93,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/products/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Categories
+         * @description Product categories in use, with product counts.
+         */
+        get: operations["categories_api_products_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/products/{product_id}": {
         parameters: {
             query?: never;
@@ -1105,6 +1125,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/insights/explore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Explore
+         * @description Any sales measure by any grouping over any window, with the previous
+         *     window alongside, shares and a Pareto running share.
+         */
+        get: operations["explore_api_insights_explore_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights/heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Heatmap
+         * @description A measure by weekday and week: the business's weekly rhythm.
+         */
+        get: operations["heatmap_api_insights_heatmap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Products
+         * @description Product intelligence: growth, ABC class, margin quadrant, enquiry
+         *     conversion, and products bought together when there is enough data.
+         */
+        get: operations["products_api_insights_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Segments
+         * @description Customers by segment (champion, loyal, at risk, dormant, new,
+         *     occasional) with buying frequency, estimated annual value and what they owe.
+         */
+        get: operations["segments_api_insights_segments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1390,6 +1493,215 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Payments
+         * @description Payments received and made, newest first.
+         */
+        get: operations["list_payments_api_payments_get"];
+        put?: never;
+        /**
+         * Record Payment
+         * @description Record money received from a customer (in) or paid to a supplier (out).
+         */
+        post: operations["record_payment_api_payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/payments/{payment_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Payment
+         * @description Void a payment entered by mistake. It stays on record, marked void.
+         */
+        post: operations["void_payment_api_payments__payment_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/finance/receivables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Receivables
+         * @description What each customer owes for goods delivered: open, overdue, ageing buckets
+         *     past the due date, credit limit use; and every overdue invoice.
+         */
+        get: operations["receivables_api_finance_receivables_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/finance/payables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Payables
+         * @description What the business owes each supplier for goods received, with ageing and
+         *     overdue bills.
+         */
+        get: operations["payables_api_finance_payables_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/finance/customers/{customer_id}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer Statement
+         * @description A customer's account: invoices (deliveries) and payments with a running balance.
+         */
+        get: operations["customer_statement_api_finance_customers__customer_id__statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/finance/suppliers/{supplier_id}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Supplier Statement
+         * @description A supplier's account: bills (goods received) and payments with a running balance.
+         */
+        get: operations["supplier_statement_api_finance_suppliers__supplier_id__statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Targets
+         * @description Monthly sales targets.
+         */
+        get: operations["list_targets_api_targets_get"];
+        /**
+         * Set Target
+         * @description Set (or change) the target for a month. An amount of 0 removes it.
+         */
+        put: operations["set_target_api_targets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/preferences/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preference */
+        get: operations["get_preference_api_preferences__key__get"];
+        /**
+         * Set Preference
+         * @description Save a personal setting (e.g. the Home layout).
+         */
+        put: operations["set_preference_api_preferences__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Views
+         * @description Saved filter sets for a page: yours and shared ones.
+         */
+        get: operations["list_views_api_views_get"];
+        put?: never;
+        /** Save View */
+        post: operations["save_view_api_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete View */
+        delete: operations["delete_view_api_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1414,6 +1726,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActionIn */
+        ActionIn: {
+            /** Model */
+            model?: string | null;
+        };
         /** AiModelOut */
         AiModelOut: {
             /** Id */
@@ -1636,6 +1953,17 @@ export interface components {
             address?: string | null;
             /** Notes */
             notes?: string | null;
+            /**
+             * Payment Terms Days
+             * @description Days of credit on each delivery.
+             * @default 0
+             */
+            payment_terms_days: number;
+            /**
+             * Credit Limit
+             * @description Most the customer may owe; empty for no limit.
+             */
+            credit_limit?: number | string | null;
         };
         /** CustomerDetailOut */
         CustomerDetailOut: {
@@ -1666,6 +1994,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Credit Limit */
+            credit_limit?: string | null;
             /** Outstanding */
             outstanding?: components["schemas"]["OutstandingLine"][];
             /** Orders */
@@ -1703,6 +2038,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Credit Limit */
+            credit_limit?: string | null;
             /**
              * Order Count
              * @default 0
@@ -1760,6 +2102,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Credit Limit */
+            credit_limit?: string | null;
         };
         /** CustomerRef */
         CustomerRef: {
@@ -1785,6 +2134,10 @@ export interface components {
             notes?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Credit Limit */
+            credit_limit?: number | string | null;
         };
         /** DailySalesRow */
         DailySalesRow: {
@@ -2553,6 +2906,8 @@ export interface components {
              * @default
              */
             text: string;
+            /** Model */
+            model?: string | null;
             /** Attachments */
             attachments?: string[];
             context?: components["schemas"]["PageContext"] | null;
@@ -3121,6 +3476,54 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PaymentIn */
+        PaymentIn: {
+            /**
+             * Direction
+             * @description in: money received from a customer; out: money paid to a supplier.
+             */
+            direction: string;
+            /** Amount */
+            amount: number | string;
+            /**
+             * Paid On
+             * @description Date of the payment (YYYY-MM-DD); today if omitted.
+             */
+            paid_on?: string | null;
+            /**
+             * Customer Id
+             * @description For money in.
+             */
+            customer_id?: string | null;
+            /**
+             * Supplier Id
+             * @description For money out.
+             */
+            supplier_id?: string | null;
+            /**
+             * Method
+             * @description cash, bank, upi, cheque, card or other.
+             * @default bank
+             */
+            method: string;
+            /**
+             * Reference
+             * @description Cheque number, UTR, transaction id.
+             */
+            reference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Sales Order Id
+             * @description Optional: the order this money is for.
+             */
+            sales_order_id?: string | null;
+            /**
+             * Purchase Order Id
+             * @description Optional: the purchase order this pays for.
+             */
+            purchase_order_id?: string | null;
+        };
         /** PendingCommitmentsOut */
         PendingCommitmentsOut: {
             /** Rows */
@@ -3241,6 +3644,11 @@ export interface components {
             /** Items */
             items?: components["schemas"]["PendingOrderRow"][];
         };
+        /** PreferenceIn */
+        PreferenceIn: {
+            /** Value */
+            value: unknown;
+        };
         /** ProductCreate */
         ProductCreate: {
             /** Sku */
@@ -3271,6 +3679,26 @@ export interface components {
              * @default 0
              */
             opening_unit_cost: number | string;
+            /**
+             * Category
+             * @description Product group, e.g. Cement or Steel.
+             */
+            category?: string | null;
+            /**
+             * Reorder Level
+             * @description Minimum stock to keep.
+             */
+            reorder_level?: number | string | null;
+            /**
+             * Preferred Supplier Id
+             * @description Usual supplier.
+             */
+            preferred_supplier_id?: string | null;
+            /**
+             * Lead Time Days
+             * @description Days from ordering to arrival.
+             */
+            lead_time_days?: number | null;
         };
         /** ProductInventoryOut */
         ProductInventoryOut: {
@@ -3301,6 +3729,19 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Category */
+            category?: string | null;
+            /**
+             * Reorder Level
+             * @default 0
+             */
+            reorder_level: string;
+            /** Preferred Supplier Id */
+            preferred_supplier_id?: string | null;
+            /** Preferred Supplier Name */
+            preferred_supplier_name?: string | null;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
             /** Physical Stock */
             physical_stock: string;
             /**
@@ -3380,6 +3821,19 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Category */
+            category?: string | null;
+            /**
+             * Reorder Level
+             * @default 0
+             */
+            reorder_level: string;
+            /** Preferred Supplier Id */
+            preferred_supplier_id?: string | null;
+            /** Preferred Supplier Name */
+            preferred_supplier_name?: string | null;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
             /** Physical Stock */
             physical_stock: string;
             /**
@@ -3455,6 +3909,26 @@ export interface components {
             description?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /**
+             * Category
+             * @description Product group, e.g. Cement or Steel.
+             */
+            category?: string | null;
+            /**
+             * Reorder Level
+             * @description Minimum stock to keep.
+             */
+            reorder_level?: number | string | null;
+            /**
+             * Preferred Supplier Id
+             * @description Usual supplier.
+             */
+            preferred_supplier_id?: string | null;
+            /**
+             * Lead Time Days
+             * @description Days from ordering to arrival.
+             */
+            lead_time_days?: number | null;
         };
         /** PurchaseOrderCreate */
         PurchaseOrderCreate: {
@@ -4111,6 +4585,17 @@ export interface components {
             address?: string | null;
             /** Notes */
             notes?: string | null;
+            /**
+             * Payment Terms Days
+             * @description Days of credit the supplier gives.
+             * @default 0
+             */
+            payment_terms_days: number;
+            /**
+             * Lead Time Days
+             * @description Typical days to deliver.
+             */
+            lead_time_days?: number | null;
         };
         /** SupplierDetailOut */
         SupplierDetailOut: {
@@ -4145,6 +4630,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
             /** Purchase Orders */
             purchase_orders?: components["schemas"]["SupplierPurchaseOrderRow"][];
             /** Goods Receipts */
@@ -4186,6 +4678,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
             /**
              * Po Count
              * @default 0
@@ -4242,6 +4741,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Payment Terms Days
+             * @default 0
+             */
+            payment_terms_days: number;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
         };
         /** SupplierPurchaseOrderRow */
         SupplierPurchaseOrderRow: {
@@ -4329,6 +4835,10 @@ export interface components {
             notes?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
         };
         /** TallySyncOut */
         TallySyncOut: {
@@ -4378,6 +4888,22 @@ export interface components {
             companies: string[];
             /** Company Found */
             company_found: boolean;
+        };
+        /** TargetIn */
+        TargetIn: {
+            /**
+             * Month
+             * @description YYYY-MM
+             */
+            month: string;
+            /**
+             * Metric
+             * @description booked (orders placed) or revenue (delivered).
+             * @default booked
+             */
+            metric: string;
+            /** Amount */
+            amount: number | string;
         };
         /** TaskCounts */
         TaskCounts: {
@@ -4530,6 +5056,25 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** ViewIn */
+        ViewIn: {
+            /** Page */
+            page: string;
+            /** Name */
+            name: string;
+            /** State */
+            state: unknown;
+            /**
+             * Shared
+             * @default false
+             */
+            shared: boolean;
+        };
+        /** VoidIn */
+        VoidIn: {
+            /** Reason */
+            reason?: string | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -4651,6 +5196,12 @@ export interface operations {
                 include_inactive?: boolean;
                 sort_by?: string;
                 sort_dir?: string;
+                /** @description One or more categories, comma-separated; (none) for uncategorised. */
+                category?: string | null;
+                /** @description Products whose preferred supplier this is. */
+                supplier_id?: string | null;
+                /** @description Only these product ids, comma-separated. */
+                ids?: string | null;
                 /** @description Page size. */
                 limit?: number;
                 /** @description Rows to skip. */
@@ -4711,6 +5262,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    categories_api_products_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -6701,6 +7272,137 @@ export interface operations {
             };
         };
     };
+    explore_api_insights_explore_get: {
+        parameters: {
+            query?: {
+                /** @description booked_value, quantity_booked, orders, discount, revenue, quantity_delivered, cost_of_goods or gross_profit. */
+                measure?: string;
+                /** @description product, category, customer, month, week, weekday, day or none. */
+                group_by?: string;
+                /** @description As for overview. */
+                period?: string;
+                start?: string | null;
+                end?: string | null;
+                /** @description Comma-separated categories. */
+                categories?: string | null;
+                /** @description Comma-separated product ids. */
+                product_ids?: string | null;
+                /** @description Comma-separated customer ids. */
+                customer_ids?: string | null;
+                sort?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heatmap_api_insights_heatmap_get: {
+        parameters: {
+            query?: {
+                measure?: string;
+                weeks?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    products_api_insights_products_get: {
+        parameters: {
+            query?: {
+                period?: string;
+                start?: string | null;
+                end?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    segments_api_insights_segments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     list_tasks_api_tasks_get: {
         parameters: {
             query?: {
@@ -7149,7 +7851,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActionIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7285,6 +7991,430 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_payments_api_payments_get: {
+        parameters: {
+            query?: {
+                direction?: string | null;
+                customer_id?: string | null;
+                supplier_id?: string | null;
+                start?: string | null;
+                end?: string | null;
+                /** @description Matches number, reference or party name. */
+                search?: string | null;
+                include_voided?: boolean;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_payment_api_payments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_payment_api_payments__payment_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["VoidIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receivables_api_finance_receivables_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    payables_api_finance_payables_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    customer_statement_api_finance_customers__customer_id__statement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supplier_statement_api_finance_suppliers__supplier_id__statement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_targets_api_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    set_target_api_targets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TargetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preference_api_preferences__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_preference_api_preferences__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_views_api_views_get: {
+        parameters: {
+            query: {
+                page: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_view_api_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_view_api_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

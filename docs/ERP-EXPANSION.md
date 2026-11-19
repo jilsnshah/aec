@@ -81,3 +81,19 @@ Deliberately not built: salesperson performance (the data has no
 salesperson), category-level targets (business-level targets first),
 statistical forecasting (months of history are needed; the screens show
 trend direction and say when data is insufficient).
+
+## 5. Status (19 November 2026)
+
+Built and tested on `frontend-v2`: steps 1–7 above. Backend tests cover
+payments and open-item matching, ageing with terms, statements, voids,
+credit-limit alerts, product settings driving reorder points, the explorer,
+heatmap, product intelligence, segments, targets, preferences and saved
+views. Browser end-to-end runs cover bulk buy into a pre-filled purchase
+order, the product intelligence card, recording a payment and seeing
+receivables fall, the customer statement, Home customisation persisting,
+explorer grouping and drill-down, and palette actions — plus the earlier
+suites, unchanged.
+
+Next candidates: invoices with tax from Tally numbers, partial payment
+allocation to a chosen invoice, category-level targets, scheduled briefings
+by WhatsApp/email, demand forecasting once 6+ months of history exist.

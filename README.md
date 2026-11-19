@@ -892,6 +892,45 @@ supplier — linked to the customer, enquiry, order, supplier or purchase order,
 with priority and an owner. Overdue follow-ups and quotes left untouched for a
 week raise alerts.
 
+## Money, targets and the command centre
+
+- **Finance** (top bar): what customers owe for goods delivered and what you
+  owe suppliers for goods received, aged past each party's payment terms, with
+  credit limits, overdue invoices and bills, and every payment. Record money
+  received or paid from here, from a customer's or supplier's **Account** tab,
+  or from the command palette. Payments settle the oldest open invoices first;
+  a mistaken payment is voided, never deleted.
+- **Customers and suppliers** carry payment terms (days of credit); customers
+  also a credit limit. Their **Account** tab is a statement with a running
+  balance; **Follow-ups** plans calls and chases against them.
+- **Products** carry a category, minimum stock, preferred supplier and lead
+  time. Stock health uses them for a lead-time-aware reorder point, an
+  order-by date, and one recommendation per product (buy, plan, do not
+  reorder, clear, watch). The product list filters by health, category and
+  supplier, sorts by cover, idle days, reorder value or capital at risk,
+  exports CSV, and **Buy** turns selected products into a pre-filled purchase
+  order.
+- **Home** is a command centre: key figures, money, today's priorities, sales,
+  the monthly target with a labelled month-end estimate, profit and more.
+  **Customise** hides and re-orders panels; the layout is saved per user.
+- **Insights → Explorer**: any measure (booked, delivered, profit, cost,
+  discount, orders, quantities) by month, week, day, weekday, product,
+  category or customer, for any period, filtered by categories, products and
+  customers, compared with the previous period, as a chart or table, with
+  Pareto shares, drill-down by click, saved views and CSV export; plus a
+  weekday × week heatmap. **Products** shows ABC classes, margin quadrants,
+  growth and enquiry conversion; **Customers** shows segments, buying
+  frequency and estimated annual value (labelled as an estimate).
+- **Enquiries** can be sorted by a priority score (deal size, existing
+  customer, freshness, stock available) with its reasons shown; call and
+  WhatsApp are one click away.
+- **⌘K** also runs actions (record money, plan a follow-up, products to
+  reorder…), lists recently viewed records, and hands anything else to the
+  assistant.
+
+Where data is too thin (bought-together needs 20+ multi-product orders; trends
+need at least 5 units a month) the screens say so rather than guess.
+
 ## Tally and invoices on WhatsApp
 
 **Settings → Integrations → Tally** connects any TallyPrime. Everything is

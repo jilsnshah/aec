@@ -17,7 +17,8 @@ export const api = {
     http.get<T.PendingCommitmentsOut>('/api/inventory/pending-commitments', query),
 
   products: {
-    list: (query: ListQuery & { include_inactive?: boolean } = {}) => http.get<T.Page<T.ProductOut>>('/api/products', query),
+    list: (query: ListQuery & { include_inactive?: boolean; category?: string; supplier_id?: string; ids?: string } = {}) => http.get<T.Page<T.ProductOut>>('/api/products', query),
+    categories: () => http.get<{ name: string; products: number }[]>('/api/products/categories'),
     get: (id: string) => http.get<T.ProductOut>(`/api/products/${id}`),
     inventory: (id: string) => http.get<T.ProductInventoryOut>(`/api/products/${id}/inventory`),
     pendingOrders: (id: string, receipt_quantity?: string) =>
@@ -95,7 +96,7 @@ export const api = {
       http.get<T.Page<T.TaskOut>>('/api/tasks', query),
     counts: () => http.get<T.TaskCounts>('/api/tasks/counts'),
     assignees: () => http.get<T.UserRef[]>('/api/tasks/assignees'),
-    create: (body: T.TaskCreate) => http.post<T.TaskOut>('/api/tasks', body),
+    create: (body: Omit<T.TaskCreate, 'priority'> & { priority?: string }) => http.post<T.TaskOut>('/api/tasks', body),
     update: (id: string, body: T.TaskUpdate) => http.patch<T.TaskOut>(`/api/tasks/${id}`, body),
   },
 

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Plus, ThumbsDown } from 'lucide-react'
+import { CheckCircle2, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ThumbsDown } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { insights } from '@/api/insights'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtPercent, fmtQty, n, plural } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
 import { EnquiryBadge } from '@/lib/status'
-import { Badge, Button, Empty, Notice, SearchBox, Spinner } from '@/ui/core'
+import { Badge, Button, Empty, Notice, SearchBox, Spinner, Toggle } from '@/ui/core'
 import { Menu, Segmented, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { EnquirySheet } from './EnquirySheet'
@@ -28,9 +30,12 @@ export function Enquiries() {
   const route = useRecordRoute('/enquiries')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
+  const [byPriority, setByPriority] = useState(false)
   const query = useDebounced(search)
   const list = useList('enquiries', api.enquiries.list, { search: query, status: status === 'all' ? undefined : status, limit: 200 })
-  const items = list.data?.items ?? []
+  const funnel = useQuery({ queryKey: ['insights', 'enquiries'], queryFn: insights.enquiries })
+  const priority = new Map((funnel.data?.priorities ?? []).map((row) => [row.enquiry_id, row]))
+  const items = [...(list.data?.items ?? [])].sort((a, b) => (byPriority ? (priority.get(b.id)?.score ?? -1) - (priority.get(a.id)?.score ?? -1) : 0))
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -52,6 +57,10 @@ export function Enquiries() {
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="Enquiry, customer or product" />
               <Segmented value={status} onChange={setStatus} options={FILTERS} />
+              <label className="flex items-center gap-2 text-[12px] text-fg-2">
+                <Toggle checked={byPriority} onChange={setByPriority} label="Sort by priority" />
+                Open enquiries by priority
+              </label>
             </>
           }
         >
@@ -73,6 +82,11 @@ export function Enquiries() {
                 <div className="mt-2 flex items-center gap-1.5">
                   <EnquiryBadge status={enquiry.status} />
                   <SourceBadge source={enquiry.source} detail={enquiry.source_detail} />
+                  {priority.get(enquiry.id) ? (
+                    <span title={priority.get(enquiry.id)!.reasons.join('; ')}>
+                      <Badge tone={priority.get(enquiry.id)!.score >= 60 ? 'bad' : priority.get(enquiry.id)!.score >= 35 ? 'sky' : 'muted'}>P{priority.get(enquiry.id)!.score}</Badge>
+                    </span>
+                  ) : null}
                   <span className="ml-auto text-[11.5px] text-fg-3">{plural(enquiry.item_count, 'product')}</span>
                 </div>
               </ListRow>
@@ -90,6 +104,8 @@ export function Enquiries() {
 function EnquiryInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const enquiry = useOne('enquiries', api.enquiries.get, id)
+  const contact = useOne('customers', api.customers.get, enquiry.data?.customer.id)
+  const phone = contact.data?.phone ?? null
   const [editing, setEditing] = useState(false)
   const confirm = useConfirm()
   const convert = useAction(() => api.enquiries.convert(id), { success: (result) => `Won — ${result.order.order_number} placed` })
@@ -133,6 +149,16 @@ function EnquiryInspector({ id }: { id: string }) {
         actions={
           open ? (
             <>
+              {phone ? (
+                <>
+                  <a className="btn btn-icon" href={`tel:${phone}`} aria-label="Call customer" title="Call">
+                    <Phone size={15} />
+                  </a>
+                  <a className="btn btn-icon" href={`https://wa.me/${phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Hello ${data.customer.name}, following up on your enquiry ${data.enquiry_number}.`)}`} target="_blank" rel="noreferrer" aria-label="WhatsApp customer" title="WhatsApp">
+                    <MessageCircle size={15} />
+                  </a>
+                </>
+              ) : null}
               <Button icon={<Pencil size={14} />} onClick={() => setEditing(true)} disabled={!data.is_editable}>
                 Edit
               </Button>

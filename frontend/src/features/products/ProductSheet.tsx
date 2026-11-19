@@ -1,3 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
+import { Picker } from '@/ui/pickers'
+import { useSuppliers } from '@/ui/lines'
 import { useEffect, useState } from 'react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -7,21 +10,33 @@ import { isQty, n } from '@/lib/format'
 import { Button, Field, Notice } from '@/ui/core'
 import { Sheet } from '@/ui/overlays'
 
-const blank = { sku: '', name: '', unit: 'pcs', mrp: '', description: '', opening: '', cost: '' }
+const blank = { sku: '', name: '', unit: 'pcs', mrp: '', description: '', opening: '', cost: '', category: '', minimum: '', supplier: '', lead: '' }
 
 export function ProductSheet({ open, onClose, editing, onSaved }: { open: boolean; onClose: () => void; editing?: ProductOut; onSaved?: (id: string) => void }) {
   const [form, setForm] = useState(blank)
   const [tried, setTried] = useState(false)
+  const suppliers = useSuppliers()
+  const categories = useQuery({ queryKey: ['products', 'categories'], queryFn: api.products.categories })
   const save = useAction(
     () => {
-      const base = { sku: form.sku.trim(), name: form.name.trim(), unit_of_measure: form.unit.trim(), mrp: form.mrp, description: form.description.trim() || null }
+      const base = {
+        sku: form.sku.trim(),
+        name: form.name.trim(),
+        unit_of_measure: form.unit.trim(),
+        mrp: form.mrp,
+        description: form.description.trim() || null,
+        category: form.category.trim() || null,
+        reorder_level: form.minimum.trim() || '0',
+        preferred_supplier_id: form.supplier || null,
+        lead_time_days: form.lead.trim() === '' ? null : Number(form.lead),
+      }
       return editing ? api.products.update(editing.id, base) : api.products.create({ ...base, opening_stock: form.opening || '0', opening_unit_cost: form.cost || '0' })
     },
     { success: editing ? 'Product saved' : 'Product added', quiet: true },
   )
   useEffect(() => {
     if (!open) return
-    setForm(editing ? { sku: editing.sku, name: editing.name, unit: editing.unit_of_measure, mrp: String(n(editing.mrp)), description: editing.description ?? '', opening: '', cost: '' } : blank)
+    setForm(editing ? { sku: editing.sku, name: editing.name, unit: editing.unit_of_measure, mrp: String(n(editing.mrp)), description: editing.description ?? '', opening: '', cost: '', category: editing.category ?? '', minimum: n(editing.reorder_level) ? String(n(editing.reorder_level)) : '', supplier: editing.preferred_supplier_id ?? '', lead: editing.lead_time_days == null ? '' : String(editing.lead_time_days) } : blank)
     setTried(false)
     save.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,6 +109,27 @@ export function ProductSheet({ open, onClose, editing, onSaved }: { open: boolea
             </Field>
           </>
         ) : null}
+        <Field label="Category" optional className="col-span-2" hint="Groups products in reports.">
+          {(props) => (
+            <>
+              <input {...props} className="field" list="product-categories" value={form.category} onChange={set('category')} placeholder="Cement, Steel…" />
+              <datalist id="product-categories">
+                {(categories.data ?? []).filter((c) => c.name !== '(none)').map((c) => (
+                  <option key={c.name} value={c.name} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </Field>
+        <Field label="Minimum stock" optional className="col-span-2" hint="Reorder before falling below this." error={tried && form.minimum.trim() !== '' && !(Number(form.minimum) >= 0) ? 'Enter a quantity.' : null}>
+          {(props) => <input {...props} className="field field-num" inputMode="decimal" value={form.minimum} onChange={set('minimum')} placeholder="0" />}
+        </Field>
+        <Field label="Lead time (days)" optional className="col-span-2" hint="Order to arrival; else the supplier's.">
+          {(props) => <input {...props} className="field field-num" inputMode="numeric" value={form.lead} onChange={set('lead')} placeholder="From supplier" />}
+        </Field>
+        <Field label="Preferred supplier" optional className="col-span-6" hint="Pre-filled when you buy this product from Insights or the product page.">
+          {() => <Picker value={form.supplier} onChange={(value) => setForm({ ...form, supplier: value })} placeholder="None" options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name, detail: supplier.code }))} />}
+        </Field>
         <Field label="Description" optional className="col-span-6">
           {(props) => <textarea {...props} className="field" rows={2} value={form.description} onChange={set('description')} />}
         </Field>

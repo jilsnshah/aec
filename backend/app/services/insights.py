@@ -528,8 +528,9 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
         elif "dead" in flags and (oldest_days or 0) >= 90:
             action = {"code": "liquidate", "text": "Clear it: {} idle for {} days".format(_money(value), oldest_days)}
         elif "dead" in flags or "slow" in flags:
-            action = {"code": "do_not_reorder", "text": "Do not reorder; {} in hand".format(
-                "about {} days of sales".format(days_to_clear) if days_to_clear else "no recent sales")}
+            order_by = None  # nothing to plan: there is more than enough
+            action = {"code": "do_not_reorder", "text": "Do not reorder: {}".format(
+                "about {} days of sales in hand or on order".format(int(cover_days)) if cover_days else "no sales in 90 days")}
         elif order_by is not None and reorder > 0:
             action = {"code": "plan", "text": "Order {} {} by {}".format(_qty(reorder), product.unit_of_measure, order_by.isoformat())}
         elif trend == "rising":
@@ -831,6 +832,50 @@ def enquiry_funnel(session: Session, period: Optional[str] = None, start: Option
                         "has_open_follow_up": enquiry.id in open_task_enquiries,
                     }
                 )
+    # Priority for open enquiries: bigger deals, customers who already buy,
+    # fresher quotes and quotes we can fulfil from stock rank higher.
+    repeat_buyers = {
+        row[0] for row in session.execute(
+            select(SalesOrder.customer_id).where(SalesOrder.status != OrderStatus.CANCELLED).group_by(SalesOrder.customer_id)
+        ).all()
+    }
+    free_stock = {}
+    for product in session.execute(select(Product)).scalars():
+        free_stock[product.id] = float(product.physical_stock or 0)
+    reserved_now = reservations.reserved_map(session)
+    open_rows = [e for e in enquiries if e.status == EnquiryStatus.OPEN]
+    values = sorted((_f(enquiry_service.enquiry_total(e)) for e in open_rows), reverse=True)
+    top_value = values[0] if values else 0
+    priorities = []
+    for enquiry in open_rows:
+        value = _f(enquiry_service.enquiry_total(enquiry))
+        age = (now - enquiry.created_at.astimezone(_zone())).days
+        idle = (now - enquiry.updated_at.astimezone(_zone())).days
+        in_stock = all(free_stock.get(item.product_id, 0) - float(reserved_now.get(item.product_id, 0)) >= float(item.quantity) for item in enquiry.items)
+        score, reasons = 0.0, []
+        if top_value:
+            score += 40 * value / top_value
+            if value >= top_value * 0.5:
+                reasons.append("one of the biggest open quotes")
+        if enquiry.customer_id in repeat_buyers:
+            score += 25
+            reasons.append("customer already buys from you")
+        freshness = max(0.0, 20 - age)
+        score += freshness
+        if age <= 3:
+            reasons.append("fresh — answer while it's warm")
+        elif idle >= STALE_ENQUIRY_DAYS:
+            reasons.append("untouched for {} days".format(idle))
+        if in_stock:
+            score += 15
+            reasons.append("can be supplied from stock now")
+        priorities.append({
+            "enquiry_id": enquiry.id, "enquiry_number": enquiry.enquiry_number, "customer_id": enquiry.customer_id,
+            "customer_name": enquiry.customer.name, "phone": enquiry.customer.phone, "value": value, "age_days": age,
+            "days_idle": idle, "in_stock": in_stock, "score": round(min(score, 100)), "reasons": reasons,
+            "has_open_follow_up": enquiry.id in open_task_enquiries,
+        })
+    priorities.sort(key=lambda row: -row["score"])
     sources = []
     for name, data in sorted(by_source.items(), key=lambda item: -item[1]["total"]):
         decided = data["converted"] + data["lost"]
@@ -847,6 +892,8 @@ def enquiry_funnel(session: Session, period: Optional[str] = None, start: Option
         "stale_days": STALE_ENQUIRY_DAYS,
         "stale": stale,
         "stale_without_follow_up": sum(1 for row in stale if not row["has_open_follow_up"]),
+        "priorities": priorities,
+        "priority_note": "Priority 0-100 = deal size (40) + existing customer (25) + freshness (20) + in stock now (15). A ranking aid, not a prediction.",
     }
 
 

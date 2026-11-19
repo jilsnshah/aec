@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Account } from '@/features/finance/Account'
+import { RecordTasks } from '@/features/tasks/RecordTasks'
 import { Archive, Building2, Mail, MapPin, MoreHorizontal, Pencil, Phone, Plus, UserRound } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
@@ -85,7 +87,9 @@ export function Suppliers() {
 function SupplierInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const supplier = useOne('suppliers', api.suppliers.get, id)
-  const [tab, setTab] = useState('orders')
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') ?? 'orders'
+  const setTab = (value: string) => setParams({ tab: value }, { replace: true })
   const [sheet, setSheet] = useState<null | 'edit' | 'po'>(null)
   const confirm = useConfirm()
   const archive = useAction(() => api.suppliers.archive(id), { success: 'Supplier archived' })
@@ -152,6 +156,8 @@ function SupplierInspector({ id }: { id: string }) {
           tabs={[
             { value: 'orders', label: 'Purchase orders', count: data.purchase_orders.length },
             { value: 'receipts', label: 'Deliveries', count: data.goods_receipts.length },
+            { value: 'account', label: 'Account' },
+            { value: 'followups', label: 'Follow-ups' },
           ]}
         >
           <TabPanel value="orders">
@@ -221,6 +227,12 @@ function SupplierInspector({ id }: { id: string }) {
                 </tbody>
               </table>
             )}
+          </TabPanel>
+          <TabPanel value="account">
+            <Account party="supplier" id={id} />
+          </TabPanel>
+          <TabPanel value="followups">
+            <RecordTasks link={{ supplier_id: id }} suggestion={`Chase ${data.name}`} />
           </TabPanel>
         </Tabs>
         <aside className="w-[270px] shrink-0 space-y-4 overflow-y-auto border-l border-white/7 p-5 max-xl:hidden">

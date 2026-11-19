@@ -16,6 +16,7 @@ import {
   Sparkles,
   Truck,
   Users,
+  Wallet,
   Warehouse,
 } from 'lucide-react'
 
@@ -37,6 +38,7 @@ export const MODULES: Module[] = [
   { to: '/assistant', label: 'Assistant', short: 'Assistant', icon: Sparkles, group: 'main', keywords: 'ai chat ask gemini' },
   { to: '/insights', label: 'Insights', short: 'Insights', icon: BarChart3, group: 'main', keywords: 'analytics reports ageing reorder conversion' },
   { to: '/fulfilment', label: 'Fulfilment', short: 'Fulfilment', icon: PackageCheck, group: 'main', keywords: 'deliver ready short on order' },
+  { to: '/finance', label: 'Finance', short: 'Finance', icon: Wallet, group: 'main', keywords: 'money receivables payables payments owed collections' },
   { to: '/tasks', label: 'Follow-ups', short: 'Follow-ups', icon: ListChecks, group: 'main', keywords: 'tasks reminders to do' },
   { to: '/enquiries', label: 'Enquiries', short: 'Enquiries', icon: MessageSquareQuote, group: 'sales', keywords: 'quote deal lead', hint: 'Quotes and leads' },
   { to: '/orders', label: 'Sales Orders', short: 'Orders', icon: ReceiptText, group: 'sales', keywords: 'so sell', hint: 'What customers bought' },

@@ -1,7 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { AlertTriangle, ArrowUpRight, BarChart3, Boxes, CalendarDays, ChevronRight, Gauge, PackageCheck, PackageOpen, ReceiptText, Sparkles, TrendingUp, Truck } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpRight, BarChart3, Boxes, CalendarDays, ChevronRight, Gauge, PackageCheck, PackageOpen, ReceiptText, SlidersHorizontal, Sparkles, Target, TrendingUp, Truck, Wallet, Zap } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { errorText } from '@/api/client'
+import { finance, workspace } from '@/api/finance'
+import { insights } from '@/api/insights'
+import { useAssistant } from '@/features/assistant/store'
+import { SEVERITY_DOT } from '@/features/insights/AlertsBell'
 import { api } from '@/api/endpoints'
 import { useList, useSummary } from '@/api/queries'
 import type { InventorySummaryOut } from '@/api/types'
@@ -10,8 +17,8 @@ import { cn } from '@/lib/cn'
 import { fmtCompactMoney, fmtMoney, fmtMoneyRound, fmtPercent, fmtQty, fmtShortDate, fmtToday, n, plural } from '@/lib/format'
 import { OrderBadge, PurchaseBadge, STATE } from '@/lib/status'
 import { Contours } from '@/ui/art'
-import { CountUp, Empty, Meter, Skeleton } from '@/ui/core'
-import { Segmented } from '@/ui/overlays'
+import { Button, CountUp, Empty, Meter, Skeleton, Toggle } from '@/ui/core'
+import { Segmented, Sheet } from '@/ui/overlays'
 
 const ease = [0.22, 1, 0.36, 1] as const
 
@@ -20,23 +27,227 @@ const greeting = () => {
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 }
 
-/** Today at a glance: one board of cards that fits the window. */
+type WidgetKey = 'kpis' | 'money' | 'target' | 'priorities' | 'gauge' | 'profit' | 'sales' | 'board' | 'dots'
+const WIDGETS: { key: WidgetKey; label: string; hint: string; className: string }[] = [
+  { key: 'kpis', label: 'Key figures', hint: 'To deliver, delivered, short', className: 'col-span-7 h-[190px]' },
+  { key: 'money', label: 'Money', hint: 'Owed to you, owed by you, cash in', className: 'col-span-5 h-[190px]' },
+  { key: 'priorities', label: "Today's priorities", hint: 'What to act on, with one-click actions', className: 'col-span-5 h-[400px]' },
+  { key: 'sales', label: 'Sales', hint: 'Booked and delivered, 30 days', className: 'col-span-7 h-[400px]' },
+  { key: 'target', label: 'Target', hint: 'This month against your target', className: 'col-span-4 h-[290px]' },
+  { key: 'gauge', label: 'Ready to deliver', hint: 'Share of owed goods in hand', className: 'col-span-3 h-[290px]' },
+  { key: 'profit', label: 'Gross profit', hint: 'On goods delivered', className: 'col-span-5 h-[290px]' },
+  { key: 'board', label: 'Recent orders', hint: 'With to-buy and to-receive tabs', className: 'col-span-7 h-[420px]' },
+  { key: 'dots', label: 'Orders this week', hint: 'One dot per order', className: 'col-span-5 h-[420px]' },
+]
+type Layout = { order: WidgetKey[]; hidden: WidgetKey[] }
+const DEFAULT_LAYOUT: Layout = { order: WIDGETS.map((w) => w.key), hidden: [] }
+
+/** The command centre: what matters today, each figure a door to the detail.
+ *  Widgets can be hidden and re-ordered; the layout is saved per user. */
 export function Home() {
   const summary = useSummary()
   const data = summary.data
   const { user } = useAuth()
+  const client = useQueryClient()
+  const saved = useQuery({ queryKey: ['preferences', 'home.layout'], queryFn: () => workspace.preference<Layout>('home.layout') })
+  const layout: Layout = useMemo(() => {
+    const value = saved.data?.value
+    if (!value) return DEFAULT_LAYOUT
+    const order = [...value.order.filter((key) => WIDGETS.some((w) => w.key === key)), ...WIDGETS.map((w) => w.key).filter((key) => !value.order.includes(key))]
+    return { order, hidden: value.hidden ?? [] }
+  }, [saved.data])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [customising, setCustomisingState] = useState(searchParams.get('customise') === '1')
+  const setCustomising = (value: boolean) => {
+    setCustomisingState(value)
+    if (!value && searchParams.get('customise')) setSearchParams({}, { replace: true })
+  }
+  async function save(next: Layout) {
+    client.setQueryData(['preferences', 'home.layout'], { key: 'home.layout', value: next })
+    try {
+      await workspace.setPreference('home.layout', next)
+    } catch (error) {
+      toast.error(errorText(error))
+    }
+  }
+  const render: Record<WidgetKey, ReactNode> = {
+    kpis: <Kpis data={data} />,
+    money: <MoneyCard />,
+    target: <TargetCard />,
+    priorities: <Priorities />,
+    gauge: <ReadyGauge data={data} />,
+    profit: <ProfitCard data={data} />,
+    sales: <SalesBars data={data} />,
+    board: <Board data={data} />,
+    dots: <OrderDots data={data} />,
+  }
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto px-6 pb-5 max-md:px-2 max-md:pb-2">
-      <Hero data={data} name={user?.username ?? ''} />
-      <div className="grid min-h-[680px] flex-1 grid-cols-12 grid-rows-[auto_minmax(0,0.95fr)_minmax(0,1.15fr)] gap-4 max-lg:flex max-lg:min-h-0 max-lg:flex-col max-md:gap-2">
-        <Kpis data={data} />
-        <ReadyGauge data={data} />
-        <ProfitCard data={data} />
-        <SalesBars data={data} />
-        <Board data={data} />
-        <OrderDots data={data} />
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto px-6 pb-24 max-md:px-2 max-md:pb-20">
+      <Hero data={data} name={user?.username ?? ''} onCustomise={() => setCustomising(true)} />
+      <div className="grid grid-flow-dense grid-cols-12 gap-4 max-lg:flex max-lg:flex-col max-md:gap-2">
+        {layout.order
+          .filter((key) => !layout.hidden.includes(key))
+          .map((key) => {
+            const widget = WIDGETS.find((w) => w.key === key)!
+            return (
+              <div key={key} className={cn(widget.className, 'min-h-0 max-lg:h-auto max-lg:min-h-[220px]')}>
+                {render[key]}
+              </div>
+            )
+          })}
       </div>
+      <Sheet open={customising} onClose={() => setCustomising(false)} title="Customise Home" subtitle="Show, hide and order the panels. Saved for you on every device." width={520}>
+        <div className="space-y-1.5">
+          {layout.order.map((key, index) => {
+            const widget = WIDGETS.find((w) => w.key === key)!
+            const shown = !layout.hidden.includes(key)
+            return (
+              <div key={key} className="card flex items-center gap-3 px-3 py-2.5">
+                <Toggle checked={shown} label={`Show ${widget.label}`} onChange={(value) => void save({ order: layout.order, hidden: value ? layout.hidden.filter((k) => k !== key) : [...layout.hidden, key] })} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium">{widget.label}</span>
+                  <span className="block text-[11.5px] text-fg-3">{widget.hint}</span>
+                </span>
+                <Button small kind="ghost" iconOnly aria-label={`Move ${widget.label} up`} disabled={index === 0} onClick={() => void save({ ...layout, order: move(layout.order, index, -1) })}>
+                  <ArrowUp size={13} />
+                </Button>
+                <Button small kind="ghost" iconOnly aria-label={`Move ${widget.label} down`} disabled={index === layout.order.length - 1} onClick={() => void save({ ...layout, order: move(layout.order, index, 1) })}>
+                  <ArrowDown size={13} />
+                </Button>
+              </div>
+            )
+          })}
+          <Button kind="ghost" small onClick={() => void save(DEFAULT_LAYOUT)}>
+            Reset to the standard layout
+          </Button>
+        </div>
+      </Sheet>
     </div>
+  )
+}
+
+function move<T>(list: T[], index: number, delta: number): T[] {
+  const next = [...list]
+  const [item] = next.splice(index, 1)
+  next.splice(index + delta, 0, item)
+  return next
+}
+
+/* ---------------------------------------------------------------- money */
+function MoneyCard() {
+  const receivables = useQuery({ queryKey: ['finance', 'receivables'], queryFn: finance.receivables })
+  const payables = useQuery({ queryKey: ['finance', 'payables'], queryFn: finance.payables })
+  const month = useQuery({ queryKey: ['insights', 'overview', 'month'], queryFn: () => insights.overview('month') })
+  const items = [
+    { label: 'Customers owe', value: receivables.data?.totals.open, hint: receivables.data ? `${fmtMoneyRound(receivables.data.totals.overdue)} overdue` : '', to: '/finance?tab=receivables', alert: (receivables.data?.totals.overdue ?? 0) > 0 },
+    { label: 'You owe suppliers', value: payables.data?.totals.open, hint: payables.data ? `${fmtMoneyRound(payables.data.totals.overdue)} overdue` : '', to: '/finance?tab=payables' },
+    { label: 'Collected this month', value: month.data?.current.cash_received, hint: month.data ? `${fmtMoneyRound(month.data.current.cash_paid ?? 0)} paid out` : '', to: '/finance?tab=payments' },
+  ]
+  return (
+    <Card lift className="h-full">
+      <div className="grid h-full grid-cols-3 divide-x divide-white/6">
+        {items.map((item) => (
+          <Link key={item.label} to={item.to} className="group flex flex-col justify-between p-5">
+            <span className="flex items-center gap-2 text-[13px] font-medium">
+              <span className={cn('size-8 shrink-0', item.alert ? 'grid place-items-center rounded-full bg-bad/12 text-bad' : 'icon-disc')}>
+                <Wallet size={14} />
+              </span>
+              {item.label}
+            </span>
+            <span>
+              <span className={cn('num block text-[24px] leading-none font-light tracking-[-0.035em]', item.alert && 'font-normal')}>{item.value === undefined ? <Skeleton className="h-6 w-20" /> : fmtMoneyRound(item.value)}</span>
+              <span className="mt-1.5 block text-[11.5px] text-fg-3">{item.hint}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/* ---------------------------------------------------------------- target */
+function TargetCard() {
+  const client = useQueryClient()
+  const month = useQuery({ queryKey: ['insights', 'overview', 'month'], queryFn: () => insights.overview('month') })
+  const [editing, setEditing] = useState(false)
+  const [amount, setAmount] = useState('')
+  const target = month.data?.target?.booked
+  const thisMonth = new Date().toISOString().slice(0, 7)
+  async function save() {
+    if (!(Number(amount) >= 0)) return
+    try {
+      await workspace.setTarget({ month: thisMonth, metric: 'booked', amount })
+      client.invalidateQueries({ queryKey: ['insights'] })
+      setEditing(false)
+      toast.success('Target saved')
+    } catch (error) {
+      toast.error(errorText(error))
+    }
+  }
+  return (
+    <Card className="h-full">
+      <CardHead icon={<Target size={17} />} title="This month's target" hint="Orders booked against the target you set" actions={<Button small kind="ghost" onClick={() => { setAmount(target ? String(target.target) : ''); setEditing(true) }}>{target ? 'Change' : 'Set'}</Button>} />
+      <div className="flex min-h-0 flex-1 flex-col justify-center px-6 pb-5">
+        {editing ? (
+          <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void save() }}>
+            <input className="field field-num" inputMode="decimal" autoFocus placeholder="Target, ₹" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Button kind="primary" type="submit">Save</Button>
+          </form>
+        ) : !target ? (
+          <Empty title="No target for this month" body="Set one to track progress and see where the month is heading." />
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between">
+              <span className="num text-[30px] leading-none font-light tracking-[-0.04em]">{fmtMoneyRound(target.actual)}</span>
+              <span className="num text-[13px] text-fg-3">of {fmtMoneyRound(target.target)}</span>
+            </div>
+            <div className="relative mt-3 h-3 overflow-hidden rounded-full bg-white/[0.07]">
+              <motion.div className="absolute inset-y-0 left-0 rounded-full bg-blue" initial={{ width: 0 }} animate={{ width: `${Math.min(100, target.percent ?? 0)}%` }} transition={{ duration: 1, ease }} />
+              <span className="absolute inset-y-0 w-0.5 bg-solid" style={{ left: `${Math.min(100, (target.days_elapsed / target.days_in_month) * 100)}%` }} title="Where you should be today" />
+            </div>
+            <div className="mt-2 flex justify-between text-[11.5px] text-fg-3">
+              <span>{target.percent ?? 0}% reached · day {target.days_elapsed} of {target.days_in_month}</span>
+              <span>Estimate: {fmtMoneyRound(target.projected)} by month end</span>
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+/* ---------------------------------------------------------------- priorities */
+function Priorities() {
+  const { ask } = useAssistant()
+  const navigate = useNavigate()
+  const alerts = useQuery({ queryKey: ['insights', 'alerts'], queryFn: insights.alerts })
+  const list = alerts.data?.alerts ?? []
+  return (
+    <Card className="h-full">
+      <CardHead
+        icon={<Zap size={17} />}
+        title="Today's priorities"
+        hint={alerts.data ? `${alerts.data.counts.critical ?? 0} urgent · ${alerts.data.counts.warning ?? 0} to act on` : 'Checking…'}
+        actions={
+          <Button small icon={<Sparkles size={13} />} onClick={() => ask("Give me today's briefing: what happened, what needs attention first and why, and the concrete actions to take — with buttons to the right screens.")}>
+            AI briefing
+          </Button>
+        }
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        {alerts.data && !list.length ? <Empty icon={<PackageCheck size={20} />} title="Nothing urgent" body="Every product, order and account looks fine." /> : null}
+        {list.slice(0, 12).map((alert) => (
+          <button key={alert.id} onClick={() => navigate(alert.link)} className="group flex w-full items-start gap-2.5 rounded-[14px] px-3 py-2 text-left hover:bg-white/[0.04]">
+            <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', SEVERITY_DOT[alert.severity])} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12.5px] leading-snug font-medium">{alert.title}</span>
+              <span className="block truncate text-[11.5px] text-fg-3">{alert.detail}</span>
+            </span>
+            <ChevronRight size={14} className="mt-1 text-fg-4 group-hover:text-fg-2" />
+          </button>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -59,7 +270,7 @@ function Card({ className, children, delay = 0, dark, lift }: { className?: stri
 
 /** The greeting banner: bright blue, with the day's numbers as chips and a few
  *  floating icon tiles for decoration. */
-function Hero({ data, name }: { data?: InventorySummaryOut; name: string }) {
+function Hero({ data, name, onCustomise }: { data?: InventorySummaryOut; name: string; onCustomise: () => void }) {
   const incoming = useList('purchase-orders', api.purchaseOrders.list, { status: 'ORDERED,PARTIALLY_RECEIVED', limit: 50 })
   const arriving = (incoming.data?.items ?? []).filter((po) => po.can_receive).length
   const chips = data
@@ -110,6 +321,9 @@ function Hero({ data, name }: { data?: InventorySummaryOut; name: string }) {
             {chip.text}
           </Link>
         ))}
+        <button onClick={onCustomise} className="glass-tile flex! h-9 items-center gap-2 rounded-full! px-3.5 text-[12.5px] font-medium transition hover:bg-[rgb(255_255_255/0.85)]">
+          <SlidersHorizontal size={14} /> Customise
+        </button>
       </div>
     </motion.section>
   )
@@ -206,7 +420,7 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
     },
   ]
   return (
-    <div className="col-span-7 grid shrink-0 grid-cols-3 gap-4 max-md:grid-cols-1 max-md:gap-2">
+    <div className="grid h-full grid-cols-3 gap-4 max-md:grid-cols-1 max-md:gap-2">
       {items.map((item, index) => (
         <Card key={item.label} delay={0.04 * index} lift>
           <Link to={item.to} className="group flex h-full flex-col gap-3.5 p-5">
@@ -236,7 +450,7 @@ function ReadyGauge({ data }: { data?: InventorySummaryOut }) {
   const gap = share > 0 && share < 100 ? 1.2 : 0
   const arc = 'M 20 110 A 90 90 0 0 1 200 110'
   return (
-    <Card className="col-span-3 max-lg:min-h-[260px]" delay={0.1}>
+    <Card className="h-full" delay={0.1}>
       <CardHead icon={<Gauge size={17} />} title="Ready to deliver" hint="Share of owed goods in hand" />
       <div className="flex min-h-0 flex-1 flex-col items-center px-5 pt-1 pb-4">
         <div className="relative flex min-h-0 w-full flex-1 items-end justify-center">
@@ -307,7 +521,7 @@ function ProfitCard({ data }: { data?: InventorySummaryOut }) {
   const profit = n(data?.gross_profit)
   const costShare = revenue > 0 ? Math.min(100, (cost / revenue) * 100) : 0
   return (
-    <Card dark className="col-span-4 justify-between gap-3 p-6 max-lg:min-h-[240px] [&>*:not(svg)]:relative" delay={0.14}>
+    <Card dark className="h-full justify-between gap-3 p-6 [&>*:not(svg)]:relative" delay={0.14}>
       <Contours className="absolute -top-[55%] -right-[18%] size-[120%] text-[rgb(255_255_255/0.5)]" rings={13} seed={7} />
       <div>
         <div className="flex items-center gap-3">
@@ -371,7 +585,7 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
   const average = buckets.length ? total / buckets.length : 0
 
   return (
-    <Card className="col-span-5 col-start-8 row-span-2 row-start-1 max-lg:h-[420px] max-lg:shrink-0" delay={0.08}>
+    <Card className="h-full" delay={0.08}>
       <CardHead
         icon={<BarChart3 size={17} />}
         title="Sales"
@@ -483,7 +697,7 @@ function Board({ data }: { data?: InventorySummaryOut }) {
   const short = data?.products_short ?? []
   const orders = data?.recent_orders ?? []
   return (
-    <Card className="col-span-7 max-lg:h-[440px] max-lg:shrink-0" delay={0.18}>
+    <Card className="h-full" delay={0.18}>
       <CardHead
         icon={tab === 'orders' ? <ReceiptText size={17} /> : tab === 'buy' ? <AlertTriangle size={17} /> : <PackageOpen size={17} />}
         title={tab === 'orders' ? 'Recent orders' : tab === 'buy' ? 'To buy' : 'To receive'}
@@ -577,7 +791,7 @@ function OrderDots({ data }: { data?: InventorySummaryOut }) {
   const rows = Math.min(8, Math.max(5, peak))
   const per = peak > rows ? peak / rows : 1
   return (
-    <Card className="col-span-5 max-lg:h-[300px] max-lg:shrink-0" delay={0.22}>
+    <Card className="h-full" delay={0.22}>
       <CardHead icon={<CalendarDays size={17} />} title="Orders this week" hint={days.length && days.every((day) => day.orders === 0) ? 'No orders booked in the last seven days' : per > 1 ? `Each dot about ${Math.round(per)} orders` : 'Each dot one order'} />
       <div className="flex min-h-0 flex-1 items-stretch justify-around gap-2 px-6 pt-2 pb-4">
         {days.map((day, column) => {

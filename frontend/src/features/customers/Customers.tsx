@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Archive, Mail, MapPin, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, Truck, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { finance } from '@/api/finance'
+import { Account } from '@/features/finance/Account'
+import { RecordTasks } from '@/features/tasks/RecordTasks'
+import { useAssistant } from '@/features/assistant/store'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Archive, Mail, MapPin, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, Truck, Users, MessageCircle, Sparkles } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import { fmtDate, fmtMoney, fmtQty, n, plural } from '@/lib/format'
@@ -87,7 +92,11 @@ function CustomerInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const customer = useOne('customers', api.customers.get, id)
   const enquiries = useList('enquiries', api.enquiries.list, { customer_id: id, limit: 100 })
-  const [tab, setTab] = useState('owed')
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') ?? 'owed'
+  const setTab = (value: string) => setParams({ tab: value }, { replace: true })
+  const { ask } = useAssistant()
+  const account = useQuery({ queryKey: ['finance', 'statement', 'customer', id], queryFn: () => finance.statement('customers', id) })
   const [sheet, setSheet] = useState<null | 'edit' | 'order' | 'enquiry'>(null)
   const confirm = useConfirm()
   const archive = useAction(() => api.customers.archive(id), { success: 'Customer archived' })
@@ -149,6 +158,12 @@ function CustomerInspector({ id }: { id: string }) {
           { label: 'To deliver', value: fmtQty(outstanding), tone: outstanding > 0 ? 'sky' : undefined, hint: 'units across orders' },
           { label: 'Ordered value', value: fmtMoney(value), hint: 'before tax' },
           { label: 'Enquiries', value: enquiries.data?.total ?? '—' },
+          {
+            label: 'Owes you',
+            value: account.data ? fmtMoney(account.data.summary.open) : '—',
+            tone: account.data && account.data.summary.overdue > 0 ? 'bad' : undefined,
+            hint: account.data ? (account.data.summary.overdue > 0 ? `${fmtMoney(account.data.summary.overdue)} overdue` : account.data.summary.payment_terms_days ? `${account.data.summary.payment_terms_days}-day terms` : 'due on delivery') : undefined,
+          },
         ]}
       />
       <div className="flex min-h-0 flex-1">
@@ -160,6 +175,8 @@ function CustomerInspector({ id }: { id: string }) {
             { value: 'owed', label: 'To deliver', count: data.outstanding.length },
             { value: 'orders', label: 'Orders', count: data.orders.length },
             { value: 'enquiries', label: 'Enquiries', count: enquiries.data?.total },
+            { value: 'account', label: 'Account' },
+            { value: 'followups', label: 'Follow-ups' },
           ]}
         >
           <TabPanel value="owed">
@@ -253,12 +270,32 @@ function CustomerInspector({ id }: { id: string }) {
               </table>
             )}
           </TabPanel>
+          <TabPanel value="account">
+            <Account party="customer" id={id} />
+          </TabPanel>
+          <TabPanel value="followups">
+            <RecordTasks link={{ customer_id: id }} suggestion={`Call ${data.name}`} />
+          </TabPanel>
         </Tabs>
         <aside className="w-[270px] shrink-0 space-y-4 overflow-y-auto border-l border-white/7 p-5 max-xl:hidden">
           <div className="eyebrow">Contact</div>
           <Contact icon={<Phone size={14} />} value={data.phone} href={data.phone ? `tel:${data.phone}` : undefined} />
+          {data.phone ? (
+            <a className="btn btn-sm w-full" href={`https://wa.me/${data.phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}`} target="_blank" rel="noreferrer">
+              <MessageCircle size={13} /> WhatsApp
+            </a>
+          ) : null}
           <Contact icon={<Mail size={14} />} value={data.email} href={data.email ? `mailto:${data.email}` : undefined} />
           <Contact icon={<MapPin size={14} />} value={data.address} />
+          <Button
+            small
+            kind="quiet"
+            className="w-full"
+            icon={<Sparkles size={13} />}
+            onClick={() => ask(`Give me a full picture of customer ${data.name} (id ${id}): what they buy, how often, what they owe and whether it is overdue, open enquiries and orders, and what I should do next with them.`)}
+          >
+            Ask AI about {data.name.split(' ')[0]}
+          </Button>
           {data.notes ? (
             <>
               <div className="eyebrow pt-2">Notes</div>

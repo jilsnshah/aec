@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Ban, ClipboardList, MoreHorizontal, PackageOpen, Pencil, Plus, Send, Users } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -24,6 +24,24 @@ const FILTERS = [
 
 export function PurchaseOrders() {
   const route = useRecordRoute('/purchase-orders')
+  const [urlParams, setUrlParams] = useSearchParams()
+  // Insights and the assistant open a purchase order pre-filled:
+  // ?new=1&supplier=<id>&lines=<product id>:<quantity>:<unit cost>,...
+  const prefill = useMemo(() => {
+    const lines = (urlParams.get('lines') ?? '')
+      .split(',')
+      .filter(Boolean)
+      .map((part) => {
+        const [product_id, quantity, cost] = part.split(':')
+        return { product_id, quantity: quantity || '1', cost: cost && Number(cost) > 0 ? cost : '' }
+      })
+    return lines.length || urlParams.get('supplier') ? { supplier_id: urlParams.get('supplier') ?? undefined, lines } : undefined
+  }, [urlParams])
+  const closeNew = () =>
+    setUrlParams((current) => {
+      for (const key of ['new', 'lines', 'supplier']) current.delete(key)
+      return current
+    }, { replace: true })
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('open')
   const query = useDebounced(search)
@@ -79,7 +97,7 @@ export function PurchaseOrders() {
       }
     >
       {route.id ? <PurchaseInspector id={route.id} /> : <Empty className="h-full" icon={<ClipboardList size={22} />} title="Choose a purchase order" />}
-      <PurchaseSheet open={route.isNew} onClose={route.closeNew} onSaved={(po) => route.select(po.id)} />
+      <PurchaseSheet open={route.isNew} onClose={closeNew} onSaved={(po) => route.select(po.id)} initial={prefill} />
     </SplitView>
   )
 }
