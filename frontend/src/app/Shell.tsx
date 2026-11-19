@@ -73,7 +73,7 @@ function TopBar({ onSearch }: { onSearch: () => void }) {
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
   return (
     <header className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 px-6 pt-4 pb-4 max-md:px-3 max-md:pt-3 max-md:pb-2">
-      <div className="w-[190px] shrink-0 max-2xl:w-auto max-2xl:pr-2 max-[1400px]:[&_span]:hidden max-xl:[&_span]:inline">
+      <div className="w-[190px] shrink-0 max-2xl:w-auto max-2xl:pr-1 max-[1600px]:[&_span]:hidden max-[1439px]:[&_span]:inline">
         <Wordmark />
       </div>
       <Nav />
@@ -84,7 +84,7 @@ function TopBar({ onSearch }: { onSearch: () => void }) {
           </button>
         </Tip>
         <Tip label={theme === 'dark' ? 'Light mode' : 'Dark mode'} side="bottom">
-          <button onClick={toggle} className={round} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <button onClick={toggle} className={cn(round, 'max-[1600px]:hidden max-[1439px]:grid')} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <motion.span key={theme} initial={{ rotate: -60, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
               {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </motion.span>
@@ -136,7 +136,7 @@ function Nav() {
   const short = Number(summary.data?.total_unallocated_quantity ?? 0) > 0
   return (
     <nav
-      className="no-scrollbar mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full bg-ink-850/70 p-1 shadow-pane backdrop-blur-xl max-xl:order-last max-xl:mx-0 max-xl:w-full"
+      className="no-scrollbar mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full bg-ink-850/70 p-1 shadow-pane backdrop-blur-xl max-[1439px]:order-last max-[1439px]:mx-0 max-[1439px]:w-full"
       aria-label="Modules"
     >
       {MODULES.map((module) => (
@@ -147,14 +147,20 @@ function Nav() {
 }
 
 function NavItem({ module, badge }: { module: Module; badge?: { count: number; alert: boolean } }) {
+  const Icon = module.icon
   return (
-    <NavLink to={module.to} end={module.to === '/'} className="group relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium whitespace-nowrap max-2xl:px-[11px] max-2xl:text-[12.5px]">
+    <NavLink
+      to={module.to}
+      end={module.to === '/'}
+      className="group relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-[10px] text-[12.5px] font-medium whitespace-nowrap min-[1600px]:px-3.5 min-[1600px]:text-[13px]"
+    >
       {({ isActive }) => (
         <>
-          {isActive ? <motion.span layoutId="nav" className="absolute inset-0 rounded-full bg-contrast shadow-[0_6px_16px_-8px_rgb(0_0_0/0.6)]" transition={{ type: 'spring', stiffness: 480, damping: 40 }} /> : null}
-          <span className={cn('relative transition-colors', isActive ? 'text-on-contrast' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
+          {isActive ? <motion.span layoutId="nav" className="brand-fill absolute inset-0 rounded-full" transition={{ type: 'spring', stiffness: 480, damping: 40 }} /> : null}
+          <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', isActive ? 'text-[#fff]' : 'text-sky/80 group-hover:text-sky')} />
+          <span className={cn('relative transition-colors', isActive ? 'text-[#fff]' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
           {badge ? (
-            <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', badge.alert ? 'bg-blue text-[#fff]' : isActive ? 'bg-on-contrast/20 text-on-contrast' : 'bg-white/10 text-fg-2')}>
+            <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', isActive ? 'bg-[#fff] text-blue' : badge.alert ? 'bg-blue text-[#fff]' : 'bg-white/10 text-fg-2')}>
               {badge.count}
             </span>
           ) : null}

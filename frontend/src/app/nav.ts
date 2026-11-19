@@ -8,7 +8,7 @@ import {
   PackageCheck,
   PackageOpen,
   PackagePlus,
-  Plug,
+  Settings2,
   ReceiptText,
   Users,
 } from 'lucide-react'
@@ -34,7 +34,7 @@ export const MODULES: Module[] = [
   { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor' },
   { to: '/products', label: 'Products', short: 'Products', icon: Boxes, group: 'stock', keywords: 'sku item stock' },
   { to: '/stock-in', label: 'Stock In', short: 'Stock in', icon: PackagePlus, group: 'stock', keywords: 'receipt without po adhoc' },
-  { to: '/integrations', label: 'Integrations', short: 'Settings', icon: Plug, group: 'settings', keywords: 'ai whatsapp email tally settings' },
+  { to: '/integrations', label: 'Integrations', short: 'Settings', icon: Settings2, group: 'settings', keywords: 'ai whatsapp email tally settings' },
 ]
 
 export const moduleFor = (pathname: string) =>

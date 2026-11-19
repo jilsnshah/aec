@@ -63,13 +63,16 @@ of names: `:root` is light, `[data-theme='dark']` swaps the values
 (`src/styles/app.css`). The choice is kept per computer; until one is made the
 system setting decides.
 
-* Light: a soft periwinkle canvas (`#dfe5f6`), white cards with 22 px corners
-  and a faint shadow, near-black text. The one strong surface per screen is
-  black. Primary buttons and the active pill are black.
-* Dark: near-black canvas, charcoal cards, white primary buttons and pill; the
-  strong card turns deep blue.
-* Data colours: periwinkle `#8ea7f3` and royal blue `#1f4fe6`, used together
-  as in the bars, gauge and dots. Status pills are light fills with coloured
+* Light: a bright, airy light-blue canvas (`#eaf2ff`), frosted white cards with
+  22 px corners, near-black text. Bright blue (`#2268ff`, as a soft vertical
+  gradient) fills the active pill, segmented controls, primary buttons, the
+  Home banner and the profit card.
+* Dark: near-black canvas, charcoal glass cards, the same bright blue accents.
+* Data colours: light blue `#8cbcff` and bright blue `#2268ff`, used together
+  as in the bars, gauge and dots.
+* Icons everywhere they help: every module pill, a bright module tile on each
+  list and record header, an icon beside every headline figure (chosen from its
+  label), an icon disc on every Home card, and icon chips in the Home banner. Status pills are light fills with coloured
   text (blue open, green delivered, red short).
 * Artistic layer, kept calm: the window sits on soft colour fields that drift
   very slowly under a fine paper grain, with faint topographic contour lines.

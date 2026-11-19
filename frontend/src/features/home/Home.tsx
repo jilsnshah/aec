@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { AlertTriangle, ArrowUpRight, ChevronRight, PackageCheck, PackageOpen, ReceiptText, Truck } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, BarChart3, Boxes, CalendarDays, ChevronRight, Gauge, PackageCheck, PackageOpen, ReceiptText, Sparkles, TrendingUp, Truck } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useList, useSummary } from '@/api/queries'
 import type { InventorySummaryOut } from '@/api/types'
@@ -27,22 +27,8 @@ export function Home() {
   const { user } = useAuth()
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto px-6 pb-5 max-md:px-2 max-md:pb-2">
-      <div className="flex shrink-0 flex-wrap items-baseline gap-x-3 pb-4 max-md:px-1">
-        <h1 className="text-[24px] font-semibold tracking-[-0.03em]">
-          {greeting()}, {user?.username}
-        </h1>
-        <p className="text-[13px] text-fg-3">{fmtToday()}</p>
-        <div className="ml-auto flex flex-wrap gap-2 max-lg:ml-0 max-lg:w-full">
-          {data ? (
-            <>
-              <Chip to="/fulfilment?lane=ready" dot="bg-blue">{fmtQty(data.total_reserved_stock)} ready to load</Chip>
-              <Chip to="/fulfilment?lane=short" dot="bg-bad">{plural(data.products_short?.length ?? 0, 'product')} to buy</Chip>
-              <Chip to="/orders" dot="bg-peri">{plural(data.open_orders, 'open order')}</Chip>
-            </>
-          ) : null}
-        </div>
-      </div>
-      <div className="grid min-h-[600px] flex-1 grid-cols-12 grid-rows-[auto_minmax(0,0.95fr)_minmax(0,1.15fr)] gap-4 max-lg:flex max-lg:min-h-0 max-lg:flex-col max-md:gap-2">
+      <Hero data={data} name={user?.username ?? ''} />
+      <div className="grid min-h-[680px] flex-1 grid-cols-12 grid-rows-[auto_minmax(0,0.95fr)_minmax(0,1.15fr)] gap-4 max-lg:flex max-lg:min-h-0 max-lg:flex-col max-md:gap-2">
         <Kpis data={data} />
         <ReadyGauge data={data} />
         <ProfitCard data={data} />
@@ -71,18 +57,68 @@ function Card({ className, children, delay = 0, dark, lift }: { className?: stri
   )
 }
 
-function Chip({ to, dot, children }: { to: string; dot: string; children: ReactNode }) {
+/** The greeting banner: bright blue, with the day's numbers as chips and a few
+ *  floating icon tiles for decoration. */
+function Hero({ data, name }: { data?: InventorySummaryOut; name: string }) {
+  const incoming = useList('purchase-orders', api.purchaseOrders.list, { status: 'ORDERED,PARTIALLY_RECEIVED', limit: 50 })
+  const arriving = (incoming.data?.items ?? []).filter((po) => po.can_receive).length
+  const chips = data
+    ? [
+        { to: '/fulfilment?lane=ready', icon: <PackageCheck size={14} />, text: `${fmtQty(data.total_reserved_stock)} ready to load` },
+        { to: '/fulfilment?lane=short', icon: <AlertTriangle size={14} />, text: `${plural(data.products_short?.length ?? 0, 'product')} to buy` },
+        { to: '/receipts?new=1', icon: <PackageOpen size={14} />, text: `${plural(arriving, 'delivery', 'deliveries')} arriving` },
+        { to: '/orders', icon: <ReceiptText size={14} />, text: plural(data.open_orders, 'open order') },
+      ]
+    : []
+  const tiles = [
+    { icon: <Truck size={22} />, className: 'right-[23%] top-[18%] size-14 rotate-[-8deg]', delay: 0 },
+    { icon: <Boxes size={26} />, className: 'right-[12%] top-[34%] size-16 rotate-[6deg]', delay: 0.6 },
+    { icon: <ReceiptText size={18} />, className: 'right-[4%] top-[12%] size-11 rotate-[-4deg]', delay: 1.2 },
+  ]
   return (
-    <Link to={to} className="pane lift flex h-8 items-center gap-2 rounded-full! px-3.5 text-[12px] font-medium text-fg-2 hover:text-fg">
-      <span className={cn('size-2 rounded-full', dot)} />
-      {children}
-    </Link>
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease }}
+      className="pane-contrast relative mb-4 flex shrink-0 flex-wrap items-center gap-x-8 gap-y-3 overflow-hidden px-7 py-5 max-md:mb-2 max-md:px-5 [&>*:not(.deco)]:relative"
+    >
+      <Contours className="deco absolute -top-[120%] right-[-6%] size-[520px] text-[rgb(255_255_255/0.16)]" rings={14} seed={9} />
+      <div className="deco pointer-events-none absolute inset-0 max-xl:hidden" aria-hidden="true">
+        {tiles.map((tile, index) => (
+          <motion.span
+            key={index}
+            className={cn('glass-tile absolute', tile.className)}
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: tile.delay }}
+          >
+            {tile.icon}
+          </motion.span>
+        ))}
+      </div>
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-[12.5px] opacity-80">
+          <Sparkles size={13} /> {fmtToday()}
+        </p>
+        <h1 className="mt-0.5 text-[26px] font-semibold tracking-[-0.03em]">
+          {greeting()}, {name}
+        </h1>
+      </div>
+      <div className="flex flex-wrap gap-2 xl:max-w-[52%]">
+        {chips.map((chip) => (
+          <Link key={chip.to} to={chip.to} className="glass-tile flex! h-9 items-center gap-2 rounded-full! px-3.5 text-[12.5px] font-medium transition hover:bg-[rgb(255_255_255/0.3)]">
+            {chip.icon}
+            {chip.text}
+          </Link>
+        ))}
+      </div>
+    </motion.section>
   )
 }
 
-function CardHead({ title, hint, actions }: { title: string; hint?: string; actions?: ReactNode }) {
+function CardHead({ title, hint, actions, icon }: { title: string; hint?: string; actions?: ReactNode; icon?: ReactNode }) {
   return (
     <header className="flex shrink-0 items-start gap-3 px-6 pt-5 pb-2">
+      {icon ? <span className="icon-disc size-10 shrink-0">{icon}</span> : null}
       <div className="min-w-0 flex-1">
         <h2 className="text-[17px] font-semibold tracking-[-0.02em]">{title}</h2>
         {hint ? <p className="mt-0.5 text-[12px] text-fg-3">{hint}</p> : null}
@@ -201,7 +237,7 @@ function ReadyGauge({ data }: { data?: InventorySummaryOut }) {
   const arc = 'M 20 110 A 90 90 0 0 1 200 110'
   return (
     <Card className="col-span-3 max-lg:min-h-[260px]" delay={0.1}>
-      <CardHead title="Ready to deliver" hint="Share of owed goods in hand" />
+      <CardHead icon={<Gauge size={17} />} title="Ready to deliver" hint="Share of owed goods in hand" />
       <div className="flex min-h-0 flex-1 flex-col items-center px-5 pt-1 pb-4">
         <div className="relative flex min-h-0 w-full flex-1 items-end justify-center">
           <svg viewBox="-16 -16 252 136" className="h-full max-h-[160px] w-auto max-w-full overflow-visible">
@@ -274,8 +310,15 @@ function ProfitCard({ data }: { data?: InventorySummaryOut }) {
     <Card dark className="col-span-4 justify-between gap-3 p-6 max-lg:min-h-[240px] [&>*:not(svg)]:relative" delay={0.14}>
       <Contours className="absolute -top-[55%] -right-[18%] size-[120%] text-[rgb(255_255_255/0.09)]" rings={13} seed={7} />
       <div>
-        <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Gross profit</h2>
-        <p className="mt-0.5 text-[12px] opacity-55">On goods delivered so far</p>
+        <div className="flex items-center gap-3">
+          <span className="glass-tile size-10 rounded-full!">
+            <TrendingUp size={17} />
+          </span>
+          <div>
+            <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Gross profit</h2>
+            <p className="mt-0.5 text-[12px] opacity-70">On goods delivered so far</p>
+          </div>
+        </div>
       </div>
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -328,6 +371,7 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
   return (
     <Card className="col-span-5 col-start-8 row-span-2 row-start-1 max-lg:h-[420px] max-lg:shrink-0" delay={0.08}>
       <CardHead
+        icon={<BarChart3 size={17} />}
         title="Sales"
         hint="Last 30 days, in five-day spans"
         actions={
@@ -409,7 +453,7 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
 
 function niceMax(value: number) {
   const power = 10 ** Math.floor(Math.log10(value))
-  const step = [1, 2, 2.5, 5, 10].find((candidate) => candidate * power >= value) ?? 10
+  const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((candidate) => candidate * power >= value) ?? 10
   return step * power
 }
 
@@ -424,6 +468,7 @@ function Board({ data }: { data?: InventorySummaryOut }) {
   return (
     <Card className="col-span-7 max-lg:h-[440px] max-lg:shrink-0" delay={0.18}>
       <CardHead
+        icon={tab === 'orders' ? <ReceiptText size={17} /> : tab === 'buy' ? <AlertTriangle size={17} /> : <PackageOpen size={17} />}
         title={tab === 'orders' ? 'Recent orders' : tab === 'buy' ? 'To buy' : 'To receive'}
         actions={
           <Segmented
@@ -516,7 +561,7 @@ function OrderDots({ data }: { data?: InventorySummaryOut }) {
   const per = peak > rows ? peak / rows : 1
   return (
     <Card className="col-span-5 max-lg:h-[300px] max-lg:shrink-0" delay={0.22}>
-      <CardHead title="Orders this week" hint={days.length && days.every((day) => day.orders === 0) ? 'No orders booked in the last seven days' : per > 1 ? `Each dot about ${Math.round(per)} orders` : 'Each dot one order'} />
+      <CardHead icon={<CalendarDays size={17} />} title="Orders this week" hint={days.length && days.every((day) => day.orders === 0) ? 'No orders booked in the last seven days' : per > 1 ? `Each dot about ${Math.round(per)} orders` : 'Each dot one order'} />
       <div className="flex min-h-0 flex-1 items-stretch justify-around gap-2 px-6 pt-2 pb-4">
         {days.map((day, column) => {
           const filled = Math.round(day.orders / per)

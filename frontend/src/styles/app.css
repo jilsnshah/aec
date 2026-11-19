@@ -9,27 +9,29 @@
    tint, so white/7 lines and hovers read on both themes.
    ========================================================================== */
 :root {
-  --c-canvas: #dfe5f6;
-  --c-canvas-2: #d3dbf2;
-  --c-ink-950: #dfe5f6;
-  --c-ink-900: #f1f4fc;
+  --c-canvas: #eaf2ff;
+  --c-canvas-2: #d9e8ff;
+  --c-ink-950: #eaf2ff;
+  --c-ink-900: #f2f7ff;
   --c-ink-850: #ffffff;
   --c-ink-800: #ffffff;
   --c-ink-750: #ffffff;
-  --c-ink-700: #eef1fa;
-  --c-ink-600: #e2e7f6;
+  --c-ink-700: #eaf2ff;
+  --c-ink-600: #dbe8ff;
 
   --c-fg: #0b0d12;
   --c-fg-2: #394050;
   --c-fg-3: #6a7183;
   --c-fg-4: #a1a8b8;
 
-  --c-sky: #2a5be3;
-  --c-sky-2: #5b80f0;
-  --c-blue: #1f4fe6;
-  --c-blue-2: #3a66ee;
-  --c-peri: #8ea7f3;
-  --c-peri-2: #c9d5fa;
+  --c-sky: #1d63f5;
+  --c-sky-2: #4b8bff;
+  --c-blue: #2268ff;
+  --c-blue-2: #4f8dff;
+  --c-peri: #8cbcff;
+  --c-peri-2: #d3e6ff;
+  --c-brand: linear-gradient(180deg, #4b8dff, #1f5ef5);
+  --brand-shadow: 0 8px 20px -8px rgb(34 104 255 / 0.65);
 
   --c-ok: #1f8a4f;
   --c-warn: #b4741c;
@@ -39,7 +41,7 @@
   --c-contrast: #0b0c10;
   --c-on-contrast: #ffffff;
   --c-tint: #10183a;
-  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(63 108 242 / 0.42), transparent 58%), radial-gradient(60% 80% at 0% 100%, rgb(142 167 243 / 0.16), transparent 60%), #0b0c10;
+  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(140 200 255 / 0.55), transparent 55%), radial-gradient(70% 90% at 0% 100%, rgb(20 60 200 / 0.45), transparent 60%), linear-gradient(140deg, #3d86ff, #1a56ea);
 
   --pane-bg: rgb(255 255 255 / 0.72);
   --card-bg: rgb(255 255 255 / 0.86);
@@ -47,11 +49,11 @@
   --shadow-card: 0 1px 2px rgb(16 24 58 / 0.04), 0 6px 16px -10px rgb(31 52 130 / 0.2);
   --pane-border: rgb(255 255 255 / 0.85);
   --hair: rgb(16 24 58 / 0.07);
-  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(16 24 58 / 0.04), 0 12px 32px -14px rgb(31 52 130 / 0.18);
-  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(16 24 58 / 0.05), 0 22px 44px -16px rgb(31 52 130 / 0.3);
-  --blob-1: rgb(142 167 243 / 0.55);
-  --blob-2: rgb(196 210 252 / 0.9);
-  --blob-3: rgb(110 140 240 / 0.28);
+  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(16 40 100 / 0.04), 0 12px 32px -14px rgb(30 90 220 / 0.22);
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(16 40 100 / 0.05), 0 22px 44px -16px rgb(30 90 220 / 0.38);
+  --blob-1: rgb(96 160 255 / 0.5);
+  --blob-2: rgb(180 215 255 / 0.95);
+  --blob-3: rgb(60 130 255 / 0.3);
   --contour: rgb(255 255 255 / 0.55);
   --grain-opacity: 0.05;
   --shadow-float: 0 30px 80px -24px rgb(16 24 58 / 0.35), 0 0 0 1px rgb(16 24 58 / 0.06);
@@ -75,12 +77,14 @@
   --c-fg-3: #808797;
   --c-fg-4: #565d6b;
 
-  --c-sky: #9db3f6;
-  --c-sky-2: #bccbf9;
-  --c-blue: #3f6cf2;
-  --c-blue-2: #5a80f4;
-  --c-peri: #8ea7f3;
-  --c-peri-2: #2b3556;
+  --c-sky: #7fb2ff;
+  --c-sky-2: #a9cbff;
+  --c-blue: #3b7bff;
+  --c-blue-2: #64a0ff;
+  --c-peri: #7fb2ff;
+  --c-peri-2: #1d2f55;
+  --c-brand: linear-gradient(180deg, #4f8fff, #2563f0);
+  --brand-shadow: 0 8px 22px -8px rgb(59 123 255 / 0.7);
 
   --c-ok: #7fd3a6;
   --c-warn: #e8c07a;
@@ -90,7 +94,7 @@
   --c-contrast: #f3f5f9;
   --c-on-contrast: #0b0c10;
   --c-tint: #ffffff;
-  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(160 185 255 / 0.4), transparent 55%), linear-gradient(150deg, #2f5ff0, #1a3ab5);
+  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(140 200 255 / 0.45), transparent 55%), linear-gradient(140deg, #3479ff, #1747c9);
 
   --pane-bg: rgb(20 22 29 / 0.74);
   --card-bg: rgb(255 255 255 / 0.035);
@@ -100,10 +104,10 @@
   --hair: rgb(255 255 255 / 0.08);
   --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.6);
   --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 2px 4px rgb(0 0 0 / 0.3), 0 26px 50px -18px rgb(0 0 0 / 0.75);
-  --blob-1: rgb(47 95 240 / 0.22);
-  --blob-2: rgb(90 110 190 / 0.14);
-  --blob-3: rgb(142 167 243 / 0.1);
-  --contour: rgb(142 167 243 / 0.09);
+  --blob-1: rgb(40 110 255 / 0.3);
+  --blob-2: rgb(60 120 230 / 0.16);
+  --blob-3: rgb(110 180 255 / 0.12);
+  --contour: rgb(127 178 255 / 0.1);
   --grain-opacity: 0.07;
   --shadow-float: 0 40px 100px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.09);
   --shadow-pop: 0 20px 50px -10px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.09);
@@ -290,8 +294,35 @@
     place-items: center;
     border-radius: 999px;
     color: var(--color-sky);
-    background: linear-gradient(145deg, color-mix(in oklab, var(--c-peri) 38%, transparent), color-mix(in oklab, var(--c-peri) 14%, transparent));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 0 0 1px color-mix(in oklab, var(--c-peri) 22%, transparent);
+    background: linear-gradient(145deg, color-mix(in oklab, var(--c-peri) 50%, transparent), color-mix(in oklab, var(--c-peri) 18%, transparent));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 0 0 1px color-mix(in oklab, var(--c-peri) 30%, transparent);
+  }
+  /* A rounded icon tile in bright blue, for module marks */
+  .icon-tile {
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    color: #fff;
+    background:
+      radial-gradient(120% 100% at 20% 0%, rgb(255 255 255 / 0.35), transparent 55%),
+      var(--c-brand);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.35),
+      var(--brand-shadow);
+  }
+  /* A frosted white tile that floats on a blue surface */
+  .glass-tile {
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    color: #fff;
+    background: rgb(255 255 255 / 0.18);
+    border: 1px solid rgb(255 255 255 / 0.35);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      0 12px 24px -12px rgb(10 40 140 / 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
   .card {
     background: var(--card-bg);
@@ -339,16 +370,22 @@
     opacity: 0.4;
   }
   .btn-primary {
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.14), transparent 55%),
-      var(--c-contrast);
-    color: var(--c-on-contrast);
+    background: var(--c-brand);
+    color: #fff;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.12),
-      0 8px 18px -8px rgb(11 12 16 / 0.55);
+      inset 0 1px 0 rgb(255 255 255 / 0.28),
+      var(--brand-shadow);
   }
   .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--c-contrast) 86%, var(--c-blue));
+    filter: brightness(1.07);
+  }
+  /* The bright blue fill for the active pill, segmented thumb and primary actions */
+  .brand-fill {
+    background: var(--c-brand);
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.28),
+      var(--brand-shadow);
   }
   .btn-ghost {
     background: transparent;

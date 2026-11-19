@@ -1,7 +1,32 @@
 import { motion } from 'motion/react'
 import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
-import { ChevronLeft } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import {
+  AlertTriangle,
+  BadgePercent,
+  Boxes,
+  CalendarClock,
+  ChevronLeft,
+  CircleDollarSign,
+  ClipboardList,
+  Coins,
+  Hash,
+  IndianRupee,
+  MessageSquareQuote,
+  PackageCheck,
+  PackageOpen,
+  PiggyBank,
+  ReceiptText,
+  ShoppingCart,
+  Tag,
+  TrendingUp,
+  Truck,
+  Users,
+  Warehouse,
+  type LucideIcon,
+} from 'lucide-react'
+import { moduleFor } from '@/app/nav'
 import { Skeleton } from './core'
 import { HeaderArt } from './art'
 
@@ -44,7 +69,8 @@ export function ListPane({
   return (
     <>
       <header className="shrink-0 space-y-3 px-5 pt-5 pb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <ModuleTile size={34} />
           <h1 className="text-[18px] font-semibold tracking-[-0.02em]">{title}</h1>
           {count !== undefined ? <span className="num rounded-full bg-white/7 px-2 py-px text-[11.5px] font-medium text-fg-2">{count}</span> : null}
           <div className="ml-auto flex items-center gap-1">{actions}</div>
@@ -97,6 +123,9 @@ export function InspectorHeader({ eyebrow, title, badges, actions, meta }: { eye
     <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-7 pt-6 pb-5 max-md:px-4">
       <HeaderArt seed={String(title).length % 7} />
             <div className="relative flex items-start gap-4 max-md:flex-col max-md:gap-3">
+        <span className="max-md:hidden">
+          <ModuleTile size={52} />
+        </span>
         <div className="min-w-0 flex-1">
           {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}
           <div className="flex flex-wrap items-center gap-2.5">
@@ -113,13 +142,52 @@ export function InspectorHeader({ eyebrow, title, badges, actions, meta }: { eye
   )
 }
 
+/** An icon for a headline figure, chosen from its label. */
+const FIGURE_ICONS: [RegExp, LucideIcon][] = [
+  [/short/i, AlertTriangle],
+  [/profit/i, TrendingUp],
+  [/margin/i, BadgePercent],
+  [/discount/i, BadgePercent],
+  [/avg cost|cost/i, Tag],
+  [/stock value|warehouse value/i, PiggyBank],
+  [/warehouse/i, Warehouse],
+  [/ready|free stock/i, PackageCheck],
+  [/on order|to receive|arriving|still to come|due|received/i, PackageOpen],
+  [/deliver|sent/i, Truck],
+  [/value|total|spend|mrp|amount/i, IndianRupee],
+  [/stock|units|bought/i, Boxes],
+  [/ordered|orders/i, ShoppingCart],
+  [/purchase/i, ClipboardList],
+  [/enquir/i, MessageSquareQuote],
+  [/customer/i, Users],
+  [/invoice|receipt/i, ReceiptText],
+  [/paid|spent/i, Coins],
+  [/days|date|age/i, CalendarClock],
+  [/price/i, CircleDollarSign],
+]
+export const figureIcon = (label: string): LucideIcon => FIGURE_ICONS.find(([pattern]) => pattern.test(label))?.[1] ?? Hash
+
+/** The current module's icon in a bright tile. */
+export function ModuleTile({ size = 40 }: { size?: number }) {
+  const { pathname } = useLocation()
+  const Icon = moduleFor(pathname).icon
+  return (
+    <span className="icon-tile shrink-0" style={{ width: size, height: size, borderRadius: size * 0.34 }}>
+      <Icon size={size * 0.46} strokeWidth={2} />
+    </span>
+  )
+}
+
 /** A strip of headline figures across the top of an inspector. */
 export function FigureStrip({ items }: { items: { label: string; value: ReactNode; hint?: ReactNode; tone?: 'sky' | 'bad' | 'ok' | 'steel' }[] }) {
   return (
     <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(132px,1fr))] border-b border-white/7">
       {items.map((item) => (
-        <div key={item.label} className="-ml-px border-l border-white/6 px-7 py-4 first:border-l-0">
-          <div className="eyebrow">{item.label}</div>
+        <div key={item.label} className="-ml-px border-l border-white/6 px-6 py-4 first:border-l-0">
+          <div className="flex items-center gap-2">
+            <FigureIcon label={item.label} tone={item.tone} />
+            <span className="eyebrow truncate">{item.label}</span>
+          </div>
           <div
             className={cn(
               'num mt-1 text-[22px] font-semibold tracking-[-0.025em] whitespace-nowrap',
@@ -135,6 +203,15 @@ export function FigureStrip({ items }: { items: { label: string; value: ReactNod
         </div>
       ))}
     </div>
+  )
+}
+
+function FigureIcon({ label, tone }: { label: string; tone?: 'sky' | 'bad' | 'ok' | 'steel' }) {
+  const Icon = figureIcon(label)
+  return (
+    <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', tone === 'bad' ? 'bg-bad/12 text-bad' : tone === 'ok' ? 'bg-ok/12 text-ok' : 'icon-disc')}>
+      <Icon size={12.5} strokeWidth={2} />
+    </span>
   )
 }
 

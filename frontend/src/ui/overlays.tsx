@@ -188,7 +188,7 @@ export function Tabs({
             {tab.label}
             {tab.count !== undefined ? <span className="num rounded-full bg-white/7 px-1.5 text-[11px] text-fg-2">{tab.count}</span> : null}
             {value === tab.value ? (
-              <motion.span layoutId={`tab-${group}`} className="absolute inset-x-2 -bottom-px h-[2px] rounded-full bg-contrast" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />
+              <motion.span layoutId={`tab-${group}`} className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-blue" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />
             ) : null}
           </RadixTabs.Trigger>
         ))}
@@ -215,13 +215,13 @@ export function Segmented<V extends string>({ value, onChange, options, classNam
           role="radio"
           aria-checked={value === option.value}
           onClick={() => onChange(option.value)}
-          className={cn('relative flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-semibold whitespace-nowrap transition-colors', value === option.value ? 'text-on-contrast' : 'text-fg-3 hover:text-fg')}
+          className={cn('relative flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-semibold whitespace-nowrap transition-colors', value === option.value ? 'text-[#fff]' : 'text-fg-3 hover:text-fg')}
         >
           {value === option.value ? (
-            <motion.span layoutId={`seg-${group}`} className="absolute inset-0 rounded-full bg-contrast shadow-[0_4px_10px_-4px_rgb(0_0_0/0.4)]" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+            <motion.span layoutId={`seg-${group}`} className="brand-fill absolute inset-0 rounded-full" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
           ) : null}
           <span className="relative">{option.label}</span>
-          {option.count !== undefined ? <span className={cn('num relative text-[10.5px]', value === option.value ? 'text-on-contrast/70' : 'text-fg-4')}>{option.count}</span> : null}
+          {option.count !== undefined ? <span className={cn('num relative text-[10.5px]', value === option.value ? 'text-[#fff]/75' : 'text-fg-4')}>{option.count}</span> : null}
         </button>
       ))}
     </div>
