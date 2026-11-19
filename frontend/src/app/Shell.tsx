@@ -196,12 +196,12 @@ function ActivePill() {
 function NavItem({ module, badge }: { module: Module; badge?: { count: number; alert: boolean } }) {
   const Icon = module.icon
   return (
-    <NavLink to={module.to} end={module.to === '/'} className={pill}>
+    <NavLink to={module.to} end={module.to === '/'} className={pill} title={module.label} aria-label={module.label}>
       {({ isActive }) => (
         <>
           {isActive ? <ActivePill /> : null}
           <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', isActive ? 'text-on-brand' : 'text-fg-3 group-hover:text-fg')} />
-          <span className={cn('relative transition-colors', isActive ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
+          <span className={cn('relative transition-colors', isActive ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg max-[1439px]:hidden')}>{module.short}</span>
           {badge ? (
             <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', isActive ? 'bg-on-brand text-solid' : badge.alert ? 'bg-blue text-[#0b0b0c]' : 'bg-white/10 text-fg-2')}>
               {badge.count}
@@ -225,7 +225,7 @@ function GroupPill({ group, current }: { group: (typeof GROUPS)[number]; current
         <button className={pill} aria-label={`${group.label} menu`}>
           {active ? <ActivePill /> : null}
           <Icon size={15} strokeWidth={active ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', active ? 'text-on-brand' : 'text-fg-3 group-hover:text-fg')} />
-          <span className={cn('relative transition-colors', active ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg')}>{active ? current.short : group.label}</span>
+          <span className={cn('relative transition-colors', active ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg max-[1439px]:hidden')}>{active ? current.short : group.label}</span>
           <ChevronDown size={13} className={cn('relative -mr-0.5 transition-colors', active ? 'text-on-brand/70' : 'text-fg-4 group-hover:text-fg-3')} />
         </button>
       }

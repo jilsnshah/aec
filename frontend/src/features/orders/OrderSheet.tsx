@@ -1,3 +1,4 @@
+import { PartyLinks } from '@/features/parties/PartyLinks'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { History, ShieldCheck, Sparkles, TrendingDown } from 'lucide-react'
@@ -25,6 +26,8 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
   const [customer, setCustomer] = useState('')
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [notes, setNotes] = useState('')
+  const [contactId, setContactId] = useState('')
+  const [siteId, setSiteId] = useState('')
   const [tried, setTried] = useState(false)
   const create = useAction(({ body, approval }: { body: Parameters<typeof api.orders.create>[0]; approval?: string }) => api.orders.create(body, approval), { success: (order) => `${order.order_number} placed`, quiet: true })
 
@@ -33,6 +36,8 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
     setCustomer(customerId ?? '')
     setLines([newLine()])
     setNotes('')
+    setContactId('')
+    setSiteId('')
     setTried(false)
     setMessage('')
     create.reset()
@@ -79,7 +84,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
     setTried(true)
     if (errors.length > 0) return
     create.mutate(
-      { approval, body: { customer_id: customer, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, discount_percent: line.discount || '0', unit_price: null })) } },
+      { approval, body: { customer_id: customer, contact_id: contactId || null, delivery_address_id: siteId || null, notes: notes || null, items: chosen.map((line) => ({ product_id: line.product_id, quantity_ordered: line.quantity, discount_percent: line.discount || '0', unit_price: null })) } },
       {
         onSuccess: (order) => {
           onClose()
@@ -209,6 +214,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
             />
           )}
         </Field>
+        <PartyLinks customerId={customer} contactId={contactId} onContact={setContactId} siteId={siteId} onSite={setSiteId} />
         <div>
           <div className="label">Products</div>
           <LineEditor lines={lines} onChange={setLines} mode="sale" />

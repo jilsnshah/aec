@@ -103,10 +103,20 @@ def build_tools(session: Session, context: InboundContext) -> list:
 
     @tool
     def search_products(query: str = "") -> str:
-        """Search the product catalogue by product name or code. An empty query
-        lists the whole catalogue (up to 50 products). Returns id, code, name,
-        unit and MRP for each match."""
+        """Search the product catalogue by name, code, or the names customers use
+        ("8mm sariya"), barcodes and supplier codes. An empty query lists the
+        whole catalogue (up to 50 products). Returns id, code, name, unit, MRP,
+        and other units (e.g. tonne = 20 bags) to convert quantities."""
         context.tool_calls.append("search_products")
+        from . import parties
+
+        if query.strip():
+            matched = parties.find_products(session, query, limit=10)
+            if matched:
+                by_id = {row["id"]: row for row in product_service.list_products(session, ids=[m["product_id"] for m in matched], limit=10)}
+                return _rows([{"id": m["product_id"], "code": m["sku"], "name": m["name"], "unit": m["unit"],
+                               "mrp": by_id.get(m["product_id"], {}).get("mrp"), "matched_by": m["matched_by"], "other_units": m["other_units"]}
+                              for m in matched])
         rows = product_service.list_products(session, search=query.strip() or None, limit=50)
         return _rows(
             [

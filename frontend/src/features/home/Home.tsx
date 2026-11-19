@@ -397,7 +397,7 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
       label: 'Delivered',
       icon: <PackageCheck size={15} />,
       value: data ? <CountUp value={recent + before} format={fmtMoneyRound} /> : null,
-      note: change === null ? null : <span className={change >= 0 ? 'text-ok' : 'text-bad'} title="Last 15 days against the 15 before">{`${change >= 0 ? '+' : ''}${change.toFixed(0)}%`} <span className="text-fg-3">30 days</span></span>,
+      note: change === null ? null : <span className={change >= 0 ? 'text-ok' : 'text-bad'} title="Last 15 days against the 15 before, within the last 30 days">{`${change >= 0 ? '+' : ''}${change.toFixed(0)}%`}</span>,
       extra: <Sparkline values={cumulative} />,
       to: '/orders',
     },

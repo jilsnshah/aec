@@ -1,3 +1,6 @@
+import { PartyContactsAside, PartyProfile } from '@/features/parties/PartyProfile'
+import { MergeSheet } from '@/features/parties/MergeSheet'
+import { GitMerge } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { finance } from '@/api/finance'
@@ -5,7 +8,7 @@ import { Account } from '@/features/finance/Account'
 import { RecordTasks } from '@/features/tasks/RecordTasks'
 import { useAssistant } from '@/features/assistant/store'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Archive, BadgePercent, CalendarClock, Clock, Crown, Gauge as GaugeIcon, HeartHandshake, IndianRupee, Mail, MapPin, MessageSquareQuote, Moon, MoreHorizontal, Pencil, Phone, Plus, Repeat2, ShoppingCart, Sparkles, Trophy, Truck, UserPlus, Users, MessageCircle, Wallet, AlertTriangle } from 'lucide-react'
+import { Archive, BadgePercent, CalendarClock, Clock, Crown, Gauge as GaugeIcon, HeartHandshake, IndianRupee, MapPin, MessageSquareQuote, Moon, MoreHorizontal, Pencil, Plus, Repeat2, ShoppingCart, Sparkles, Trophy, Truck, UserPlus, Users, Wallet, AlertTriangle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { insights, type Segment } from '@/api/insights'
 import { records } from '@/api/records'
@@ -299,6 +302,7 @@ function CustomerInspector({ id }: { id: string }) {
   const segments = useQuery({ queryKey: ['insights', 'segments'], queryFn: insights.segments, staleTime: 60_000 })
   const [sheet, setSheet] = useState<null | 'edit' | 'order' | 'enquiry'>(null)
   const confirm = useConfirm()
+  const [merging, setMerging] = useState(false)
   const archive = useAction(() => api.customers.archive(id), { success: 'Customer archived' })
 
   if (customer.isPending) return <Spinner />
@@ -314,9 +318,9 @@ function CustomerInspector({ id }: { id: string }) {
       <InspectorHeader
         eyebrow={data.is_active ? 'Customer' : 'Customer · archived'}
         title={
-          <span className="flex items-center gap-3">
-            <Avatar name={data.name} size={34} />
-            {data.name}
+          <span key={data.name} className="flex min-w-0 items-center gap-3">
+            <Avatar name={data.name} size={34} className="shrink-0" />
+            <span className="min-w-0 truncate">{data.name}</span>
           </span>
         }
         badges={<SegmentBadge segment={segment} />}
@@ -338,6 +342,7 @@ function CustomerInspector({ id }: { id: string }) {
               }
               items={[
                 { label: 'Edit details', icon: <Pencil size={14} />, onSelect: () => setSheet('edit') },
+                { label: 'Merge a duplicate into this', icon: <GitMerge size={14} />, onSelect: () => setMerging(true) },
                 { label: 'Show on fulfilment board', icon: <Truck size={14} />, onSelect: () => navigate(`/fulfilment?customer=${id}`), disabled: outstanding === 0 },
                 {
                   label: 'Archive',
@@ -376,6 +381,7 @@ function CustomerInspector({ id }: { id: string }) {
           className="min-w-0 flex-1"
           tabs={[
             { value: 'overview', label: 'Overview' },
+            { value: 'profile', label: 'Profile' },
             { value: 'owed', label: 'To deliver', count: data.outstanding.length },
             { value: 'orders', label: 'Orders', count: data.orders.length },
             { value: 'enquiries', label: 'Enquiries', count: enquiries.data?.total },
@@ -384,6 +390,9 @@ function CustomerInspector({ id }: { id: string }) {
             { value: 'followups', label: 'Follow-ups' },
           ]}
         >
+          <TabPanel value="profile">
+            <PartyProfile kind="customer" id={id} />
+          </TabPanel>
           <TabPanel value="overview">
             <Overview id={id} name={data.name} onOrder={() => setSheet('order')} />
           </TabPanel>
@@ -490,13 +499,7 @@ function CustomerInspector({ id }: { id: string }) {
         </Tabs>
         <aside className="w-[270px] shrink-0 space-y-4 overflow-y-auto border-l border-white/7 p-5 max-xl:hidden">
           <div className="eyebrow">Contact</div>
-          <Contact icon={<Phone size={14} />} value={data.phone} href={data.phone ? `tel:${data.phone}` : undefined} />
-          {data.phone ? (
-            <a className="btn btn-sm w-full" href={`https://wa.me/${data.phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}`} target="_blank" rel="noreferrer">
-              <MessageCircle size={13} /> WhatsApp
-            </a>
-          ) : null}
-          <Contact icon={<Mail size={14} />} value={data.email} href={data.email ? `mailto:${data.email}` : undefined} />
+          <PartyContactsAside kind="customer" id={id} />
           <Contact icon={<MapPin size={14} />} value={data.address} />
           <Button
             small
@@ -520,6 +523,7 @@ function CustomerInspector({ id }: { id: string }) {
       <PartySheet kind="customer" open={sheet === 'edit'} onClose={() => setSheet(null)} editing={data} />
       <OrderSheet open={sheet === 'order'} onClose={() => setSheet(null)} customerId={id} onCreated={(order) => navigate(`/orders/${order.id}`)} />
       <EnquirySheet open={sheet === 'enquiry'} onClose={() => setSheet(null)} customerId={id} onSaved={(enquiry) => navigate(`/enquiries/${enquiry.id}`)} />
+      <MergeSheet kind="customer" id={id} name={data.name} open={merging} onClose={() => setMerging(false)} />
       {confirm.element}
     </>
   )

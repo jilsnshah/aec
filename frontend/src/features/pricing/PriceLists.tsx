@@ -136,7 +136,8 @@ function Editor({ list, onSaved }: { list?: PriceListRow; onSaved: (row: PriceLi
               Add product
             </Button>
           </div>
-          <table className="grid-table">
+          <div className="overflow-x-auto">
+          <table className="grid-table min-w-[760px]">
             <thead>
               <tr>
                 <th>Product</th>
@@ -184,6 +185,7 @@ function Editor({ list, onSaved }: { list?: PriceListRow; onSaved: (row: PriceLi
               })}
             </tbody>
           </table>
+          </div>
           {!lines.length ? <p className="px-4 pb-4 text-[12.5px] text-fg-3">No product lines: every product gets the default discount.</p> : null}
         </div>
         <Field label="Notes" optional>

@@ -1,3 +1,4 @@
+import { PartyLinks } from '@/features/parties/PartyLinks'
 import { usePriceList } from '@/features/pricing/usePriceList'
 import { useEffect, useState } from 'react'
 import { errorText } from '@/api/client'
@@ -18,11 +19,13 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
   const [lines, setLines] = useState<Line[]>([newLine()])
   const pricing = usePriceList(open, customer, lines, setLines)
   const [notes, setNotes] = useState('')
+  const [contactId, setContactId] = useState('')
+  const [siteId, setSiteId] = useState('')
   const [tried, setTried] = useState(false)
   const save = useAction(
     () => {
       const items = lines.filter((line) => line.product_id).map((line) => ({ product_id: line.product_id, quantity: line.quantity, discount_percent: line.discount || '0' }))
-      return editing ? api.enquiries.update(editing.id, { notes: notes || null, items }) : api.enquiries.create({ customer_id: customer, notes: notes || null, items })
+      return editing ? api.enquiries.update(editing.id, { notes: notes || null, items, contact_id: contactId || null, delivery_address_id: siteId || null }) : api.enquiries.create({ customer_id: customer, contact_id: contactId || null, delivery_address_id: siteId || null, notes: notes || null, items })
     },
     { success: (enquiry) => (editing ? `${enquiry.enquiry_number} saved` : `${enquiry.enquiry_number} opened`), quiet: true },
   )
@@ -32,6 +35,8 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
     setCustomer(editing?.customer_id ?? customerId ?? '')
     setLines(editing ? editing.items.map((item) => newLine({ product_id: item.product_id, quantity: String(n(item.quantity)), discount: String(n(item.discount_percent)) })) : [newLine()])
     setNotes(editing?.notes ?? '')
+    setContactId(editing?.contact_id ?? '')
+    setSiteId(editing?.delivery_address_id ?? '')
     setTried(false)
     save.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -91,6 +96,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
         <Field label="Customer">
           {(props) => <Picker {...props} value={customer} onChange={setCustomer} disabled={Boolean(editing)} invalid={tried && !customer} placeholder="Choose a customer…" options={customers.map((row) => ({ value: row.id, label: row.name, detail: row.phone ?? undefined }))} />}
         </Field>
+        <PartyLinks customerId={customer} contactId={contactId} onContact={setContactId} siteId={siteId} onSite={setSiteId} />
         <div>
           <div className="label">Products</div>
           <LineEditor lines={lines} onChange={setLines} mode="sale" />

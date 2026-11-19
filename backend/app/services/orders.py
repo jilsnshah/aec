@@ -206,6 +206,8 @@ def create_order(
     customer_id: uuid.UUID,
     lines: Iterable[Dict[str, Any]],
     notes: Optional[str] = None,
+    contact_id: Optional[uuid.UUID] = None,
+    delivery_address_id: Optional[uuid.UUID] = None,
 ) -> SalesOrder:
     """Create a confirmed sales order in its own transaction.
 
@@ -215,7 +217,7 @@ def create_order(
     """
     try:
         begin_write(session)
-        order = build_order(session, customer_id, lines, notes)
+        order = build_order(session, customer_id, lines, notes, contact_id=contact_id, delivery_address_id=delivery_address_id)
         session.commit()
     except Exception:
         session.rollback()
@@ -229,6 +231,8 @@ def build_order(
     lines: Iterable[Dict[str, Any]],
     notes: Optional[str] = None,
     enquiry_id: Optional[uuid.UUID] = None,
+    contact_id: Optional[uuid.UUID] = None,
+    delivery_address_id: Optional[uuid.UUID] = None,
 ) -> SalesOrder:
     """Create a confirmed sales order, fulfilling what stock honestly allows.
 
@@ -270,6 +274,8 @@ def build_order(
         status=OrderStatus.PENDING,
         notes=notes,
         enquiry_id=enquiry_id,
+        contact_id=check_party_link(session, customer.id, contact_id, "contact"),
+        delivery_address_id=check_party_link(session, customer.id, delivery_address_id, "address"),
     )
     session.add(order)
     session.flush()
@@ -610,3 +616,15 @@ def sales_report(session: Session) -> Dict[str, Any]:
         "discounts_given": discounts,
         "outstanding_order_value": outstanding,
     }
+
+
+def check_party_link(session: Session, customer_id: uuid.UUID, link_id: Optional[uuid.UUID], what: str) -> Optional[uuid.UUID]:
+    """A contact or delivery site chosen for a customer's document must be that customer's."""
+    if not link_id:
+        return None
+    from ..models import Address, Contact
+
+    row = session.get(Contact if what == "contact" else Address, link_id)
+    if row is None or row.customer_id != customer_id or not row.is_active:
+        raise ValidationError("That {} does not belong to this customer.".format("contact" if what == "contact" else "delivery site"))
+    return row.id

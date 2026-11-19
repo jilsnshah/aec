@@ -6,6 +6,7 @@ import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import { Button, Field, Notice } from '@/ui/core'
 import { Sheet } from '@/ui/overlays'
+import { DuplicateWarning } from '@/features/parties/MergeSheet'
 
 type Kind = 'customer' | 'supplier'
 interface Party {
@@ -21,9 +22,11 @@ interface Party {
   credit_limit?: string | number | null
   price_list_id?: string | null
   lead_time_days?: number | null
+  gstin?: string | null
+  pan?: string | null
 }
 
-const blank = { name: '', phone: '', email: '', address: '', notes: '', code: '', contact_person: '', terms: '0', credit: '', lead: '', priceList: '' }
+const blank = { name: '', phone: '', email: '', address: '', notes: '', code: '', contact_person: '', terms: '0', credit: '', lead: '', priceList: '', gstin: '', pan: '' }
 
 /** Create or edit a customer or supplier: who they are and how to reach them. */
 export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Kind; open: boolean; onClose: () => void; editing?: Party; onSaved?: (id: string) => void }) {
@@ -34,7 +37,7 @@ export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Ki
   const save = useAction(
     async () => {
       const clean = (value: string) => value.trim() || null
-      const base = { name: form.name.trim(), phone: clean(form.phone), email: clean(form.email), address: clean(form.address), notes: clean(form.notes), payment_terms_days: Number(form.terms) || 0 }
+      const base = { name: form.name.trim(), phone: clean(form.phone), email: clean(form.email), address: clean(form.address), notes: clean(form.notes), payment_terms_days: Number(form.terms) || 0, gstin: clean(form.gstin), pan: clean(form.pan) }
       if (kind === 'customer') {
         const customer = { ...base, credit_limit: form.credit.trim() === '' ? null : form.credit.trim(), price_list_id: form.priceList || null }
         return editing ? api.customers.update(editing.id, customer) : api.customers.create(customer)
@@ -47,7 +50,7 @@ export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Ki
 
   useEffect(() => {
     if (!open) return
-    setForm(editing ? { name: editing.name, phone: editing.phone ?? '', email: editing.email ?? '', address: editing.address ?? '', notes: editing.notes ?? '', code: editing.code ?? '', contact_person: editing.contact_person ?? '', terms: String(editing.payment_terms_days ?? 0), credit: editing.credit_limit == null ? '' : String(editing.credit_limit), lead: editing.lead_time_days == null ? '' : String(editing.lead_time_days), priceList: editing.price_list_id ?? '' } : blank)
+    setForm(editing ? { name: editing.name, phone: editing.phone ?? '', email: editing.email ?? '', address: editing.address ?? '', notes: editing.notes ?? '', code: editing.code ?? '', contact_person: editing.contact_person ?? '', terms: String(editing.payment_terms_days ?? 0), credit: editing.credit_limit == null ? '' : String(editing.credit_limit), lead: editing.lead_time_days == null ? '' : String(editing.lead_time_days), priceList: editing.price_list_id ?? '', gstin: editing.gstin ?? '', pan: editing.pan ?? '' } : blank)
     setTried(false)
     save.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -109,6 +112,13 @@ export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Ki
         <Field label="Email" optional error={tried && emailBad ? 'This does not look like an email address.' : null}>
           {(props) => <input {...props} className="field" type="email" value={form.email} onChange={set('email')} />}
         </Field>
+        <Field label="GSTIN" optional hint="15 characters; one GSTIN belongs to one party.">
+          {(props) => <input {...props} className="field" placeholder="24ABCDE1234F1Z5" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} />}
+        </Field>
+        <Field label="PAN" optional>
+          {(props) => <input {...props} className="field" placeholder="ABCDE1234F" value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} />}
+        </Field>
+        <DuplicateWarning kind={kind} name={form.name} phone={form.phone} email={form.email} gstin={form.gstin} excludeId={editing?.id} />
         <Field label="Address" optional className="col-span-2">
           {(props) => <textarea {...props} className="field" rows={2} value={form.address} onChange={set('address')} />}
         </Field>

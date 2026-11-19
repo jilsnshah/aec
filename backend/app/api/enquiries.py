@@ -50,6 +50,8 @@ def create_enquiry(payload: schemas.EnquiryCreate, db: Session = Depends(get_db)
         customer_id=payload.customer_id,
         items=[item.model_dump() for item in payload.items],
         notes=payload.notes,
+        contact_id=payload.contact_id,
+        delivery_address_id=payload.delivery_address_id,
     )
     return enquiry_service.to_view(enquiry)
 

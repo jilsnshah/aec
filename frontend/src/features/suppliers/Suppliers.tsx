@@ -1,3 +1,6 @@
+import { PartyContactsAside, PartyProfile } from '@/features/parties/PartyProfile'
+import { MergeSheet } from '@/features/parties/MergeSheet'
+import { GitMerge } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -8,7 +11,7 @@ import { records } from '@/api/records'
 import { AiStrip, AskButton, Gauge, PageGuide, QuickChips, Stat, Timeline, type Chip } from '@/ui/smart'
 import { Account } from '@/features/finance/Account'
 import { RecordTasks } from '@/features/tasks/RecordTasks'
-import { AlarmClock, Archive, Award, BadgeCheck, Building2, Clock, IndianRupee, Mail, MapPin, MoreHorizontal, PackageCheck, Pencil, Phone, Plus, Timer, Truck, UserRound, Wallet } from 'lucide-react'
+import { AlarmClock, Archive, Award, BadgeCheck, Building2, Clock, IndianRupee, MapPin, MoreHorizontal, PackageCheck, Pencil, Plus, Timer, Truck, UserRound, Wallet } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
@@ -150,6 +153,7 @@ function SupplierInspector({ id }: { id: string }) {
   const setTab = (value: string) => setParams({ tab: value }, { replace: true })
   const [sheet, setSheet] = useState<null | 'edit' | 'po'>(null)
   const confirm = useConfirm()
+  const [merging, setMerging] = useState(false)
   const archive = useAction(() => api.suppliers.archive(id), { success: 'Supplier archived' })
   if (supplier.isPending) return <Spinner />
   if (!supplier.data) return <Empty title="This supplier could not be loaded" />
@@ -163,9 +167,9 @@ function SupplierInspector({ id }: { id: string }) {
       <InspectorHeader
         eyebrow={`Supplier · ${data.code}${data.is_active ? '' : ' · archived'}`}
         title={
-          <span className="flex items-center gap-3">
-            <Avatar name={data.name} size={34} />
-            {data.name}
+          <span key={data.name} className="flex min-w-0 items-center gap-3">
+            <Avatar name={data.name} size={34} className="shrink-0" />
+            <span className="min-w-0 truncate">{data.name}</span>
           </span>
         }
         meta={data.contact_person ? `Contact: ${data.contact_person}` : `Supplier since ${fmtDate(data.created_at)}`}
@@ -183,6 +187,7 @@ function SupplierInspector({ id }: { id: string }) {
               }
               items={[
                 { label: 'Edit details', icon: <Pencil size={14} />, onSelect: () => setSheet('edit') },
+                { label: 'Merge a duplicate into this', icon: <GitMerge size={14} />, onSelect: () => setMerging(true) },
                 {
                   label: 'Archive',
                   icon: <Archive size={14} />,
@@ -214,6 +219,7 @@ function SupplierInspector({ id }: { id: string }) {
           className="min-w-0 flex-1"
           tabs={[
             { value: 'scorecard', label: 'Scorecard' },
+            { value: 'profile', label: 'Profile' },
             { value: 'orders', label: 'Purchase orders', count: data.purchase_orders.length },
             { value: 'receipts', label: 'Deliveries', count: data.goods_receipts.length },
             { value: 'account', label: 'Account' },
@@ -221,6 +227,9 @@ function SupplierInspector({ id }: { id: string }) {
             { value: 'followups', label: 'Follow-ups' },
           ]}
         >
+          <TabPanel value="profile">
+            <PartyProfile kind="supplier" id={id} />
+          </TabPanel>
           <TabPanel value="scorecard">
             <Scorecard id={id} />
           </TabPanel>
@@ -305,8 +314,7 @@ function SupplierInspector({ id }: { id: string }) {
         <aside className="w-[270px] shrink-0 space-y-4 overflow-y-auto border-l border-white/7 p-5 max-xl:hidden">
           <div className="eyebrow">Contact</div>
           <Contact icon={<UserRound size={14} />} value={data.contact_person} />
-          <Contact icon={<Phone size={14} />} value={data.phone} href={data.phone ? `tel:${data.phone}` : undefined} />
-          <Contact icon={<Mail size={14} />} value={data.email} href={data.email ? `mailto:${data.email}` : undefined} />
+          <PartyContactsAside kind="supplier" id={id} />
           <Contact icon={<MapPin size={14} />} value={data.address} />
           {data.notes ? (
             <>
@@ -318,6 +326,7 @@ function SupplierInspector({ id }: { id: string }) {
       </div>
       <PartySheet kind="supplier" open={sheet === 'edit'} onClose={() => setSheet(null)} editing={data} />
       <PurchaseSheet open={sheet === 'po'} onClose={() => setSheet(null)} initial={{ supplier_id: id }} onSaved={(po) => navigate(`/purchase-orders/${po.id}`)} />
+      <MergeSheet kind="supplier" id={id} name={data.name} open={merging} onClose={() => setMerging(false)} />
       {confirm.element}
     </>
   )

@@ -931,6 +931,29 @@ week raise alerts.
 Where data is too thin (bought-together needs 20+ multi-product orders; trends
 need at least 5 units a month) the screens say so rather than guess.
 
+## Customers and suppliers as complete records
+
+Each customer and supplier owns child records, as in Odoo, ERPNext and
+Business Central:
+
+- **People** (owner, site engineer, accounts), each with their own numbers.
+- **Phone numbers and emails**, as many as needed, labelled, marked WhatsApp
+  or primary. A number or email belongs to one party only, so WhatsApp, email,
+  phone calls and the assistant always find the right customer.
+- **Addresses and delivery sites** (billing, sites, offices, warehouses).
+  Orders and quotes choose the site and the person who ordered.
+- **GSTIN and PAN** (validated; one GSTIN per party) and the **Tally ledger
+  name**, fixed on first sync so renaming here never splits a Tally account.
+
+Creating a customer or supplier checks for duplicates (same number, email or
+GSTIN blocks it; a similar name warns). **Merge** moves everything from a
+duplicate (orders, enquiries, payments, returns, calls, follow-ups, people,
+numbers, addresses) and archives it, with an audit entry.
+
+Products get **other names** (what customers call them), **barcodes**,
+**supplier item codes** and **units** (1 tonne = 20 bags). Search, the
+WhatsApp/email reader, phone calls and the assistant match on all of them.
+
 ## Controls, returns, counts, price lists and reminders
 
 Benchmarked against Business Central, NetSuite, SAP Business One, Odoo,

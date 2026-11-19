@@ -75,6 +75,325 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/parties/{kind}/{party_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Profile
+         * @description A customer's or supplier's full details: GSTIN, PAN, Tally ledger, contacts,
+         *     phone numbers and emails, addresses and delivery sites. kind = customer or supplier.
+         */
+        get: operations["get_profile_api_parties__kind___party_id__profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Contact
+         * @description Add a person at the customer or supplier (name, role).
+         */
+        post: operations["add_contact_api_parties__kind___party_id__contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Contact
+         * @description Change a contact; is_active false removes them.
+         */
+        patch: operations["update_contact_api_parties__kind___party_id__contacts__contact_id__patch"];
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Point
+         * @description Add a phone number or email. A number or email can belong to one party only.
+         */
+        post: operations["add_point_api_parties__kind___party_id__points_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/points/{point_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Point
+         * @description Change a phone number or email; is_active false removes it.
+         */
+        patch: operations["update_point_api_parties__kind___party_id__points__point_id__patch"];
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Address
+         * @description Add a billing address, office, warehouse or delivery site.
+         */
+        post: operations["add_address_api_parties__kind___party_id__addresses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/addresses/{address_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Address
+         * @description Change an address; is_active false removes it.
+         */
+        patch: operations["update_address_api_parties__kind___party_id__addresses__address_id__patch"];
+        trace?: never;
+    };
+    "/api/parties/{kind}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find Duplicates
+         * @description Existing customers/suppliers that a new record may duplicate: blocking
+         *     (same phone, email or GSTIN) and similar (similar name).
+         */
+        get: operations["find_duplicates_api_parties__kind__duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup
+         * @description Which customer or supplier a phone number or email belongs to.
+         */
+        get: operations["lookup_api_parties_lookup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/{kind}/{party_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge
+         * @description Merge a duplicate into this record: its orders, enquiries, payments,
+         *     returns, calls, follow-ups, contacts, numbers and addresses move here, and
+         *     the duplicate is archived. Recorded in the audit log.
+         */
+        post: operations["merge_api_parties__kind___party_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product Names
+         * @description A product's other names (what customers call it), barcodes, supplier item codes and units.
+         */
+        get: operations["product_names_api_products__product_id__names_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Alias
+         * @description Add another name, barcode or supplier item code for a product.
+         */
+        post: operations["add_alias_api_products__product_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Alias */
+        delete: operations["remove_alias_api_products__product_id__aliases__alias_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Unit
+         * @description Add another unit the product is counted in, as a multiple of its base unit.
+         */
+        post: operations["add_unit_api_products__product_id__units_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/{product_id}/units/{unit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Unit */
+        delete: operations["remove_unit_api_products__product_id__units__unit_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match Products
+         * @description Products matching free text, including other names, barcodes and supplier
+         *     codes ("8mm sariya", a scanned code). Says what matched and other units.
+         */
+        get: operations["match_products_api_products_match_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/products": {
         parameters: {
             query?: never;
@@ -2065,6 +2384,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/controls/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Controls
+         * @description Change the order controls: credit_check off/warn/block, block_on_overdue,
+         *     overdue_grace_days, max_discount_percent, min_margin_percent (0 = no limit),
+         *     block_below_cost. Only the fields sent change.
+         */
+        put: operations["update_controls_api_controls_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{kind}/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Document Link
+         * @description A link to a printable document: kind 'quotation' (enquiry id) or
+         *     'invoice' (sales order id, once Tally has the invoice). Share the url as a
+         *     markdown link.
+         */
+        get: operations["document_link_api_documents__kind___record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/price-lists": {
         parameters: {
             query?: never;
@@ -2161,6 +2524,35 @@ export interface components {
             /** Model */
             model?: string | null;
         };
+        /** AddressIn */
+        AddressIn: {
+            /**
+             * Kind
+             * @description billing, site, office or warehouse.
+             */
+            kind?: string | null;
+            /**
+             * Label
+             * @description e.g. 'Sector 21 tower site'.
+             */
+            label?: string | null;
+            /** Line */
+            line?: string | null;
+            /** City */
+            city?: string | null;
+            /** State */
+            state?: string | null;
+            /** Pincode */
+            pincode?: string | null;
+            /** Map Url */
+            map_url?: string | null;
+            /** Contact Id */
+            contact_id?: string | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
         /** AdjustmentIn */
         AdjustmentIn: {
             /** Lines */
@@ -2221,6 +2613,19 @@ export interface components {
             model: string;
             /** Reply */
             reply: string;
+        };
+        /** AliasIn */
+        AliasIn: {
+            /**
+             * Kind
+             * @description alias (another name), barcode or supplier_code.
+             * @default alias
+             */
+            kind: string;
+            /** Value */
+            value: string;
+            /** Supplier Id */
+            supplier_id?: string | null;
         };
         /** AllocationInput */
         AllocationInput: {
@@ -2410,6 +2815,34 @@ export interface components {
             /** Outstanding Value */
             outstanding_value: string;
         };
+        /** ContactIn */
+        ContactIn: {
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
+        /** ControlsIn */
+        ControlsIn: {
+            /** Credit Check */
+            credit_check?: string | null;
+            /** Block On Overdue */
+            block_on_overdue?: boolean | null;
+            /** Overdue Grace Days */
+            overdue_grace_days?: number | null;
+            /** Max Discount Percent */
+            max_discount_percent?: number | null;
+            /** Min Margin Percent */
+            min_margin_percent?: number | null;
+            /** Block Below Cost */
+            block_below_cost?: boolean | null;
+        };
         /** ConversationIn */
         ConversationIn: {
             /** Title */
@@ -2462,6 +2895,10 @@ export interface components {
              * @description Most the customer may owe; empty for no limit.
              */
             credit_limit?: number | string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
         };
         /** CustomerDetailOut */
         CustomerDetailOut: {
@@ -2501,6 +2938,12 @@ export interface components {
             credit_limit?: string | null;
             /** Price List Id */
             price_list_id?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
             /** Outstanding */
             outstanding?: components["schemas"]["OutstandingLine"][];
             /** Orders */
@@ -2547,6 +2990,12 @@ export interface components {
             credit_limit?: string | null;
             /** Price List Id */
             price_list_id?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
             /**
              * Order Count
              * @default 0
@@ -2613,6 +3062,12 @@ export interface components {
             credit_limit?: string | null;
             /** Price List Id */
             price_list_id?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
         };
         /** CustomerRef */
         CustomerRef: {
@@ -2644,6 +3099,10 @@ export interface components {
             credit_limit?: number | string | null;
             /** Price List Id */
             price_list_id?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
         };
         /** DailySalesRow */
         DailySalesRow: {
@@ -2880,6 +3339,16 @@ export interface components {
             customer_id: string;
             /** Notes */
             notes?: string | null;
+            /**
+             * Contact Id
+             * @description The customer's contact who placed it.
+             */
+            contact_id?: string | null;
+            /**
+             * Delivery Address Id
+             * @description The customer's delivery site.
+             */
+            delivery_address_id?: string | null;
             /** Items */
             items: components["schemas"]["EnquiryLineCreate"][];
         };
@@ -2941,6 +3410,10 @@ export interface components {
              * Format: uuid
              */
             customer_id: string;
+            /** Contact Id */
+            contact_id?: string | null;
+            /** Delivery Address Id */
+            delivery_address_id?: string | null;
             customer: components["schemas"]["CustomerRef"];
             /** Notes */
             notes?: string | null;
@@ -2999,6 +3472,16 @@ export interface components {
             notes?: string | null;
             /** Items */
             items?: components["schemas"]["EnquiryLineCreate"][] | null;
+            /**
+             * Contact Id
+             * @description The customer's contact who placed it.
+             */
+            contact_id?: string | null;
+            /**
+             * Delivery Address Id
+             * @description The customer's delivery site.
+             */
+            delivery_address_id?: string | null;
         };
         /** FulfilmentLine */
         FulfilmentLine: {
@@ -3433,6 +3916,15 @@ export interface components {
             /** Is Admin */
             is_admin: boolean;
         };
+        /** MergeIn */
+        MergeIn: {
+            /**
+             * Merge Id
+             * Format: uuid
+             * @description The duplicate record to merge into this one (it is archived).
+             */
+            merge_id: string;
+        };
         /** MessageIn */
         MessageIn: {
             /**
@@ -3560,6 +4052,16 @@ export interface components {
             customer_id: string;
             /** Notes */
             notes?: string | null;
+            /**
+             * Contact Id
+             * @description The customer's contact who placed it.
+             */
+            contact_id?: string | null;
+            /**
+             * Delivery Address Id
+             * @description The customer's delivery site.
+             */
+            delivery_address_id?: string | null;
             /** Items */
             items: components["schemas"]["OrderLineCreate"][];
         };
@@ -3577,6 +4079,10 @@ export interface components {
              * Format: uuid
              */
             customer_id: string;
+            /** Contact Id */
+            contact_id?: string | null;
+            /** Delivery Address Id */
+            delivery_address_id?: string | null;
             status: components["schemas"]["OrderStatus"];
             /** Notes */
             notes?: string | null;
@@ -3769,6 +4275,10 @@ export interface components {
              * Format: uuid
              */
             customer_id: string;
+            /** Contact Id */
+            contact_id?: string | null;
+            /** Delivery Address Id */
+            delivery_address_id?: string | null;
             status: components["schemas"]["OrderStatus"];
             /** Notes */
             notes?: string | null;
@@ -4177,6 +4687,29 @@ export interface components {
             pending_after?: string | null;
             /** Items */
             items?: components["schemas"]["PendingOrderRow"][];
+        };
+        /** PointIn */
+        PointIn: {
+            /**
+             * Kind
+             * @description phone or email (when adding).
+             */
+            kind?: string | null;
+            /** Value */
+            value?: string | null;
+            /**
+             * Label
+             * @description e.g. mobile, office, accounts, site.
+             */
+            label?: string | null;
+            /** Contact Id */
+            contact_id?: string | null;
+            /** Is Whatsapp */
+            is_whatsapp?: boolean | null;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /** PreferenceIn */
         PreferenceIn: {
@@ -5223,6 +5756,10 @@ export interface components {
              * @description Typical days to deliver.
              */
             lead_time_days?: number | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
         };
         /** SupplierDetailOut */
         SupplierDetailOut: {
@@ -5264,6 +5801,12 @@ export interface components {
             payment_terms_days: number;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
             /** Purchase Orders */
             purchase_orders?: components["schemas"]["SupplierPurchaseOrderRow"][];
             /** Goods Receipts */
@@ -5312,6 +5855,12 @@ export interface components {
             payment_terms_days: number;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
             /**
              * Po Count
              * @default 0
@@ -5375,6 +5924,12 @@ export interface components {
             payment_terms_days: number;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /** Tally Ledger Name */
+            tally_ledger_name?: string | null;
         };
         /** SupplierPurchaseOrderRow */
         SupplierPurchaseOrderRow: {
@@ -5466,6 +6021,10 @@ export interface components {
             payment_terms_days?: number | null;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
         };
         /** TallySyncOut */
         TallySyncOut: {
@@ -5664,6 +6223,19 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** UnitIn */
+        UnitIn: {
+            /**
+             * Name
+             * @description e.g. tonne, bundle.
+             */
+            name: string;
+            /**
+             * Factor
+             * @description How many base units one of these holds, e.g. 20 (bags per tonne).
+             */
+            factor: string;
+        };
         /** UserRef */
         UserRef: {
             /**
@@ -5802,6 +6374,561 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profile_api_parties__kind___party_id__profile_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_contact_api_parties__kind___party_id__contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_api_parties__kind___party_id__contacts__contact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+                contact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_point_api_parties__kind___party_id__points_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PointIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_point_api_parties__kind___party_id__points__point_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+                point_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PointIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_address_api_parties__kind___party_id__addresses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_address_api_parties__kind___party_id__addresses__address_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+                address_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    find_duplicates_api_parties__kind__duplicates_get: {
+        parameters: {
+            query?: {
+                name?: string | null;
+                phone?: string[];
+                email?: string[];
+                gstin?: string | null;
+                exclude_id?: string | null;
+            };
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_api_parties_lookup_get: {
+        parameters: {
+            query?: {
+                phone?: string | null;
+                email?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_api_parties__kind___party_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    product_names_api_products__product_id__names_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_alias_api_products__product_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AliasIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_alias_api_products__product_id__aliases__alias_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_unit_api_products__product_id__units_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_unit_api_products__product_id__units__unit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+                unit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_products_api_products_match_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -9622,6 +10749,71 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_controls_api_controls_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControlsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    document_link_api_documents__kind___record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                record_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

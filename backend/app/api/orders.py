@@ -61,6 +61,8 @@ def create_order(
         customer_id=payload.customer_id,
         lines=[item.model_dump() for item in payload.items],
         notes=payload.notes,
+        contact_id=payload.contact_id,
+        delivery_address_id=payload.delivery_address_id,
     )
     # Placed: to Tally as a Sales Order and an invoice, and the invoice on to
     # the customer -- after the response, so placing the order stays fast.

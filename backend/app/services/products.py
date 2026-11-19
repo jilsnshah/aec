@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..models import (
+    ProductAlias,
     MovementType,
     OrderStatus,
     Product,
@@ -192,6 +193,7 @@ def _product_filter(
             or_(
                 func.lower(Product.sku).like(pattern),
                 func.lower(Product.name).like(pattern),
+                Product.id.in_(select(ProductAlias.product_id).where(ProductAlias.normalized.like(pattern))),
             )
         )
     return stmt

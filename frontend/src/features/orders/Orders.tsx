@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { parties } from '@/api/parties'
 import {
   AlertTriangle,
   Ban,
+  Building2,
   Check,
   CheckCircle2,
   CircleDollarSign,
@@ -255,6 +257,7 @@ function Stepper({ order, payment }: { order: OrderDetailOut; payment?: OrderPay
 function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: OrderPayment; onRepeat: (id: string) => void }) {
   const order = useOne('orders', api.orders.get, id)
   const customer = useQuery({ queryKey: ['customers', 'one', order.data?.customer_id], enabled: Boolean(order.data), queryFn: () => api.customers.get(order.data!.customer_id) })
+  const partyProfile = useQuery({ queryKey: ['parties', 'customer', order.data?.customer_id], enabled: Boolean(order.data?.delivery_address_id || order.data?.contact_id), queryFn: () => parties.profile('customer', order.data!.customer_id) })
   const [tab, setTab] = useState('lines')
   const [delivering, setDelivering] = useState(false)
   const [buying, setBuying] = useState(false)
@@ -268,6 +271,8 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
   const data = order.data
   const totals = orderTotals(data)
   const open = data.status === 'PENDING' || data.status === 'PARTIALLY_FULFILLED'
+  const site = partyProfile.data?.addresses.find((a) => a.id === data.delivery_address_id)
+  const orderedBy = partyProfile.data?.contacts.find((c) => c.id === data.contact_id)
   const phone = customer.data?.phone?.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')
   const update = `Hello ${data.customer.name}, an update on your order ${data.order_number}: ${fmtQty(totals.delivered)} delivered${totals.ready > 0 ? `, ${fmtQty(totals.ready)} ready to dispatch` : ''}${totals.short + totals.onOrder > 0 ? `, ${fmtQty(totals.short + totals.onOrder)} arriving soon` : ''}.${payment && payment.open > 0 ? ` Amount due: ${fmtMoney(payment.open)}.` : ''} Thank you.`
 
@@ -294,6 +299,8 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
               {data.customer.name}
             </Link>{' '}
             · placed {fmtDateTime(data.created_at)}
+            {site ? <> · <Building2 size={12} className="inline" /> {site.label || 'Site'}{site.city ? `, ${site.city}` : ''}</> : null}
+            {orderedBy ? ` · by ${orderedBy.name}` : null}
           </>
         }
         actions={

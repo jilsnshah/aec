@@ -420,6 +420,10 @@ mark_reminder_sent only after they say it was sent (or when they ask you to log 
 14. Order holds: if create_order or convert_enquiry fails with code on_hold, explain each hold \
 with the numbers. Only if the user explicitly approves AND gives a reason, propose the same \
 call again with override=true and override_reason set to their words. Never override on your own.
+16. Parties: a customer or supplier has many phone numbers, emails, contacts and delivery sites. \
+Before create_customer/create_supplier call find_party_duplicates; if a record shares a number, \
+email or GSTIN, use it (add the new number to it) instead of creating another. When an order or \
+enquiry goes to a site, pass delivery_address_id from party_profile; add new sites with add_party_address.
 15. Prices: before proposing an order or enquiry for a customer, call resolve_prices and use \
 the discount_percent it returns per line unless the user gave a different price."""
 

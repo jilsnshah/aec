@@ -126,6 +126,10 @@ def _customer_filter(search: Optional[str], include_inactive: bool):
                     "%{}%".format(digits[-10:])
                 )
             )
+        from . import parties
+
+        conditions.append(func.lower(func.coalesce(Customer.gstin, "")).like(pattern))
+        conditions.append(parties.search_condition("customer", search))
         stmt = stmt.where(or_(*conditions))
     return stmt
 
@@ -135,6 +139,10 @@ def create_customer(session: Session, **fields: Any) -> Customer:
     if not name:
         raise ValidationError("Customer name is required.")
     begin_write(session)
+    from . import parties
+
+    parties.require_unique(session, "customer", [fields.get("phone")] if fields.get("phone") else [],
+                           [fields.get("email")] if fields.get("email") else [], fields.get("gstin"))
     customer = Customer(
         name=name,
         phone=(fields.get("phone") or None),
@@ -146,6 +154,9 @@ def create_customer(session: Session, **fields: Any) -> Customer:
     )
     session.add(customer)
     try:
+        session.flush()
+        parties.set_identity(session, "customer", customer.id, fields.get("gstin"), fields.get("pan"))
+        parties.sync_from_columns(session, "customer", customer, fields.get("phone"), fields.get("email"), fields.get("address"))
         session.commit()
     except Exception:
         session.rollback()
@@ -162,9 +173,17 @@ def update_customer(session: Session, customer_id: uuid.UUID, changes: Dict[str,
         if not name:
             raise ValidationError("Customer name is required.")
         customer.name = name
+    from . import parties
+
+    parties.require_unique(session, "customer", [changes["phone"]] if changes.get("phone") else [],
+                           [changes["email"]] if changes.get("email") else [], changes.get("gstin"), exclude_id=customer.id)
     for field in ("phone", "email", "address", "notes"):
         if field in changes:
             setattr(customer, field, changes[field] or None)
+    parties.sync_from_columns(session, "customer", customer,
+                              *[(changes[f] or "") if f in changes else None for f in ("phone", "email", "address")])
+    if "gstin" in changes or "pan" in changes:
+        parties.set_identity(session, "customer", customer.id, changes.get("gstin", customer.gstin), changes.get("pan", customer.pan))
     if changes.get("payment_terms_days") is not None:
         customer.payment_terms_days = int(changes["payment_terms_days"])
     if "credit_limit" in changes:

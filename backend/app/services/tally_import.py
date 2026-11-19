@@ -140,6 +140,15 @@ def _sku(session: Session, row: Dict[str, Any], used: set) -> str:
     return candidate
 
 
+def _valid_gstin(value):
+    from .parties import norm_gstin
+
+    try:
+        return norm_gstin(value)
+    except Exception:
+        return None
+
+
 def _notes(row: Dict[str, Any]) -> str:
     parts = ["Imported from Tally ({})".format(row.get("group") or "ledger")]
     if row.get("gstin"):
@@ -189,10 +198,12 @@ def run(session: Session, client: TallyClient, dry_run: bool = False) -> Report:
             report.skipped += 1
             continue
         try:
-            customer_service.create_customer(
+            created = customer_service.create_customer(
                 session, name=row["name"], phone=row["phone"], email=row["email"],
-                address=row["address"], notes=_notes(row),
+                address=row["address"], notes=_notes(row), gstin=_valid_gstin(row.get("gstin")),
             )
+            created.tally_ledger_name = row["name"]  # the exact ledger name in Tally
+            session.commit()
             report.customers += 1
         except Exception as exc:
             session.rollback()
@@ -203,10 +214,12 @@ def run(session: Session, client: TallyClient, dry_run: bool = False) -> Report:
             report.skipped += 1
             continue
         try:
-            supplier_service.create_supplier(
+            created = supplier_service.create_supplier(
                 session, name=row["name"], contact_person=row["contact"], phone=row["phone"],
                 email=row["email"], address=row["address"], notes=_notes(row),
             )
+            created.tally_ledger_name = row["name"]
+            session.commit()
             report.suppliers += 1
         except Exception as exc:
             session.rollback()

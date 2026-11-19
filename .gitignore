@@ -32,3 +32,4 @@ backend/*.db-wal
 *.1800
 *.TSF
 /100000/
+.env.*

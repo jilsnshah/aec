@@ -34,6 +34,7 @@ from ..models import (
     SalesOrder,
 )
 from ..numeric import ZERO, ZERO_MONEY, money, percent, quantity, unit_cost
+from . import orders as order_service
 from . import pricing
 from .common import count_matching, get_customer, next_document_number, windowed
 from .orders import build_order, get_order
@@ -222,6 +223,8 @@ def create_enquiry(
     notes: Optional[str] = None,
     source: str = "manual",
     source_detail: Optional[str] = None,
+    contact_id: Optional[uuid.UUID] = None,
+    delivery_address_id: Optional[uuid.UUID] = None,
 ) -> CustomerEnquiry:
     """Open an enquiry, pricing each line from the product master's MRP.
 
@@ -248,6 +251,8 @@ def create_enquiry(
             status=EnquiryStatus.OPEN,
             source=source,
             source_detail=source_detail,
+            contact_id=order_service.check_party_link(session, customer.id, contact_id, "contact"),
+            delivery_address_id=order_service.check_party_link(session, customer.id, delivery_address_id, "address"),
         )
         session.add(enquiry)
         session.flush()
@@ -303,6 +308,9 @@ def update_enquiry(
 
         if "notes" in changes:
             enquiry.notes = changes["notes"] or None
+        for link, what in (("contact_id", "contact"), ("delivery_address_id", "address")):
+            if link in changes:
+                setattr(enquiry, link, order_service.check_party_link(session, enquiry.customer_id, changes[link], what))
 
         if "items" in changes and changes["items"] is not None:
             cleaned = _clean_items(changes["items"])
@@ -445,6 +453,8 @@ def convert_enquiry(session: Session, enquiry_id: uuid.UUID) -> Dict[str, Any]:
             lines=lines,
             notes=order_notes,
             enquiry_id=enquiry.id,
+            contact_id=enquiry.contact_id,
+            delivery_address_id=enquiry.delivery_address_id,
         )
 
         enquiry.sales_order_id = order.id
@@ -483,6 +493,8 @@ def to_view(enquiry: CustomerEnquiry) -> Dict[str, Any]:
         "id": enquiry.id,
         "enquiry_number": enquiry.enquiry_number,
         "customer_id": enquiry.customer_id,
+        "contact_id": enquiry.contact_id,
+        "delivery_address_id": enquiry.delivery_address_id,
         "customer": enquiry.customer,
         "notes": enquiry.notes,
         "status": enquiry.status,

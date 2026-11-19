@@ -129,20 +129,29 @@ def sales_taxes(config: Dict[str, Any], subtotal: Decimal) -> List[Tuple[str, De
     return [(config["cgst_ledger"], half), (config["sgst_ledger"], tax - half)]
 
 
+def ledger_name(party) -> str:
+    """The Tally ledger a customer or supplier posts to. Fixed the first time
+    it is used, so renaming the party here never creates a second ledger."""
+    if not party.tally_ledger_name:
+        party.tally_ledger_name = party.name
+    return party.tally_ledger_name
+
+
 def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tally.TallyClient) -> None:
     if row.kind in (SALES_ORDER, SALES_INVOICE):
         from .orders import get_order
 
         order = get_order(session, row.entity_id)
         customer = order.customer
-        client.ensure_ledger(customer.name, config["customer_group"], customer.phone, customer.email)
+        ledger = ledger_name(customer)
+        client.ensure_ledger(ledger, config["customer_group"], customer.phone, customer.email)
         lines = _sales_lines(order)
         for item in order.items:
             client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
         on = _local_day(order.created_at)
         if row.kind == SALES_ORDER:
             result = client.create_voucher(
-                config["sales_order_type"], on, customer.name, config["sales_ledger"], lines,
+                config["sales_order_type"], on, ledger, config["sales_ledger"], lines,
                 party_is_debit=True, godown=config["godown"], number=order.order_number,
                 reference=order.order_number, narration=order.notes,
                 order_number=order.order_number, order_due=on,
@@ -155,7 +164,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
             ).scalar_one_or_none()
             subtotal = sum((line.amount for line in lines), Decimal("0"))
             result = client.create_voucher(
-                config["sales_invoice_type"], on, customer.name, config["sales_ledger"], lines,
+                config["sales_invoice_type"], on, ledger, config["sales_ledger"], lines,
                 party_is_debit=True, godown=config["godown"], reference=order.order_number,
                 narration="Against {}".format(order.order_number),
                 order_number=order.order_number if linked else None,
@@ -177,7 +186,8 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
     from .purchasing import get_purchase_order
 
     order = get_purchase_order(session, row.entity_id)
-    client.ensure_ledger(order.supplier.name, config["supplier_group"], order.supplier.phone, order.supplier.email)
+    supplier_ledger = ledger_name(order.supplier)
+    client.ensure_ledger(supplier_ledger, config["supplier_group"], order.supplier.phone, order.supplier.email)
     for item in order.items:
         client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
     on = _local_day(order.ordered_at or order.created_at)
@@ -188,7 +198,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
     ]
     due = order.expected_delivery_date.date() if order.expected_delivery_date else on
     result = client.create_voucher(
-        config["purchase_order_type"], on, order.supplier.name, config["purchase_ledger"], lines,
+        config["purchase_order_type"], on, supplier_ledger, config["purchase_ledger"], lines,
         party_is_debit=False, godown=config["godown"], number=order.po_number,
         reference=order.po_number, narration=order.notes, order_number=order.po_number, order_due=due,
     )

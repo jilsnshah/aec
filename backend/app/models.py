@@ -34,6 +34,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -191,6 +192,11 @@ class Customer(Base, TimestampMixin):
     price_list_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="SET NULL", name="fk_customers_price_list"), nullable=True
     )
+    #: Tax identity and the ledger this party is posted to in Tally (kept
+    #: once set, so renaming here never creates a second ledger there).
+    gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, index=True)
+    pan: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    tally_ledger_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     orders: Mapped[List["SalesOrder"]] = relationship(back_populates="customer")
 
@@ -216,6 +222,12 @@ class SalesOrder(Base, TimestampMixin):
         nullable=False,
         default=OrderStatus.PENDING,
         index=True,
+    )
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("addresses.id", ondelete="SET NULL"), nullable=True
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -552,6 +564,12 @@ class CustomerEnquiry(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    delivery_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("addresses.id", ondelete="SET NULL"), nullable=True
+    )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[EnquiryStatus] = mapped_column(
         SAEnum(EnquiryStatus, native_enum=False, length=16, name="enquiry_status"),
@@ -751,6 +769,11 @@ class Supplier(Base, TimestampMixin):
     code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contact_person: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: Tax identity and the ledger this party is posted to in Tally (kept
+    #: once set, so renaming here never creates a second ledger there).
+    gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, index=True)
+    pan: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    tally_ledger_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1571,3 +1594,142 @@ class PriceListItem(Base):
 
     price_list: Mapped["PriceList"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
+
+
+class PhoneCall(Base):
+    """One phone call handled by the AI receptionist: who called, how long,
+    what was said, and what came of it."""
+
+    __tablename__ = "phone_calls"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider_call_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, default="in")
+    from_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    to_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_progress")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    transcript: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    actions: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# Party details: contacts, phone numbers and emails, addresses and sites
+# ---------------------------------------------------------------------------
+# Each belongs to exactly one customer or one supplier. The customer's and
+# supplier's own phone, email and address columns mirror the primary entries,
+# for screens and integrations that show a single value.
+
+_ONE_PARTY = "(customer_id IS NOT NULL) <> (supplier_id IS NOT NULL)"
+
+
+class Contact(Base, TimestampMixin):
+    """A person at a customer or supplier: the owner, a site engineer, accounts."""
+
+    __tablename__ = "contacts"
+    __table_args__ = (CheckConstraint(_ONE_PARTY, name="ck_contacts_one_party"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class ContactPoint(Base, TimestampMixin):
+    """One phone number or email address of a party (optionally of one of its
+    contacts). A number or address belongs to one party only, so WhatsApp,
+    email and phone calls always resolve to the right customer or supplier."""
+
+    __tablename__ = "contact_points"
+    __table_args__ = (
+        CheckConstraint(_ONE_PARTY, name="ck_contact_points_one_party"),
+        CheckConstraint("kind IN ('phone', 'email')", name="ck_contact_points_kind"),
+        Index("uq_contact_points_active_value", "kind", "normalized", unique=True, postgresql_where=text("is_active")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Phone: the last 10 digits. Email: lower case. Used for matching.
+    normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    label: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_whatsapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class Address(Base, TimestampMixin):
+    """A billing address, office, warehouse or delivery site of a party."""
+
+    __tablename__ = "addresses"
+    __table_args__ = (
+        CheckConstraint(_ONE_PARTY, name="ck_addresses_one_party"),
+        CheckConstraint("kind IN ('billing', 'site', 'office', 'warehouse')", name="ck_addresses_kind"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(12), nullable=False, default="site")
+    label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    line: Mapped[str] = mapped_column(Text, nullable=False)
+    city: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    pincode: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    map_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ProductAlias(Base, TimestampMixin):
+    """Another name a product goes by: what customers call it ("8mm sariya"),
+    a barcode, or a supplier's item code. Used to match messages, calls and
+    scanned codes to the one product."""
+
+    __tablename__ = "product_aliases"
+    __table_args__ = (
+        CheckConstraint("kind IN ('alias', 'barcode', 'supplier_code')", name="ck_product_aliases_kind"),
+        UniqueConstraint("kind", "normalized", "supplier_id", name="uq_product_aliases_value"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="alias")
+    value: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True)
+
+
+class ProductUnit(Base, TimestampMixin):
+    """Another unit a product is counted in, as a multiple of its base unit:
+    1 tonne = 20 bags, 1 bundle = 10 pieces."""
+
+    __tablename__ = "product_units"
+    __table_args__ = (
+        CheckConstraint("factor > 0", name="ck_product_units_factor"),
+        UniqueConstraint("product_id", "name", name="uq_product_units_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: How many base units one of this unit holds.
+    factor: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)

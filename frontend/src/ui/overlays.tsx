@@ -178,12 +178,12 @@ export function Tabs({
   const [group] = useState(() => Math.random().toString(36).slice(2))
   return (
     <RadixTabs.Root value={value} onValueChange={onChange} className={cn('flex min-h-0 flex-col', className)}>
-      <RadixTabs.List className="flex shrink-0 gap-1 border-b border-white/7 px-4">
+      <RadixTabs.List className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/7 px-4 [scrollbar-width:none]">
         {tabs.map((tab) => (
           <RadixTabs.Trigger
             key={tab.value}
             value={tab.value}
-            className="relative flex h-10 items-center gap-1.5 px-2.5 text-[13px] font-medium text-fg-3 transition-colors outline-none hover:text-fg data-[state=active]:text-fg"
+            className="relative flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-fg-3 transition-colors outline-none hover:text-fg data-[state=active]:text-fg"
           >
             {tab.label}
             {tab.count !== undefined ? <span className="num rounded-full bg-white/7 px-1.5 text-[11px] text-fg-2">{tab.count}</span> : null}

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import { useLocation } from 'react-router-dom'
 import {
@@ -119,24 +119,27 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
 
 /** The inspector's top: what the record is, its state and what can be done. */
 export function InspectorHeader({ eyebrow, title, badges, actions, meta }: { eyebrow?: ReactNode; title: ReactNode; badges?: ReactNode; actions?: ReactNode; meta?: ReactNode }) {
+  // A name too long to fit beside the actions even at the smallest size takes
+  // the whole row, and the actions move below it.
+  const [crowded, setCrowded] = useState(false)
+  const key = typeof title === 'string' ? title : String((title as { key?: string } | null)?.key ?? '')
+  useLayoutEffect(() => setCrowded(false), [key])
   return (
     <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-7 pt-6 pb-5 max-md:px-4">
       <HeaderArt seed={String(title).length % 7} />
-            <div className="relative flex items-start gap-4 max-md:flex-col max-md:gap-3">
+            <div className="relative flex flex-wrap items-start gap-4 max-md:gap-3">
         <span className="max-md:hidden">
           <ModuleTile size={52} />
         </span>
-        <div className="min-w-0 flex-1">
+        <div className={cn('min-w-[240px] flex-1', crowded && 'basis-[calc(100%-68px)] max-md:basis-full')}>
           {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className="text-[24px] font-semibold tracking-[-0.025em]" data-selectable>
-              {title}
-            </h2>
-            {badges}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <FitTitle onCrowded={() => setCrowded(true)}>{title}</FitTitle>
+            {badges ? <div className="flex shrink-0 items-center gap-2">{badges}</div> : null}
           </div>
           {meta ? <div className="mt-1 text-[13px] text-fg-3">{meta}</div> : null}
         </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     </header>
   )
@@ -235,4 +238,44 @@ export function Section({ title, hint, actions, children, className }: { title?:
 
 export function useSelection(initial?: string) {
   return useState<string | undefined>(initial)
+}
+
+
+/** A record's name on one line: the font shrinks (24 → 14 px) until it fits
+ *  the space it has, re-measured when that space changes; only then "…". */
+export function FitTitle({ children, max = 24, min = 14, onCrowded }: { children: ReactNode; max?: number; min?: number; onCrowded?: () => void }) {
+  const ref = useRef<HTMLHeadingElement>(null)
+  const [size, setSize] = useState(max)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      el.classList.add('measuring')
+      let next = max
+      el.style.fontSize = `${next}px`
+      while (el.scrollWidth > el.clientWidth + 1 && next > min) {
+        next -= 1
+        el.style.fontSize = `${next}px`
+      }
+      const tight = el.scrollWidth > el.clientWidth + 1
+      el.classList.remove('measuring')
+      setSize(next)
+      if (tight) onCrowded?.()
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(el.parentElement ?? el)
+    return () => observer.disconnect()
+  }, [children, max, min]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <h2
+      ref={ref}
+      className="min-w-0 overflow-hidden font-semibold tracking-[-0.025em] text-ellipsis whitespace-nowrap [&>span]:min-w-0 [&_span]:whitespace-nowrap [&.measuring_*]:!overflow-visible"
+      style={{ fontSize: size, lineHeight: 1.25 }}
+      title={typeof children === 'string' ? children : undefined}
+      data-selectable
+    >
+      {children}
+    </h2>
+  )
 }

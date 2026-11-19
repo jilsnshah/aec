@@ -175,6 +175,8 @@ class CustomerCreate(BaseModel):
     notes: Optional[str] = None
     payment_terms_days: int = Field(default=0, ge=0, le=365, description="Days of credit on each delivery.")
     credit_limit: Optional[Decimal] = Field(default=None, ge=0, description="Most the customer may owe; empty for no limit.")
+    gstin: Optional[str] = Field(default=None, max_length=20)
+    pan: Optional[str] = Field(default=None, max_length=12)
 
 
 class CustomerUpdate(BaseModel):
@@ -187,6 +189,8 @@ class CustomerUpdate(BaseModel):
     payment_terms_days: Optional[int] = Field(default=None, ge=0, le=365)
     credit_limit: Optional[Decimal] = Field(default=None, ge=0)
     price_list_id: Optional[uuid.UUID] = None
+    gstin: Optional[str] = Field(default=None, max_length=20)
+    pan: Optional[str] = Field(default=None, max_length=12)
 
 
 class CustomerOut(ORMModel):
@@ -202,6 +206,9 @@ class CustomerOut(ORMModel):
     payment_terms_days: int = 0
     credit_limit: Optional[Decimal] = None
     price_list_id: Optional[uuid.UUID] = None
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    tally_ledger_name: Optional[str] = None
 
 
 class CustomerListRow(CustomerOut):
@@ -241,6 +248,8 @@ class OrderLineCreate(BaseModel):
 class OrderCreate(BaseModel):
     customer_id: uuid.UUID
     notes: Optional[str] = None
+    contact_id: Optional[uuid.UUID] = Field(default=None, description="The customer's contact who placed it.")
+    delivery_address_id: Optional[uuid.UUID] = Field(default=None, description="The customer's delivery site.")
     items: List[OrderLineCreate] = Field(min_length=1)
 
 
@@ -316,6 +325,8 @@ class OrderOut(ORMModel):
     id: uuid.UUID
     order_number: str
     customer_id: uuid.UUID
+    contact_id: Optional[uuid.UUID] = None
+    delivery_address_id: Optional[uuid.UUID] = None
     status: OrderStatus
     notes: Optional[str] = None
     created_at: datetime
@@ -365,6 +376,8 @@ class EnquiryLineCreate(BaseModel):
 class EnquiryCreate(BaseModel):
     customer_id: uuid.UUID
     notes: Optional[str] = None
+    contact_id: Optional[uuid.UUID] = Field(default=None, description="The customer's contact who placed it.")
+    delivery_address_id: Optional[uuid.UUID] = Field(default=None, description="The customer's delivery site.")
     items: List[EnquiryLineCreate] = Field(min_length=1)
 
 
@@ -373,6 +386,8 @@ class EnquiryUpdate(BaseModel):
 
     notes: Optional[str] = None
     items: Optional[List[EnquiryLineCreate]] = None
+    contact_id: Optional[uuid.UUID] = Field(default=None, description="The customer's contact who placed it.")
+    delivery_address_id: Optional[uuid.UUID] = Field(default=None, description="The customer's delivery site.")
 
 
 class MarkLostRequest(BaseModel):
@@ -398,6 +413,8 @@ class EnquiryOut(ORMModel):
     id: uuid.UUID
     enquiry_number: str
     customer_id: uuid.UUID
+    contact_id: Optional[uuid.UUID] = None
+    delivery_address_id: Optional[uuid.UUID] = None
     customer: CustomerRef
     notes: Optional[str] = None
     status: EnquiryStatus
@@ -645,6 +662,8 @@ class SupplierCreate(BaseModel):
     notes: Optional[str] = None
     payment_terms_days: int = Field(default=0, ge=0, le=365, description="Days of credit the supplier gives.")
     lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Typical days to deliver.")
+    gstin: Optional[str] = Field(default=None, max_length=20)
+    pan: Optional[str] = Field(default=None, max_length=12)
 
 
 class SupplierUpdate(BaseModel):
@@ -658,6 +677,8 @@ class SupplierUpdate(BaseModel):
     is_active: Optional[bool] = None
     payment_terms_days: Optional[int] = Field(default=None, ge=0, le=365)
     lead_time_days: Optional[int] = Field(default=None, ge=0, le=365)
+    gstin: Optional[str] = Field(default=None, max_length=20)
+    pan: Optional[str] = Field(default=None, max_length=12)
 
 
 class SupplierOut(ORMModel):
@@ -674,6 +695,9 @@ class SupplierOut(ORMModel):
     updated_at: datetime
     payment_terms_days: int = 0
     lead_time_days: Optional[int] = None
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    tally_ledger_name: Optional[str] = None
 
 
 class SupplierListRow(SupplierOut):

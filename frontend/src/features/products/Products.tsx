@@ -1,3 +1,4 @@
+import { ProductNamesTab } from '@/features/parties/ProductNames'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -383,6 +384,7 @@ function ProductInspector({ id }: { id: string }) {
         tabs={[
           { value: 'overview', label: 'Overview' },
           { value: 'prices', label: 'Prices' },
+          { value: 'names', label: 'Names & units' },
           { value: 'waiting', label: 'Waiting customers', count: waitingRows.length },
           { value: 'ledger', label: 'Movements', count: data.movements.length },
           { value: 'layers', label: 'Cost layers', count: data.cost_layers.length },
@@ -496,6 +498,9 @@ function ProductInspector({ id }: { id: string }) {
             </tbody>
           </table>
           <p className="px-[18px] py-3 text-[12px] text-fg-3">Deliveries use the oldest layer first, so cost of goods follows what was actually bought.</p>
+        </TabPanel>
+        <TabPanel value="names">
+          <ProductNamesTab id={id} name={data.name} />
         </TabPanel>
         <TabPanel value="prices">
           <PricesTab id={id} />

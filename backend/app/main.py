@@ -26,6 +26,7 @@ from .api import (
     integrations,
     inventory,
     orders,
+    parties,
     pricelists,
     products,
     purchasing,
@@ -121,6 +122,7 @@ signed_in = [Depends(require_user)]
 app.include_router(auth.router)
 app.include_router(integrations.webhooks)
 for router in (
+    parties.router,
     products.router,
     customers.router,
     enquiries.router,

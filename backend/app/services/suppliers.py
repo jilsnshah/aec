@@ -117,6 +117,12 @@ def supplier_stats(session: Session, supplier_ids: List[uuid.UUID]) -> Dict[uuid
     return stats
 
 
+def parties_search(kind, search):
+    from . import parties
+
+    return parties.search_condition(kind, search)
+
+
 def _supplier_filter(search: Optional[str], include_inactive: bool):
     stmt = select(Supplier)
     if not include_inactive:
@@ -130,6 +136,8 @@ def _supplier_filter(search: Optional[str], include_inactive: bool):
                 func.lower(func.coalesce(Supplier.contact_person, "")).like(pattern),
                 func.lower(func.coalesce(Supplier.phone, "")).like(pattern),
                 func.lower(func.coalesce(Supplier.email, "")).like(pattern),
+                func.lower(func.coalesce(Supplier.gstin, "")).like(pattern),
+                parties_search("supplier", search),
             )
         )
     return stmt
@@ -152,6 +160,10 @@ def create_supplier(session: Session, **fields: Any) -> Supplier:
             # The backend generates one when the user does not supply it.
             code = next_document_number(session, SUPPLIER_COUNTER, "SUP")
 
+        from . import parties
+
+        parties.require_unique(session, "supplier", [fields.get("phone")] if fields.get("phone") else [],
+                               [fields.get("email")] if fields.get("email") else [], fields.get("gstin"))
         supplier = Supplier(
             code=code,
             name=name,
@@ -164,6 +176,9 @@ def create_supplier(session: Session, **fields: Any) -> Supplier:
             lead_time_days=fields.get("lead_time_days"),
         )
         session.add(supplier)
+        session.flush()
+        parties.set_identity(session, "supplier", supplier.id, fields.get("gstin"), fields.get("pan"))
+        parties.sync_from_columns(session, "supplier", supplier, fields.get("phone"), fields.get("email"), fields.get("address"), fields.get("contact_person"))
         session.commit()
     except IntegrityError as exc:
         session.rollback()
@@ -197,9 +212,17 @@ def update_supplier(session: Session, supplier_id: uuid.UUID, changes: Dict[str,
                 raise ValidationError("Supplier name is required.")
             supplier.name = name
 
+        from . import parties
+
+        parties.require_unique(session, "supplier", [changes["phone"]] if changes.get("phone") else [],
+                               [changes["email"]] if changes.get("email") else [], changes.get("gstin"), exclude_id=supplier.id)
         for field in ("contact_person", "phone", "email", "address", "notes"):
             if field in changes:
                 setattr(supplier, field, changes[field] or None)
+        parties.sync_from_columns(session, "supplier", supplier,
+                                  *[(changes[f] or "") if f in changes else None for f in ("phone", "email", "address", "contact_person")])
+        if "gstin" in changes or "pan" in changes:
+            parties.set_identity(session, "supplier", supplier.id, changes.get("gstin", supplier.gstin), changes.get("pan", supplier.pan))
         if changes.get("payment_terms_days") is not None:
             supplier.payment_terms_days = int(changes["payment_terms_days"])
         if "lead_time_days" in changes:
