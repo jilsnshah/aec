@@ -309,6 +309,16 @@ def delete_group(session: Session, group_id: uuid.UUID) -> None:
     session.commit()
 
 
+def memberships(session: Session, customer_id: uuid.UUID) -> List[Dict[str, Any]]:
+    """Every group a customer is in or kept out of, and how (rule, manual, excluded)."""
+    rows = session.execute(
+        select(CustomerGroup, CustomerGroupMember.source).join(CustomerGroupMember, CustomerGroupMember.group_id == CustomerGroup.id)
+        .where(CustomerGroupMember.customer_id == customer_id).order_by(CustomerGroup.name)
+    ).all()
+    return [{"id": g.id, "name": g.name, "price_list_id": g.price_list_id, "price_list_name": g.price_list.name if g.price_list else None,
+             "source": source, "is_active": g.is_active} for g, source in rows]
+
+
 def groups_of(session: Session, customer_id: uuid.UUID) -> List[CustomerGroup]:
     """Active groups a customer belongs to (not kept out)."""
     return session.execute(

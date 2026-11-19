@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AuditPane, ControlsPane } from './ControlsPane'
-import { Check, Copy, FileText, History, Inbox, Mail, MessageCircle, RefreshCw, ShieldCheck, Sparkles, Wand2 } from 'lucide-react'
+import { CompanyPane } from './CompanyPane'
+import { ApprovalsPane, AutomationPane } from '@/features/automation/Automation'
+import { Building2, Check, CheckCheck, Copy, FileText, History, Inbox, Mail, Workflow, MessageCircle, RefreshCw, ShieldCheck, Sparkles, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -63,6 +65,14 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
         { key: 'poll_minutes', label: 'Check every (minutes)', kind: 'number' },
       ],
     },
+    {
+      title: 'Replies',
+      hint: 'When TAI may answer by email (Settings › Automation), replies go out through this server with the same address and password.',
+      fields: [
+        { key: 'smtp_host', label: 'SMTP server', placeholder: 'smtp.gmail.com' },
+        { key: 'smtp_port', label: 'Port', kind: 'number', hint: '465 for SSL, 587 for STARTTLS.' },
+      ],
+    },
   ],
   tally: [
     {
@@ -119,12 +129,15 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
   ],
 }
 
-type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'controls' | 'audit' | 'messages' | 'syncs' | 'assistant_log'
+type SectionKey = 'automation' | 'approvals' | 'company' | 'ai' | 'whatsapp' | 'email' | 'tally' | 'controls' | 'audit' | 'messages' | 'syncs' | 'assistant_log'
 const SECTIONS: { key: SectionKey; label: string; hint: string; icon: ReactNode; group: string }[] = [
   { key: 'ai', label: 'AI · Gemini', hint: 'Assistant and message reading', icon: <Sparkles size={16} />, group: 'Connections' },
   { key: 'whatsapp', label: 'WhatsApp', hint: 'Messages in, invoices out', icon: <MessageCircle size={16} />, group: 'Connections' },
   { key: 'email', label: 'Email', hint: 'Read a sales mailbox', icon: <Mail size={16} />, group: 'Connections' },
   { key: 'tally', label: 'Tally', hint: 'Vouchers and invoices', icon: <FileText size={16} />, group: 'Connections' },
+  { key: 'automation', label: 'Automation', hint: 'Sales and purchase pipelines', icon: <Workflow size={16} />, group: 'Business rules' },
+  { key: 'approvals', label: 'Approvals', hint: 'What the AI is waiting to send', icon: <CheckCheck size={16} />, group: 'Business rules' },
+  { key: 'company', label: 'Company knowledge', hint: 'What the AI knows about you', icon: <Building2 size={16} />, group: 'Business rules' },
   { key: 'controls', label: 'Order controls', hint: 'Credit, discount and margin holds', icon: <ShieldCheck size={16} />, group: 'Business rules' },
   { key: 'audit', label: 'Audit log', hint: 'Approvals, adjustments, returns', icon: <History size={16} />, group: 'Activity' },
   { key: 'messages', label: 'Received messages', hint: 'What came in, what AI did', icon: <Inbox size={16} />, group: 'Activity' },
@@ -137,30 +150,32 @@ export function Integrations() {
   const navigate = useNavigate()
   const current = (SECTIONS.find((item) => item.key === section)?.key ?? 'ai') as SectionKey
   const data = useQuery({ queryKey: ['integrations'], queryFn: api.integrations.get })
+  const wide = current === 'automation'
   const on: Partial<Record<SectionKey, boolean>> = data.data ? { ai: data.data.ai.enabled, whatsapp: data.data.whatsapp.enabled, email: data.data.email.enabled, tally: data.data.tally.enabled } : {}
 
   return (
     <div className="flex h-full min-h-0 gap-4 px-6 pt-1 pb-5 max-lg:flex-col max-md:gap-2 max-md:p-2">
-      <nav className="pane flex w-[290px] shrink-0 flex-col gap-5 overflow-y-auto p-3 max-lg:max-h-[220px] max-lg:w-full">
-        <div className="px-2 pt-1">
+      <nav className={cn('pane flex shrink-0 flex-col gap-5 overflow-y-auto p-3 max-lg:max-h-[220px] max-lg:w-full', wide ? 'w-[68px] [&_.nav-text]:hidden' : 'w-[290px]')}>
+        <div className="nav-text px-2 pt-1">
           <h1 className="text-[16px] font-semibold tracking-[-0.015em]">Integrations</h1>
           <p className="text-[12px] text-fg-3">Turn WhatsApp and email into enquiries; keep Tally in step.</p>
         </div>
         {['Connections', 'Business rules', 'Activity'].map((group) => (
           <div key={group}>
-            <div className="eyebrow px-2 pb-2">{group}</div>
+            <div className={cn('eyebrow px-2 pb-2', wide && 'invisible h-2 overflow-hidden p-0')}>{group}</div>
             {SECTIONS.filter((item) => item.group === group).map((item) => (
               <button
                 key={item.key}
                 onClick={() => navigate(`/integrations/${item.key}`)}
+                title={wide ? item.label : undefined}
                 className={cn('relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors', current === item.key ? 'bg-peri/[0.18]' : 'hover:bg-white/[0.035]')}
               >
                 <span className={cn('grid size-8 place-items-center rounded-full bg-peri/20', current === item.key ? 'text-sky' : 'text-fg-2')}>{item.icon}</span>
-                <span className="min-w-0 flex-1">
+                <span className="nav-text min-w-0 flex-1">
                   <span className="block text-[13px] font-medium">{item.label}</span>
                   <span className="block truncate text-[11.5px] text-fg-3">{item.hint}</span>
                 </span>
-                {item.key in on ? <span className={cn('size-2 rounded-full', on[item.key] ? 'bg-sky' : 'bg-white/15')} title={on[item.key] ? 'On' : 'Off'} /> : null}
+                {item.key in on && !wide ? <span className={cn('size-2 rounded-full', on[item.key] ? 'bg-sky' : 'bg-white/15')} title={on[item.key] ? 'On' : 'Off'} /> : null}
               </button>
             ))}
           </div>
@@ -173,6 +188,12 @@ export function Integrations() {
           <Empty title="Settings could not be loaded" />
         ) : current === 'ai' ? (
           <AiPane data={data.data} />
+        ) : current === 'automation' ? (
+          <AutomationPane />
+        ) : current === 'approvals' ? (
+          <ApprovalsPane />
+        ) : current === 'company' ? (
+          <CompanyPane data={data.data} />
         ) : current === 'controls' ? (
           <ControlsPane data={data.data} />
         ) : current === 'audit' ? (

@@ -1,7 +1,7 @@
 import { http } from './client'
 import type { PriceListItemRow } from './records'
 
-/** Smart customer groups and a customer's own pricing. */
+/** Customer groups (by hand and by rules) and a customer's own pricing. */
 
 export interface RuleField {
   key: string
@@ -52,7 +52,16 @@ export interface CustomerPricing {
   discount_percent: number | null
   price_list: { id: string; name: string; discount_percent: number } | null
   own_items: PriceListItemRow[]
-  groups: { id: string; name: string; price_list_id: string | null; price_list_name: string | null }[]
+  groups: Membership[]
+  kept_out: Membership[]
+}
+export interface Membership {
+  id: string
+  name: string
+  price_list_id: string | null
+  price_list_name: string | null
+  source: 'rule' | 'manual' | 'excluded'
+  is_active: boolean
 }
 
 export const groups = {

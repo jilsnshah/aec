@@ -449,6 +449,19 @@ def system_prompt(turn: Turn, mode: str) -> str:
         lines.append("Datasets available in this conversation:")
         for dataset in list(turn.datasets.values())[-15:]:
             lines.append("- " + outputs.describe(dataset))
+    try:
+        from ..database import SessionLocal
+        from ..services import integration_settings as settings_service
+
+        session = SessionLocal()
+        try:
+            knowledge = settings_service.company_knowledge(session)
+        finally:
+            session.close()
+        if knowledge:
+            lines.append("About the business (written by the owner):\n" + knowledge[:12000])
+    except Exception:  # knowledge is a help, never a reason to fail
+        pass
     if mode == "development":
         lines.append("(Development mode: scripted model.)")
     return "\n".join(lines)

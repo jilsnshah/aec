@@ -74,6 +74,17 @@ DECLARATIONS = [
         ),
     ),
     types.FunctionDeclaration(
+        name="prepare_order",
+        description="For a recognised caller who wants to order: prepare it at their prices and get the summary to read back. Then ask for a clear yes.",
+        parameters=types.Schema(type="OBJECT", properties={"items": types.Schema(type="ARRAY", items=types.Schema(type="OBJECT", properties={
+            "product_id": types.Schema(type="STRING"), "quantity": types.Schema(type="NUMBER")}, required=["product_id", "quantity"]))}, required=["items"]),
+    ),
+    types.FunctionDeclaration(
+        name="place_order",
+        description="Place the order the caller just confirmed with a clear yes to the summary you read back.",
+        parameters=types.Schema(type="OBJECT", properties={}),
+    ),
+    types.FunctionDeclaration(
         name="end_call",
         description="Hang up after saying goodbye, when the caller is done.",
         parameters=types.Schema(type="OBJECT", properties={}),
@@ -175,6 +186,54 @@ class CallTools:
         self.enquiry_id = enquiry.id
         return {"enquiry": enquiry.enquiry_number, "total": float(enquiry_service.enquiry_total(enquiry)),
                 "say": "Tell the caller the enquiry number and that the team will confirm price and delivery shortly."}
+
+    def _prepare_order(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..models import AgentDraft
+        from ..services import automation
+
+        if not automation.allowed(automation.step(session, "sales.confirm_order"), "pai"):
+            return {"error": "Orders are confirmed by the team: take an enquiry instead."}
+        if not self.customer_id:
+            return {"error": "Caller not recognised: take an enquiry instead."}
+        items = [{"product_id": str(i["product_id"]), "quantity": float(i["quantity"])} for i in args.get("items") or []]
+        resolved = {str(r["product_id"]): r for r in pricelists.resolve(session, self.customer_id, [{"product_id": i["product_id"], "quantity": str(i["quantity"])} for i in items])["lines"]}
+        total, said = 0.0, []
+        for item in items:
+            hit = resolved.get(item["product_id"])
+            if hit is None:
+                return {"error": "Unknown product."}
+            item["discount_percent"] = hit["discount_percent"]
+            product = session.get(Product, uuid.UUID(item["product_id"]))
+            total += hit["net_price"] * item["quantity"]
+            said.append("{:g} {} {} at {:,.0f} rupees".format(item["quantity"], product.unit_of_measure, product.name, hit["net_price"]))
+        session.add(AgentDraft(channel="call", sender=self.number or "", customer_id=self.customer_id, items=items, total=round(total, 2)))
+        session.commit()
+        return {"read_back": said, "total": round(total, 2), "say": "Read this back with the total, before GST, and ask for a clear yes."}
+
+    def _place_order(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from sqlalchemy import select
+
+        from ..models import AgentDraft
+        from ..services import automation, controls, notifications
+        from ..services import orders as order_service
+
+        draft = session.execute(select(AgentDraft).where(AgentDraft.sender == (self.number or ""), AgentDraft.channel == "call",
+                                                         AgentDraft.status == "awaiting_confirmation").order_by(AgentDraft.created_at.desc())).scalars().first()
+        if draft is None:
+            return {"error": "No order was read back yet."}
+        step = automation.step(session, "sales.confirm_order")
+        broken = automation.within_limits(step, {"order_value": float(draft.total), "customer": "known"}) if step.get("mode") == "limits" else None
+        gate = controls.evaluate(session, draft.customer_id, [{"product_id": i["product_id"], "quantity_ordered": i["quantity"], "discount_percent": i["discount_percent"]} for i in draft.items])
+        if step.get("mode") == "approval" or broken or gate["holds"]:
+            draft.status, draft.note = "held", "Needs a person: " + ("approval required by the flow" if step.get("mode") == "approval" else broken or "; ".join(h["text"] for h in gate["holds"]))
+            session.commit()
+            return {"held": True, "say": "Tell the caller the team will confirm the order shortly. Do not say it is placed."}
+        order = order_service.create_order(session, draft.customer_id, [{"product_id": i["product_id"], "quantity_ordered": str(i["quantity"]), "discount_percent": str(i["discount_percent"]), "unit_price": None} for i in draft.items],
+                                           notes="Placed by PAI after the caller confirmed on the phone.")
+        draft.status, draft.order_id = "placed", order.id
+        session.commit()
+        notifications.order_placed(order.id)
+        return {"placed": order.order_number, "say": "Tell them the order number in words."}
 
     def _end_call(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         self.hangup = True

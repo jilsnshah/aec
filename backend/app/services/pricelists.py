@@ -222,8 +222,8 @@ def customer_pricing(session: Session, customer_id: uuid.UUID) -> Dict[str, Any]
         "discount_percent": float(customer.discount_percent) if customer.discount_percent is not None else None,
         "price_list": {"id": assigned.id, "name": assigned.name, "discount_percent": float(assigned.discount_percent)} if assigned else None,
         "own_items": view(own)["items"] if own else [],
-        "groups": [{"id": g.id, "name": g.name, "price_list_id": g.price_list_id, "price_list_name": g.price_list.name if g.price_list else None}
-                   for g in group_service.groups_of(session, customer_id)],
+        "groups": [m for m in group_service.memberships(session, customer_id) if m["source"] != "excluded" and m["is_active"]],
+        "kept_out": [m for m in group_service.memberships(session, customer_id) if m["source"] == "excluded"],
     }
 
 

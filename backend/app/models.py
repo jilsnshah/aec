@@ -1791,3 +1791,60 @@ class CustomerGroupMember(Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(10), nullable=False, default="rule")
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AutomationFlow(Base):
+    """One automation pipeline (sales or purchase): its steps as nodes with
+    their settings, and the order they run in as edges. Edited in Settings ->
+    Automation; read by the agents at run time."""
+
+    __tablename__ = "automation_flows"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    flow: Mapped[dict] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    updated_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class OutboundMessage(Base):
+    """A message the agents (or people) sent, or want to send, to a customer
+    or supplier: a reply, a quote, an order summary. Held for approval when
+    the flow says so."""
+
+    __tablename__ = "outbound_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    to: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    subject: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    #: sent, failed, pending_approval, discarded
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="sent", index=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    author: Mapped[str] = mapped_column(String(32), nullable=False, default="tai")
+    inbound_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("inbound_messages.id", ondelete="SET NULL"), nullable=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="SET NULL"), nullable=True)
+    provider_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class AgentDraft(Base):
+    """An order an agent has read back to a customer, waiting for their yes."""
+
+    __tablename__ = "agent_drafts"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    sender: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="SET NULL"), nullable=True)
+    items: Mapped[list] = mapped_column(JSON, nullable=False)
+    total: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    #: awaiting_confirmation, placed, held, cancelled
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="awaiting_confirmation")
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="SET NULL"), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

@@ -21,7 +21,7 @@ const EXAMPLES: { name: string; rules: Rule[] }[] = [
   { name: 'Win back', rules: [{ field: 'days_since_last_order', op: '>=', value: 90 }, { field: 'orders_total', op: '>=', value: 3 }] },
 ]
 
-/** Customers grouped automatically by rules, each group with a price list. */
+/** Customer groups: picked by hand, by rules, or both; each can carry a price list. */
 export function CustomerGroups() {
   const list = useQuery({ queryKey: ['customer-groups'], queryFn: groups.list })
   const [selected, setSelected] = useState<string | 'new' | null>(null)
@@ -42,11 +42,12 @@ export function CustomerGroups() {
           actions={
             <>
               <PageGuide
-                title="Smart customer groups"
+                title="Customer groups"
                 points={[
-                  { icon: Wand2, text: 'Rules pick the members: orders and spend in the last year, years with you, days since last order, money overdue, segment, city.' },
+                  { icon: UserPlus, text: 'Pick customers by hand, let rules pick them, or both.' },
+                  { icon: Wand2, text: 'Rules can use: orders and spend in the last year, years with you, days since last order, money overdue, segment, city.' },
                   { icon: Tags, text: 'Link a price list to give the group its prices. A customer in several groups gets the best price for each product.' },
-                  { icon: UserPlus, text: 'Add a customer by hand or keep one out; rules never undo that.' },
+                  { icon: Ban, text: 'Add anyone by hand, or remove anyone the rules picked; rules never undo that.' },
                   { icon: RefreshCw, text: 'Members are recalculated once a day, or now with Recalculate.' },
                 ]}
               />
@@ -81,7 +82,7 @@ export function CustomerGroups() {
                   <Users size={12} className="text-fg-3" />
                 </div>
                 <div className="mt-0.5 truncate text-[12px] text-fg-3">
-                  {group.price_list_name ? `${group.price_list_name}` : 'No price list'} · {group.rules.length} rule{group.rules.length === 1 ? '' : 's'}
+                  {group.price_list_name ? `${group.price_list_name}` : 'No price list'} · {group.rules.length ? `${group.rules.length} rule${group.rules.length === 1 ? '' : 's'} + by hand` : 'by hand'}
                 </div>
               </ListRow>
             ))
@@ -114,12 +115,29 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
   const [name, setName] = useState(group?.name ?? template?.name ?? '')
   const [description, setDescription] = useState(group?.description ?? '')
   const [match, setMatch] = useState<'all' | 'any'>(group?.match ?? 'all')
-  const [rules, setRules] = useState<Rule[]>(group?.rules ?? template?.rules ?? [{ field: 'orders_12m', op: '>=', value: 3 }])
+  const [rules, setRules] = useState<Rule[]>(group?.rules ?? template?.rules ?? [])
+  const [byRules, setByRules] = useState(Boolean((group?.rules ?? template?.rules ?? []).length))
+  const [kept, setKept] = useState<Rule[]>([{ field: 'orders_12m', op: '>=', value: 3 }])
+  const [pending, setPending] = useState<string[]>([])
   const [listId, setListId] = useState(group?.price_list_id ?? '')
   const [active, setActive] = useState(group?.is_active ?? true)
   const [addId, setAddId] = useState('')
-  const body = { name, description: description || null, match, rules, price_list_id: listId || null, is_active: active }
-  const save = useAction(() => (group ? groups.update({ id: group.id, ...body }) : groups.create(body)), { success: 'Group saved', quiet: true })
+  const body = { name, description: description || null, match, rules: byRules ? rules : [], price_list_id: listId || null, is_active: active }
+  const save = useAction(
+    async () => {
+      if (group) return groups.update({ id: group.id, ...body })
+      let created = await groups.create(body)
+      for (const customerId of pending) created = await groups.setMember({ id: created.id, customerId, source: 'manual' })
+      return created
+    },
+    { success: 'Group saved', quiet: true },
+  )
+  const chooseRules = (on: boolean) => {
+    if (on === byRules) return
+    if (on) setRules(rules.length ? rules : kept)
+    else (setKept(rules.length ? rules : kept), setRules([]))
+    setByRules(on)
+  }
   const preview = useAction(() => groups.preview({ rules, match }), { quiet: true })
   const member = useAction(groups.setMember)
   const remove = useAction(async () => {
@@ -127,7 +145,16 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
   }, { success: 'Group deleted' })
   const fieldOf = (key: string) => fields.data?.fields.find((f) => f.key === key)
   const update = (index: number, patch: Partial<Rule>) => setRules(rules.map((r, i) => (i === index ? { ...r, ...patch } : r)))
+  const [filter, setFilter] = useState('')
   const members = group?.members ?? []
+  const names = Object.fromEntries(customers.map((c) => [c.id, c.name]))
+  const inGroup = group ? members.filter((m) => m.source !== 'excluded') : pending.map((id) => ({ customer_id: id, name: names[id] ?? 'Customer', source: 'manual' as const }))
+  const keptOut = members.filter((m) => m.source === 'excluded')
+  const add = () => {
+    if (!addId) return
+    if (group) member.mutate({ id: group.id, customerId: addId, source: 'manual' }, { onSuccess: () => setAddId('') })
+    else (setPending([...pending, addId]), setAddId(''))
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/7 px-7 py-5 max-md:px-4">
@@ -143,9 +170,11 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
             Delete
           </Button>
         ) : null}
-        <Button icon={<Eye size={14} />} busy={preview.isPending} onClick={() => preview.mutate(undefined)}>
-          Preview
-        </Button>
+        {byRules ? (
+          <Button icon={<Eye size={14} />} busy={preview.isPending} onClick={() => preview.mutate(undefined)}>
+            Preview
+          </Button>
+        ) : null}
         <Button kind="primary" busy={save.isPending} disabled={!name.trim()} onClick={() => save.mutate(undefined, { onSuccess: onSaved })}>
           Save
         </Button>
@@ -156,7 +185,7 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
           <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
             <Stat strong icon={Users} label="Members" value={group.member_count} hint={group.last_computed_at ? `updated ${fmtAgo(group.last_computed_at)}` : 'not calculated'} />
             <Stat icon={Tags} label="Price list" value={group.price_list_name ?? 'None'} hint={group.price_list_discount ? `${group.price_list_discount}% off everything` : 'linked prices'} />
-            <Stat icon={Wand2} label="Rules" value={group.rules.length} hint={group.match === 'all' ? 'all must match' : 'any can match'} />
+            <Stat icon={Wand2} label="Chosen" value={group.rules.length ? `${group.rules.length} rule${group.rules.length === 1 ? '' : 's'}` : 'By hand'} hint={group.rules.length ? (group.match === 'all' ? 'all must match, plus by hand' : 'any can match, plus by hand') : 'you add each customer'} />
           </div>
         ) : null}
         <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
@@ -181,6 +210,21 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
             <input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Who this is for" />
           </label>
         </div>
+        <section className="grid grid-cols-2 gap-2 max-md:grid-cols-1" aria-label="How members are chosen">
+          {[
+            { on: false, icon: UserPlus, title: 'By hand', body: 'You add and remove each customer.' },
+            { on: true, icon: Wand2, title: 'By rules, plus by hand', body: 'Rules keep it filled; you can still add anyone or remove anyone.' },
+          ].map((choice) => (
+            <button key={choice.title} onClick={() => chooseRules(choice.on)} className={cn('flex items-start gap-3 rounded-2xl p-3.5 text-left transition', byRules === choice.on ? 'brand-fill' : 'card')}>
+              <choice.icon size={17} className="mt-0.5 shrink-0" />
+              <span>
+                <span className="block text-[13.5px] font-semibold">{choice.title}</span>
+                <span className={cn('block text-[12px]', byRules === choice.on ? 'opacity-75' : 'text-fg-3')}>{choice.body}</span>
+              </span>
+            </button>
+          ))}
+        </section>
+        {byRules ? (
         <section className="card p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="icon-disc size-7">
@@ -243,6 +287,7 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
             </Button>
           </div>
         </section>
+        ) : null}
         {preview.error ? <Notice tone="bad">{errorText(preview.error)}</Notice> : null}
         {preview.data ? (
           <section className="card overflow-hidden">
@@ -283,45 +328,74 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
             </div>
           </section>
         ) : null}
-        {group ? (
-          <section className="card p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="icon-disc size-7">
-                <Crown size={14} />
-              </span>
-              <span className="flex-1 text-[13.5px] font-semibold">Members</span>
-              <div className="w-[260px] max-md:w-full">
-                <Picker value={addId} onChange={setAddId} placeholder="Add a customer by hand…" options={customers.filter((c) => c.is_active).map((c) => ({ value: c.id, label: c.name }))} />
-              </div>
-              <Button small icon={<UserPlus size={13} />} disabled={!addId} onClick={() => member.mutate({ id: group.id, customerId: addId, source: 'manual' }, { onSuccess: () => setAddId('') })}>
-                Add
-              </Button>
+        <section className="card p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="icon-disc size-7">
+              <Crown size={14} />
+            </span>
+            <span className="flex-1 text-[13.5px] font-semibold">
+              Members <span className="font-normal text-fg-3">· {inGroup.length}</span>
+            </span>
+            <div className="w-[280px] max-md:w-full">
+              <Picker
+                value={addId}
+                onChange={setAddId}
+                placeholder="Add any customer…"
+                options={customers.filter((c) => c.is_active && !inGroup.some((m) => m.customer_id === c.id)).map((c) => ({ value: c.id, label: c.name }))}
+              />
             </div>
-            <div className="mt-3 divide-y divide-white/6">
-              {members.length ? (
-                members.map((m) => (
-                  <div key={m.customer_id} className={cn('flex items-center gap-2 py-2 text-[13px]', m.source === 'excluded' && 'opacity-60')}>
+            <Button small kind="primary" icon={<UserPlus size={13} />} disabled={!addId} busy={member.isPending} onClick={add}>
+              Add
+            </Button>
+          </div>
+          {inGroup.length > 8 ? <input className="field field-sm mt-3" placeholder="Find a member" value={filter} onChange={(e) => setFilter(e.target.value)} /> : null}
+          <div className="mt-2 divide-y divide-white/6">
+            {inGroup.length ? (
+              inGroup
+                .filter((m) => !filter || m.name.toLowerCase().includes(filter.toLowerCase()))
+                .map((m) => (
+                  <div key={m.customer_id} className="flex items-center gap-2 py-2 text-[13px]">
                     <Link to={`/customers/${m.customer_id}`} className="min-w-0 flex-1 truncate font-medium hover:underline">
                       {m.name}
                     </Link>
-                    <Badge tone={m.source === 'manual' ? 'sky' : m.source === 'excluded' ? 'bad' : 'muted'}>{m.source === 'rule' ? 'by rules' : m.source === 'manual' ? 'added by hand' : 'kept out'}</Badge>
-                    {m.source === 'rule' ? (
-                      <Button small kind="ghost" icon={<Ban size={12} />} onClick={() => member.mutate({ id: group.id, customerId: m.customer_id, source: 'excluded' })}>
-                        Keep out
-                      </Button>
-                    ) : (
-                      <Button small kind="ghost" icon={<UserMinus size={12} />} onClick={() => member.mutate({ id: group.id, customerId: m.customer_id, source: null })}>
-                        Undo
-                      </Button>
-                    )}
+                    <Badge tone={m.source === 'manual' ? 'sky' : 'muted'}>{m.source === 'rule' ? 'matches the rules' : 'added by hand'}</Badge>
+                    <Button
+                      small
+                      kind="ghost"
+                      icon={<UserMinus size={12} />}
+                      title={m.source === 'rule' ? 'Remove and keep out, even though the rules match' : 'Remove from the group'}
+                      onClick={() => (group ? member.mutate({ id: group.id, customerId: m.customer_id, source: m.source === 'rule' ? 'excluded' : null }) : setPending(pending.filter((id) => id !== m.customer_id)))}
+                    >
+                      Remove
+                    </Button>
                   </div>
                 ))
-              ) : (
-                <p className="py-2 text-[12.5px] text-fg-3">Nobody matches yet.</p>
-              )}
+            ) : (
+              <p className="py-2 text-[12.5px] text-fg-3">{byRules ? 'Nobody matches the rules yet. Add customers by hand above.' : 'No one yet. Add customers above.'}</p>
+            )}
+          </div>
+          {keptOut.length ? (
+            <div className="mt-3 rounded-xl bg-white/[0.03] p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-fg-2">
+                <Ban size={12} /> Removed by hand · rules will not add them back
+              </div>
+              {keptOut.map((m) => (
+                <div key={m.customer_id} className="flex items-center gap-2 py-1 text-[13px]">
+                  <Link to={`/customers/${m.customer_id}`} className="min-w-0 flex-1 truncate text-fg-2 hover:underline">
+                    {m.name}
+                  </Link>
+                  <Button small kind="ghost" icon={<UserPlus size={12} />} onClick={() => member.mutate({ id: group!.id, customerId: m.customer_id, source: null })}>
+                    Let back in
+                  </Button>
+                  <Button small kind="ghost" onClick={() => member.mutate({ id: group!.id, customerId: m.customer_id, source: 'manual' })}>
+                    Add by hand
+                  </Button>
+                </div>
+              ))}
             </div>
-          </section>
-        ) : null}
+          ) : null}
+          {!group && pending.length ? <p className="mt-2 text-[11.5px] text-fg-3">They join when you save the group.</p> : null}
+        </section>
       </div>
     </div>
   )

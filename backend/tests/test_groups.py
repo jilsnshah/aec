@@ -28,6 +28,16 @@ def test_groups_fill_by_rules_and_hand(client, db, make_product, make_customer, 
     assert after["member_count"] == 1 and {m["source"] for m in after["members"]} == {"manual", "excluded"}
     assert client.post("/api/customer-groups/recalculate").json()["groups"] == 1
     assert client.get("/api/customer-groups/{}".format(gid)).json()["member_count"] == 1
+    pricing = client.get("/api/customers/{}/pricing".format(big.id)).json()
+    assert pricing["groups"] == [] and [g["name"] for g in pricing["kept_out"]] == ["Regular builders"]
+    assert client.get("/api/customers/{}/pricing".format(small.id)).json()["groups"][0]["source"] == "manual"
+    # A group with no rules is picked by hand only.
+    hand = client.post("/api/customer-groups", json={"name": "Site partners", "rules": []}).json()
+    assert hand["member_count"] == 0
+    hand = client.put("/api/customer-groups/{}/members/{}".format(hand["id"], big.id), json={"source": "manual"}).json()
+    assert hand["member_count"] == 1
+    assert client.post("/api/customer-groups/recalculate").json()["groups"] == 2
+    assert client.get("/api/customer-groups/{}".format(hand["id"])).json()["member_count"] == 1
     bad = client.post("/api/customer-groups/preview", json={"rules": [{"field": "magic", "op": ">=", "value": 1}]})
     assert bad.status_code == 422
 

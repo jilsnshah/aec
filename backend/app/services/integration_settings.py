@@ -107,6 +107,15 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             # go straight through; money, stock and cancellations still wait.
             "change_policy": "confirm_all",
             "temperature": 0.2,
+            # What the agents know about the business, written by the owner.
+            "company_profile": "",
+            "company_hours": "",
+            "company_delivery": "",
+            "company_payment": "",
+            "company_policies": "",
+            "agent_name": "Asha",
+            # TAI/PAI reply in this tone; English, Hindi or Gujarati follow the customer.
+            "agent_tone": "warm and brief",
         },
         "secrets": ["api_key"],
     },
@@ -166,6 +175,9 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "config": {
             "imap_host": "",
             "imap_port": 993,
+            # For replies: the same mailbox's outgoing server.
+            "smtp_host": "",
+            "smtp_port": 587,
             "username": "",
             "folder": "INBOX",
             "poll_minutes": 5,
@@ -317,6 +329,9 @@ def _validate_ai(config: Dict[str, Any]) -> None:
     if not 0 <= temperature <= 1:
         raise ValidationError("Temperature must be between 0 and 1.")
     config["temperature"] = temperature
+    for key, limit in (("company_profile", 30000), ("company_hours", 2000), ("company_delivery", 4000), ("company_payment", 4000),
+                       ("company_policies", 8000), ("agent_name", 40), ("agent_tone", 120)):
+        config[key] = str(config.get(key) or "")[:limit]
 
 
 def _validate_config(name: str, config: Dict[str, Any]) -> None:
@@ -355,7 +370,7 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
     if name == WHATSAPP:
         config["country_code"] = "".join(ch for ch in str(config["country_code"]) if ch.isdigit())
     if name == EMAIL:
-        for key, low, high in (("imap_port", 1, 65535), ("poll_minutes", 1, 1440)):
+        for key, low, high in (("imap_port", 1, 65535), ("smtp_port", 1, 65535), ("poll_minutes", 1, 1440)):
             try:
                 number = int(config[key])
             except (TypeError, ValueError):
@@ -396,3 +411,15 @@ def _require_ready(name: str, config: Dict[str, Any], secrets: Dict[str, str]) -
             missing.append("the password")
     if missing:
         raise ValidationError("To switch this on, add {}.".format(", ".join(missing)))
+
+
+def company_knowledge(session: Session) -> str:
+    """Everything the owner wrote about the business, for the agents' prompts."""
+    config = get(session, AI).config
+    parts = []
+    for key, title in (("company_profile", "About the business"), ("company_hours", "Hours"), ("company_delivery", "Delivery"),
+                       ("company_payment", "Payment terms"), ("company_policies", "Policies")):
+        text = (config.get(key) or "").strip()
+        if text:
+            parts.append("## {}\n{}".format(title, text))
+    return "\n\n".join(parts)

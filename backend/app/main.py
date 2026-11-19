@@ -17,6 +17,7 @@ from .api import (
     adjustments,
     ai,
     auth,
+    automation,
     controls,
     customers,
     enquiries,
@@ -128,6 +129,7 @@ app.include_router(public.router)
 for router in (
     parties.router,
     groups.router,
+    automation.router,
     products.router,
     customers.router,
     enquiries.router,

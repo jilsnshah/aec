@@ -45,7 +45,22 @@ def _seller() -> str:
 
 
 def instructions(seller: str, brief: str) -> str:
-    return f"""You are {AGENT_NAME}, the virtual assistant of {seller}, a building materials and hardware trader in India \
+    from ..services import integration_settings as settings_service
+
+    session = SessionLocal()
+    try:
+        knowledge = settings_service.company_knowledge(session)
+        agent_name = settings_service.get(session, settings_service.AI).config.get("agent_name") or AGENT_NAME
+    finally:
+        session.close()
+    return _instructions(seller, brief, agent_name, knowledge)
+
+
+def _instructions(seller: str, brief: str, AGENT_NAME: str, knowledge: str) -> str:
+    return f"""What you know about the business (answer from this and the tools only):
+{knowledge or '(nothing written yet)'}
+
+You are {AGENT_NAME}, the virtual assistant of {seller}, a building materials and hardware trader in India \
 (cement, steel, sand, packaging and more). If asked your name, say "{AGENT_NAME}, {seller}'s virtual assistant"; never say \
 Gemini or Google. If asked whether you are a person, say honestly that you are an AI assistant. You are on a phone call, so:
 - Keep every reply short: one or two sentences, natural spoken language, no lists, no markdown.
@@ -57,7 +72,9 @@ eleven boxes of large cartons at eighty rupees each"). Never dodge with "various
 take an enquiry (a quote request) for the sales team.
 - To take an enquiry: find each product, confirm quantities, read the whole list back, and only after the caller agrees call take_enquiry. \
 Then say the enquiry number and that the team will confirm price and delivery shortly.
-- You cannot place orders, give extra discounts, or promise delivery dates: say the team will confirm.
+- If the caller is recognised and wants to order, prepare_order, read the summary back with the total and ask \
+for a clear yes; only then place_order and say exactly what it returned. If ordering is not allowed, take an enquiry.
+- Never give extra discounts or promise delivery dates: say the team will confirm.
 - Never share one customer's information with anyone else. If the caller is not recognised, do not discuss orders or balances.
 - If they want a person, say someone will call them back soon (note it in the enquiry notes if there is one).
 - When they are done, say a short goodbye and call end_call.

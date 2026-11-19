@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { BadgePercent, Plus, Tags, Trash2, UsersRound } from 'lucide-react'
+import { BadgePercent, Plus, Tags, Trash2, UserMinus, UserPlus, UsersRound } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { useAction } from '@/api/queries'
 import { groups } from '@/api/groups'
 import { cn } from '@/lib/cn'
 import { fmtMoney } from '@/lib/format'
-import { Button, Notice, Spinner } from '@/ui/core'
+import { Badge, Button, Notice, Spinner } from '@/ui/core'
 import { Picker } from '@/ui/pickers'
 import { productOption, useProducts } from '@/ui/lines'
 
@@ -19,6 +19,9 @@ const key = () => Math.random().toString(36).slice(2)
 export function CustomerPricing({ customerId }: { customerId: string }) {
   const data = useQuery({ queryKey: ['customer-pricing', customerId], queryFn: () => groups.pricing(customerId) })
   const products = useProducts()
+  const allGroups = useQuery({ queryKey: ['customer-groups'], queryFn: groups.list })
+  const member = useAction(groups.setMember, { success: 'Groups updated' })
+  const [groupId, setGroupId] = useState('')
   const [discount, setDiscount] = useState('')
   const [lines, setLines] = useState<Line[]>([])
   useEffect(() => {
@@ -130,22 +133,42 @@ export function CustomerPricing({ customerId }: { customerId: string }) {
           <div>
             Price list: {p?.price_list ? <Link to="/price-lists" className="font-semibold hover:underline">{p.price_list.name}</Link> : <span className="text-fg-3">none (set under Edit details)</span>}
           </div>
-          <div>
-            Groups:{' '}
-            {p?.groups.length ? (
-              p.groups.map((g, i) => (
-                <span key={g.id}>
-                  {i ? ', ' : ''}
-                  <Link to="/customer-groups" className="font-semibold hover:underline">
-                    {g.name}
-                  </Link>
-                  {g.price_list_name ? <span className="text-fg-3"> ({g.price_list_name})</span> : null}
-                </span>
-              ))
-            ) : (
-              <span className="text-fg-3">none</span>
-            )}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] font-semibold">Groups</span>
+          <span className="flex-1" />
+          <div className="w-[240px] max-md:w-full">
+            <Picker value={groupId} onChange={setGroupId} placeholder="Add to a group…" options={(allGroups.data?.items ?? []).filter((g) => !p?.groups.some((m) => m.id === g.id)).map((g) => ({ value: g.id, label: g.name }))} />
           </div>
+          <Button small icon={<UserPlus size={13} />} disabled={!groupId} onClick={() => member.mutate({ id: groupId, customerId, source: 'manual' }, { onSuccess: () => setGroupId('') })}>
+            Add
+          </Button>
+        </div>
+        <div className="mt-1 divide-y divide-white/6">
+          {p?.groups.length ? (
+            p.groups.map((g) => (
+              <div key={g.id} className="flex items-center gap-2 py-1.5 text-[13px]">
+                <Link to="/customer-groups" className="min-w-0 flex-1 truncate font-semibold hover:underline">
+                  {g.name}
+                  {g.price_list_name ? <span className="font-normal text-fg-3"> · {g.price_list_name}</span> : null}
+                </Link>
+                <Badge tone={g.source === 'manual' ? 'sky' : 'muted'}>{g.source === 'rule' ? 'by rules' : 'by hand'}</Badge>
+                <Button small kind="ghost" icon={<UserMinus size={12} />} onClick={() => member.mutate({ id: g.id, customerId, source: g.source === 'rule' ? 'excluded' : null })}>
+                  Remove
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="py-1.5 text-[12.5px] text-fg-3">Not in any group.</p>
+          )}
+          {p?.kept_out.map((g) => (
+            <div key={g.id} className="flex items-center gap-2 py-1.5 text-[13px] text-fg-3">
+              <span className="min-w-0 flex-1 truncate">{g.name} · removed by hand</span>
+              <Button small kind="ghost" onClick={() => member.mutate({ id: g.id, customerId, source: null })}>
+                Let back in
+              </Button>
+            </div>
+          ))}
         </div>
       </section>
       <div className="flex justify-end">

@@ -75,6 +75,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/e/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Enquiry Page */
+        get: operations["enquiry_page_api_public_e__token__get"];
+        put?: never;
+        /** Send Enquiry */
+        post: operations["send_enquiry_api_public_e__token__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/parties/{kind}/{party_id}/profile": {
         parameters: {
             query?: never;
@@ -388,6 +406,382 @@ export interface paths {
         get: operations["match_products_api_products_match_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rule Fields
+         * @description What group rules can test: orders, spend, years with us, days since last
+         *     order, money owed and overdue, segment, city, state.
+         */
+        get: operations["rule_fields_api_customer_groups_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Groups
+         * @description Customer groups with their rules, price list and member count.
+         */
+        get: operations["list_groups_api_customer_groups_get"];
+        put?: never;
+        /**
+         * Create Group
+         * @description Create a smart group: rules (all or any must match) and an optional price list. Members are calculated at once.
+         */
+        post: operations["create_group_api_customer_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description Who these rules would put in a group, without saving.
+         */
+        post: operations["preview_api_customer_groups_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups/recalculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recalculate All
+         * @description Recalculate every group's members now (also done once a day).
+         */
+        post: operations["recalculate_all_api_customer_groups_recalculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Group
+         * @description A group with its members (rule, manual or excluded).
+         */
+        get: operations["get_group_api_customer_groups__group_id__get"];
+        /** Update Group */
+        put: operations["update_group_api_customer_groups__group_id__put"];
+        post?: never;
+        /** Delete Group */
+        delete: operations["delete_group_api_customer_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customer-groups/{group_id}/members/{customer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Member
+         * @description Add a customer to a group by hand, keep one out, or undo.
+         */
+        put: operations["set_member_api_customer_groups__group_id__members__customer_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer Pricing
+         * @description A customer's flat discount, own product prices, price list and groups.
+         */
+        get: operations["customer_pricing_api_customers__customer_id__pricing_get"];
+        /**
+         * Set Customer Pricing
+         * @description Set a customer's flat discount and/or own product prices (fixed price or discount, from a quantity).
+         */
+        put: operations["set_customer_pricing_api_customers__customer_id__pricing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/enquiries/{enquiry_id}/apply-prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Prices
+         * @description Set every line of an open enquiry to the customer's best price (own
+         *     prices, discount, price list, groups); says what changed.
+         */
+        post: operations["apply_prices_api_enquiries__enquiry_id__apply_prices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/enquiry-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Enquiry Link
+         * @description The customer's own enquiry page link (path), if switched on.
+         */
+        get: operations["get_enquiry_link_api_customers__customer_id__enquiry_link_get"];
+        put?: never;
+        /**
+         * Set Enquiry Link
+         * @description Create a new link for the customer (the old one stops working), or switch it off (enabled false).
+         */
+        post: operations["set_enquiry_link_api_customers__customer_id__enquiry_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Library
+         * @description Every step type the flows can use: who can do it, the modes, limits,
+         *     AI, channels and timing it supports, and whether it is live today.
+         */
+        get: operations["library_api_automation_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/flows/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Flow
+         * @description The sales or purchase flow: steps (nodes with their settings) and order (edges).
+         */
+        get: operations["get_flow_api_automation_flows__key__get"];
+        /**
+         * Save Flow
+         * @description Save a flow. Steps that existing settings control (order confirmation,
+         *     invoice timing) update those settings too.
+         */
+        put: operations["save_flow_api_automation_flows__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/flows/{key}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Flow
+         * @description Back to the default flow.
+         */
+        post: operations["reset_flow_api_automation_flows__key__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Approvals
+         * @description Replies waiting to be sent and orders the agents held for a person.
+         */
+        get: operations["approvals_api_automation_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sent Messages
+         * @description Messages the agents and people sent (or tried to).
+         */
+        get: operations["sent_messages_api_automation_messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/messages/{message_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Message
+         * @description Send a held reply (optionally edited first), or retry a failed one.
+         */
+        post: operations["approve_message_api_automation_messages__message_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/messages/{message_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard Message */
+        post: operations["discard_message_api_automation_messages__message_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/drafts/{draft_id}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Place Draft
+         * @description Place an order the agent held for approval (order controls still apply).
+         */
+        post: operations["place_draft_api_automation_drafts__draft_id__place_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/drafts/{draft_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard Draft */
+        post: operations["discard_draft_api_automation_drafts__draft_id__discard_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -755,6 +1149,46 @@ export interface paths {
          *     cost they were delivered at.
          */
         post: operations["create_return_api_orders__order_id__returns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Confirmation Preview
+         * @description The order confirmation text, as it would go on WhatsApp.
+         */
+        get: operations["confirmation_preview_api_orders__order_id__confirmation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/orders/{order_id}/send-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Confirmation
+         * @description Send the order confirmation on WhatsApp now (needs the approved template).
+         */
+        post: operations["send_confirmation_api_orders__order_id__send_confirmation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2664,6 +3098,11 @@ export interface components {
          * @enum {string}
          */
         AllocationSource: "ORDER_CREATION" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "ADJUSTMENT";
+        /** ApproveIn */
+        ApproveIn: {
+            /** Body */
+            body?: string | null;
+        };
         /** Body_upload_file_api_ai_files_post */
         Body_upload_file_api_ai_files_post: {
             /**
@@ -3090,6 +3529,19 @@ export interface components {
             pan?: string | null;
             /** Tally Ledger Name */
             tally_ledger_name?: string | null;
+        };
+        /** CustomerPricingIn */
+        CustomerPricingIn: {
+            /**
+             * Discount Percent
+             * @description Flat discount for this customer; empty clears it.
+             */
+            discount_percent?: string | null;
+            /**
+             * Items
+             * @description This customer's own product prices (replaces them).
+             */
+            items?: components["schemas"]["OwnPriceItem"][] | null;
         };
         /** CustomerRef */
         CustomerRef: {
@@ -3523,6 +3975,19 @@ export interface components {
              */
             delivery_address_id?: string | null;
         };
+        /** FlowIn */
+        FlowIn: {
+            /** Nodes */
+            nodes: {
+                [key: string]: unknown;
+            }[];
+            /** Edges */
+            edges: {
+                [key: string]: unknown;
+            }[];
+            /** Name */
+            name?: string | null;
+        };
         /** FulfilmentLine */
         FulfilmentLine: {
             /**
@@ -3777,6 +4242,24 @@ export interface components {
             /** Is Over Receipt */
             is_over_receipt: boolean;
         };
+        /** GroupIn */
+        GroupIn: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Rules */
+            rules?: components["schemas"]["Rule"][] | null;
+            /**
+             * Match
+             * @description all or any
+             */
+            match?: string | null;
+            /** Price List Id */
+            price_list_id?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -3944,6 +4427,14 @@ export interface components {
             /** Daily Sales */
             daily_sales?: components["schemas"]["DailySalesRow"][];
         };
+        /** LinkIn */
+        LinkIn: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
         /** MarkLostRequest */
         MarkLostRequest: {
             /** Reason */
@@ -3955,6 +4446,14 @@ export interface components {
             username: string;
             /** Is Admin */
             is_admin: boolean;
+        };
+        /** MemberIn */
+        MemberIn: {
+            /**
+             * Source
+             * @description manual (add by hand), excluded (keep out), or null to undo.
+             */
+            source?: string | null;
         };
         /** MergeIn */
         MergeIn: {
@@ -4388,6 +4887,23 @@ export interface components {
             /** Pending Quantity */
             pending_quantity: string;
         };
+        /** OwnPriceItem */
+        OwnPriceItem: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Min Quantity
+             * @default 0
+             */
+            min_quantity: string | null;
+            /** Price */
+            price?: string | null;
+            /** Discount Percent */
+            discount_percent?: string | null;
+        };
         /** PageContext */
         PageContext: {
             /** Path */
@@ -4756,6 +5272,16 @@ export interface components {
             /** Value */
             value: unknown;
         };
+        /** PreviewIn */
+        PreviewIn: {
+            /** Rules */
+            rules: components["schemas"]["Rule"][];
+            /**
+             * Match
+             * @default all
+             */
+            match: string;
+        };
         /** PriceItemIn */
         PriceItemIn: {
             /**
@@ -5073,6 +5599,30 @@ export interface components {
              * @description Days from ordering to arrival.
              */
             lead_time_days?: number | null;
+        };
+        /** PublicEnquiryIn */
+        PublicEnquiryIn: {
+            /** Items */
+            items: components["schemas"]["PublicLine"][];
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Name
+             * @description Who is asking (for site staff).
+             */
+            name?: string | null;
+            /** Phone */
+            phone?: string | null;
+        };
+        /** PublicLine */
+        PublicLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Quantity */
+            quantity: number;
         };
         /** PurchaseOrderCreate */
         PurchaseOrderCreate: {
@@ -5640,6 +6190,18 @@ export interface components {
              * @default true
              */
             restock: boolean;
+        };
+        /** Rule */
+        Rule: {
+            /** Field */
+            field: string;
+            /**
+             * Op
+             * @description >=, <=, >, <, = or !=
+             */
+            op: string;
+            /** Value */
+            value: unknown;
         };
         /** SignIn */
         SignIn: {
@@ -6427,6 +6989,72 @@ export interface operations {
             };
         };
     };
+    enquiry_page_api_public_e__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_enquiry_api_public_e__token__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicEnquiryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_profile_api_parties__kind___party_id__profile_get: {
         parameters: {
             query?: {
@@ -6958,6 +7586,722 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rule_fields_api_customer_groups_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_groups_api_customer_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_group_api_customer_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_customer_groups_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalculate_all_api_customer_groups_recalculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_group_api_customer_groups__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_api_customer_groups__group_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_api_customer_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_member_api_customer_groups__group_id__members__customer_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customer_pricing_api_customers__customer_id__pricing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_customer_pricing_api_customers__customer_id__pricing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPricingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_prices_api_enquiries__enquiry_id__apply_prices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enquiry_link_api_customers__customer_id__enquiry_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_enquiry_link_api_customers__customer_id__enquiry_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    library_api_automation_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_flow_api_automation_flows__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_flow_api_automation_flows__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlowIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_flow_api_automation_flows__key__reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approvals_api_automation_approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    sent_messages_api_automation_messages_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_message_api_automation_messages__message_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApproveIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_message_api_automation_messages__message_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_draft_api_automation_drafts__draft_id__place_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_draft_api_automation_drafts__draft_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -7887,6 +9231,68 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirmation_preview_api_orders__order_id__confirmation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_confirmation_api_orders__order_id__send_confirmation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

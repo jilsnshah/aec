@@ -77,14 +77,26 @@ def process(message_id: uuid.UUID) -> None:
             _finish(session, message, "skipped", summary="AI is switched off, so nobody read this message.")
             return
 
+        from . import automation, parties
+
+        steps = {key: automation.step(session, key) for key in ("sales.trigger_incoming", "sales.understand", "sales.price", "sales.send_quote", "sales.confirm_order")}
+        if not automation.allowed(steps["sales.trigger_incoming"], "tai") or message.channel not in (steps["sales.trigger_incoming"].get("channels") or []):
+            _finish(session, message, "skipped", summary="TAI is not set to read {} messages (Settings -> Automation).".format(message.channel))
+            return
+        kind, party = (parties.find_by_email if message.channel == "email" else parties.find_by_phone)(session, message.sender)
         context = ai_agent.InboundContext(
             channel=message.channel,
             sender=message.sender,
             sender_name=message.sender_name,
             subject=message.subject,
+            inbound_id=message.id,
+            history=conversation(session, message),
+            steps=steps,
+            customer_id=party.id if kind == "customer" and party is not None and party.is_active else None,
         )
+        model = (steps["sales.understand"].get("ai") or {}).get("model") or ai.config["model"]
         try:
-            outcome = ai_agent.run(session, context, message.body, model_factory(ai.config["model"]))
+            outcome = ai_agent.run(session, context, message.body, model_factory(model))
         except Exception as exc:  # the agent, the model API or a tool failed
             logger.exception("The agent could not process %s message %s", message.channel, message.id)
             session.rollback()
@@ -182,3 +194,24 @@ def view(message: InboundMessage) -> Dict[str, Any]:
         "error": message.error,
         "processed_at": message.processed_at,
     }
+
+
+
+def conversation(session: Session, message: InboundMessage, days: int = 7) -> list:
+    """The last week of messages with this sender, both ways, oldest first."""
+    from datetime import timedelta
+
+    from ..models import OutboundMessage
+
+    since = message.received_at - timedelta(days=days)
+    earlier = session.execute(
+        select(InboundMessage).where(InboundMessage.sender == message.sender, InboundMessage.id != message.id,
+                                     InboundMessage.received_at >= since, InboundMessage.received_at <= message.received_at)
+    ).scalars().all()
+    replies = session.execute(
+        select(OutboundMessage).where(OutboundMessage.to == message.sender, OutboundMessage.created_at >= since,
+                                      OutboundMessage.status.in_(["sent", "pending_approval"]))
+    ).scalars().all()
+    turns = [{"who": "customer", "text": m.body, "at": m.received_at} for m in earlier] + [{"who": "you", "text": r.body, "at": r.created_at} for r in replies]
+    turns.sort(key=lambda t: t["at"])
+    return turns[-12:]
