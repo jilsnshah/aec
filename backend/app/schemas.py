@@ -1198,8 +1198,10 @@ class IntegrationsOut(BaseModel):
     tally: IntegrationOut
     #: Only models the server holds credentials for.
     models: List[AiModelOut]
-    #: Providers configured on the server, by name.
+    #: "Google Gemini" when credentials exist, else empty. Never the credentials.
     providers: List[str] = []
+    #: settings (a key saved in Settings), server (environment), or None.
+    ai_credential_source: Optional[str] = None
 
 
 class IntegrationUpdate(BaseModel):
@@ -1265,3 +1267,71 @@ class TallyTestOut(BaseModel):
 class TemplateStatusOut(BaseModel):
     template: str
     status: str
+
+
+# ---------------------------------------------------------------------------
+# Follow-ups
+# ---------------------------------------------------------------------------
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255, description="What has to be done.")
+    notes: Optional[str] = None
+    due_date: Optional[date_type] = Field(default=None, description="The day it is due (YYYY-MM-DD).")
+    priority: str = Field(default="NORMAL", pattern="^(LOW|NORMAL|HIGH)$")
+    assignee_id: Optional[uuid.UUID] = Field(default=None, description="The user who should do it.")
+    customer_id: Optional[uuid.UUID] = None
+    enquiry_id: Optional[uuid.UUID] = None
+    sales_order_id: Optional[uuid.UUID] = None
+    supplier_id: Optional[uuid.UUID] = None
+    purchase_order_id: Optional[uuid.UUID] = None
+
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    notes: Optional[str] = None
+    due_date: Optional[date_type] = None
+    priority: Optional[str] = Field(default=None, pattern="^(LOW|NORMAL|HIGH)$")
+    status: Optional[str] = Field(default=None, pattern="^(OPEN|DONE|CANCELLED)$")
+    assignee_id: Optional[uuid.UUID] = None
+    customer_id: Optional[uuid.UUID] = None
+    enquiry_id: Optional[uuid.UUID] = None
+    sales_order_id: Optional[uuid.UUID] = None
+    supplier_id: Optional[uuid.UUID] = None
+    purchase_order_id: Optional[uuid.UUID] = None
+
+
+class TaskOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    notes: Optional[str] = None
+    due_date: Optional[date_type] = None
+    overdue: bool = False
+    status: str
+    priority: str
+    source: str
+    assignee_id: Optional[uuid.UUID] = None
+    assignee: Optional[str] = None
+    customer_id: Optional[uuid.UUID] = None
+    customer_name: Optional[str] = None
+    enquiry_id: Optional[uuid.UUID] = None
+    enquiry_number: Optional[str] = None
+    sales_order_id: Optional[uuid.UUID] = None
+    order_number: Optional[str] = None
+    supplier_id: Optional[uuid.UUID] = None
+    supplier_name: Optional[str] = None
+    purchase_order_id: Optional[uuid.UUID] = None
+    po_number: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class TaskCounts(BaseModel):
+    open: int
+    overdue: int
+    due_today: int
+
+
+class UserRef(BaseModel):
+    id: uuid.UUID
+    username: str

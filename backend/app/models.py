@@ -27,6 +27,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -1099,3 +1100,195 @@ class User(Base):
         DateTime(timezone=True), default=utcnow, nullable=False
     )
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Follow-ups
+# ---------------------------------------------------------------------------
+
+
+class TaskStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    DONE = "DONE"
+    CANCELLED = "CANCELLED"
+
+
+class TaskPriority(str, enum.Enum):
+    LOW = "LOW"
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+
+
+class Task(Base, TimestampMixin):
+    """A follow-up someone has to do by a date: call a customer back about a
+    quote, chase a supplier, collect a payment. It may point at the record it
+    is about, so it shows up there and the record shows its open follow-ups."""
+
+    __tablename__ = "tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    status: Mapped[TaskStatus] = mapped_column(
+        SAEnum(TaskStatus, native_enum=False, length=16, name="task_status"), nullable=False, default=TaskStatus.OPEN, index=True
+    )
+    priority: Mapped[TaskPriority] = mapped_column(
+        SAEnum(TaskPriority, native_enum=False, length=16, name="task_priority"), nullable=False, default=TaskPriority.NORMAL
+    )
+    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    sales_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    #: manual, assistant, or automatic
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    assignee: Mapped[Optional["User"]] = relationship(foreign_keys=[assignee_id])
+    customer: Mapped[Optional["Customer"]] = relationship()
+    enquiry: Mapped[Optional["CustomerEnquiry"]] = relationship()
+    sales_order: Mapped[Optional["SalesOrder"]] = relationship()
+    supplier: Mapped[Optional["Supplier"]] = relationship()
+    purchase_order: Mapped[Optional["PurchaseOrder"]] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# The assistant
+# ---------------------------------------------------------------------------
+
+
+class AiConversation(Base):
+    """One chat with the assistant. Each user sees only their own."""
+
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+
+    messages: Mapped[List["AiMessage"]] = relationship(
+        back_populates="conversation", order_by="AiMessage.created_at", cascade="all, delete-orphan"
+    )
+
+
+class AiMessage(Base):
+    """A turn in a conversation. ``blocks_json`` holds the rich parts of an
+    assistant reply (tables, charts, files, record links, action cards), each
+    built from real tool results; ``content`` is the text."""
+
+    __tablename__ = "ai_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: user, assistant, or event (an action's outcome fed back to the agent)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    blocks_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Tool calls made while writing this reply: names, arguments, outcomes.
+    steps_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attachments_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    context_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    conversation: Mapped["AiConversation"] = relationship(back_populates="messages")
+
+
+class AiAction(Base):
+    """A change the assistant proposed. It runs only when the user confirms it,
+    through the same API route the screens use."""
+
+    __tablename__ = "ai_actions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    message_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_messages.id", ondelete="SET NULL"), nullable=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    tool: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments_json: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    #: write, financial, or destructive
+    risk: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: pending, running, done, failed, cancelled
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiFile(Base):
+    """A file in a conversation: one the user attached, or a report the
+    assistant generated."""
+
+    __tablename__ = "ai_files"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    #: upload or report
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AiToolCall(Base):
+    """Audit trail: every tool the assistant ran, for whom, and how it ended."""
+
+    __tablename__ = "ai_tool_calls"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    tool: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    route: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    arguments_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )

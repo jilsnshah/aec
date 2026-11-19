@@ -102,36 +102,35 @@ def whatsapp_payload(message_id="wamid.1", sender="919876543210", body="Need 40 
 EMAIL = {"imap_host": "imap.test", "imap_port": 993, "username": "sales@aec.test"}
 
 
-def test_the_ai_has_no_credentials_for_users_to_see_or_set(client):
+def test_the_ai_offers_gemini_models_and_reports_where_credentials_come_from(client):
     data = client.get("/api/integrations").json()
-    assert data["ai"]["credentials"] == {}
+    # The server's own Vertex credentials count; the key itself is never shown.
     assert "server-side-test-key" not in client.get("/api/integrations").text
-    # Only models the server has credentials for, cheapest Gemini first.
-    assert [model["id"] for model in data["models"]][0] == "gemini-3.1-flash-lite"
-    assert all(model["provider"] == "vertex" for model in data["models"])
-    assert data["providers"] == ["Google Gemini (Vertex AI)"]
-    assert data["ai"]["config"]["model"] == "gemini-3.1-flash-lite"
-    # A credential cannot be sent in either.
-    response = client.put("/api/integrations/ai", json={"credentials": {"api_key": "sk-x"}})
-    assert response.status_code == 422
+    assert all(model["provider"] == "gemini" for model in data["models"])
+    assert data["providers"] == ["Google Gemini"] and data["ai_credential_source"] == "server"
+    assert data["ai"]["config"]["model"] == "gemini-3.8-flash"
+    assert data["ai"]["credentials"]["api_key"] == {"set": False, "hint": None}
 
 
 def test_users_switch_the_ai_on_and_choose_a_model(client):
-    response = client.put("/api/integrations/ai", json={"enabled": True, "config": {"model": "gemini-3.8-flash"}})
+    response = client.put("/api/integrations/ai", json={"enabled": True, "config": {"model": "gemini-3.1-flash-lite"}})
     assert response.status_code == 200
-    assert response.json()["enabled"] is True and response.json()["config"]["model"] == "gemini-3.8-flash"
-    # A model whose provider has no credentials on the server is refused.
+    assert response.json()["enabled"] is True and response.json()["config"]["model"] == "gemini-3.1-flash-lite"
+    # Only Gemini models.
     response = client.put("/api/integrations/ai", json={"config": {"model": "claude-opus-5-5"}})
     assert response.status_code == 422
 
 
-def test_without_server_credentials_the_ai_cannot_be_switched_on(client, monkeypatch):
+def test_without_any_credentials_the_ai_cannot_be_switched_on(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "vertex_api_key", "")
     monkeypatch.setattr(get_settings(), "vertex_project", "")
-    assert client.get("/api/integrations").json()["models"] == []
+    assert client.get("/api/integrations").json()["providers"] == []
     response = client.put("/api/integrations/ai", json={"enabled": True})
     assert response.status_code == 422
-    assert "not set up on the server" in response.json()["message"]
+    assert "API key" in response.json()["message"]
+    # With a key saved in Settings it can.
+    response = client.put("/api/integrations/ai", json={"enabled": True, "credentials": {"api_key": "AIza-test-0000"}})
+    assert response.status_code == 200
 
 
 def test_an_integration_cannot_be_switched_on_half_configured(client):

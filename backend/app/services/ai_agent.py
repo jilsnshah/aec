@@ -1,6 +1,6 @@
 """The enquiry agent: turns a customer's message into a sales enquiry.
 
-A LangChain ReAct agent (``create_agent``) running on Claude. It reads one
+A LangChain ReAct agent (``create_agent``) running on Gemini. It reads one
 inbound message -- from WhatsApp or email -- decides whether it is a sales
 enquiry, and if it is, records it using tools. It never replies to the
 customer and never asks questions: a message it cannot act on is simply left
@@ -175,65 +175,24 @@ def build_tools(session: Session, context: InboundContext) -> list:
 
 
 class NotConfigured(Exception):
-    """The server has no credentials for this model's provider."""
+    """No Gemini credentials are configured."""
 
 
 def chat_model(model: str) -> BaseChatModel:
-    """The chat model, built from the server's own credentials.
-
-    Users choose the model; the credentials come from the environment and are
-    never stored in the database or shown in the app.
-    """
-    from ..config import get_settings
+    """The Gemini model for reading messages, with the credentials from
+    Settings (or the server's own Vertex AI credentials)."""
+    from ..ai import provider
+    from ..database import SessionLocal
     from . import integration_settings
 
-    info = integration_settings.model_info(model)
-    if info is None or not integration_settings.provider_configured(info["provider"]):
-        raise NotConfigured("No credentials are configured on the server for {}.".format(model))
-    settings = get_settings()
-    if info["provider"] == "vertex":
-        return _gemini(model, settings)
-    return _claude(model, settings.anthropic_api_key)
-
-
-def _gemini(model: str, settings) -> BaseChatModel:
-    """Gemini on Vertex AI: an express-mode key, or Application Default Credentials."""
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    if settings.vertex_api_key:
-        return ChatGoogleGenerativeAI(
-            model=model, vertexai=True, api_key=settings.vertex_api_key, max_retries=2, timeout=120
-        )
-    return ChatGoogleGenerativeAI(
-        model=model,
-        vertexai=True,
-        project=settings.vertex_project,
-        location=settings.vertex_location,
-        max_retries=2,
-        timeout=120,
-    )
-
-
-def _claude(model: str, api_key: str) -> BaseChatModel:
-    """Claude through LangChain. Thinking is adaptive by default on these models."""
-    from langchain_anthropic import ChatAnthropic
-
-    options: Dict[str, Any] = {}
-    if model in ("claude-opus-5-5", "claude-sonnet-5-5"):
-        # If a safety classifier declines a request, the API retries it on a
-        # suitable model instead of failing the message.
-        options = {
-            "betas": ["server-side-fallback-2026-07-01"],
-            "model_kwargs": {"fallbacks": "default"},
-        }
-    return ChatAnthropic(
-        model=model,
-        api_key=api_key,
-        max_tokens=8192,
-        timeout=120,
-        max_retries=2,
-        **options,
-    )
+    session = SessionLocal()
+    try:
+        creds = integration_settings.ai_credentials(session)
+    finally:
+        session.close()
+    if creds is None:
+        raise NotConfigured("Gemini is not connected. Add an API key in Settings.")
+    return provider.gemini(model, creds, temperature=0)
 
 
 def _message_text(message: InboundContext, body: str) -> str:

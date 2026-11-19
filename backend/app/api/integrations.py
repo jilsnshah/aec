@@ -5,7 +5,6 @@ import json
 import uuid
 from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy.orm import Session
@@ -13,7 +12,6 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..database import get_db
 from ..errors import NotFoundError, ValidationError
-from ..services import ai_agent
 from ..services import email_inbox
 from ..services import inbound as inbound_service
 from ..services import integration_settings as settings_service
@@ -29,16 +27,16 @@ webhooks = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 def _all(db: Session) -> dict:
     models = settings_service.available_models()
+    configured = settings_service.ai_credentials(db)
     return {
         "ai": settings_service.view(settings_service.get(db, settings_service.AI)),
         "whatsapp": settings_service.view(settings_service.get(db, settings_service.WHATSAPP)),
         "email": settings_service.view(settings_service.get(db, settings_service.EMAIL)),
         "tally": settings_service.view(settings_service.get(db, settings_service.TALLY)),
         "models": models,
-        # Which providers the server holds credentials for. Never the credentials.
-        "providers": sorted(
-            {settings_service.PROVIDER_LABELS[model["provider"]] for model in models}
-        ),
+        # Where Gemini credentials come from, if anywhere. Never the credentials.
+        "providers": [settings_service.PROVIDER_LABELS["gemini"]] if configured else [],
+        "ai_credential_source": configured["source"] if configured else None,
     }
 
 
@@ -59,30 +57,23 @@ def update_integration(name: str, payload: schemas.IntegrationUpdate, db: Sessio
 
 @router.post("/ai/test", response_model=schemas.AiTestOut)
 def test_ai(db: Session = Depends(get_db)):
-    """Send one tiny request with the chosen model and the server's credentials."""
+    """Send one tiny request to Gemini with the saved key and chosen model."""
+    from ..ai import provider
+
     row = settings_service.get(db, settings_service.AI)
     model = row.config["model"]
     try:
-        reply = ai_agent.test_connection(model)
-    except ai_agent.NotConfigured:
-        raise ValidationError("The AI is not set up on the server yet.")
-    except anthropic.AuthenticationError:
-        raise ValidationError("The API key was rejected. Check it and save it again.")
-    except anthropic.PermissionDeniedError:
-        raise ValidationError("This API key may not use {}.".format(model))
-    except anthropic.NotFoundError:
-        raise ValidationError("The model {} is not available to this API key.".format(model))
-    except anthropic.RateLimitError:
-        raise ValidationError("The AI provider is rate limiting this key. Try again in a minute.")
-    except anthropic.APIStatusError as exc:
-        raise ValidationError("The AI provider returned an error ({}).".format(exc.status_code))
-    except anthropic.APIConnectionError:
-        raise ValidationError("Could not reach the AI provider. Check the server's internet access.")
-    except Exception as exc:  # the Gemini client's errors
-        if type(exc).__module__.startswith(("google", "langchain_google")):
-            raise ValidationError("The AI provider refused the request: {}".format(str(exc)[:300]))
-        raise
-    return {"ok": True, "model": model, "reply": reply}
+        llm = provider.chat_model(db, model)
+        if isinstance(llm, provider.ScriptedModel):
+            raise provider.NotConfigured("development mode")
+        reply = llm.invoke("Reply with the single word OK.")
+    except provider.NotConfigured:
+        raise ValidationError("Gemini is not connected yet. Add an API key and save first.")
+    except Exception as exc:
+        raise ValidationError(provider.explain_error(exc))
+    text = reply.content if isinstance(reply.content, str) else "".join(
+        part.get("text", "") for part in reply.content if isinstance(part, dict))
+    return {"ok": True, "model": model, "reply": (text or "OK").strip()[:200]}
 
 
 # --- WhatsApp -------------------------------------------------------------------

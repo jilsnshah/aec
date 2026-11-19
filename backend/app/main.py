@@ -14,15 +14,18 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .api import (
+    ai,
     auth,
     customers,
     enquiries,
     fulfilment,
+    insights,
     integrations,
     inventory,
     orders,
     products,
     purchasing,
+    tasks,
 )
 from .config import get_settings
 from .api.auth import require_user
@@ -122,6 +125,9 @@ for router in (
     purchasing.receipts_router,
     fulfilment.router,
     integrations.router,
+    insights.router,
+    tasks.router,
+    ai.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

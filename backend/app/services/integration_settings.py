@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -30,34 +31,45 @@ TALLY = "tally"
 
 TAX_MODES = ("none", "cgst_sgst", "igst")
 
-#: Every model the enquiry agent knows how to run. Only those whose provider
-#: has credentials on the server are offered (see available_models).
+#: Gemini models offered in Settings. Any other Gemini model id can be typed
+#: in; when an API key is saved the list is refreshed from Google (see
+#: app.ai.provider.list_models).
 AI_MODELS: List[Dict[str, str]] = [
-    {"id": "gemini-3.1-flash-lite", "provider": "vertex", "label": "Gemini 3.1 Flash-Lite",
-     "hint": "Lowest cost. Read 14 of 14 test messages correctly."},
-    {"id": "gemini-3.5-flash-lite", "provider": "vertex", "label": "Gemini 3.5 Flash-Lite",
+    {"id": "gemini-3.1-flash-lite", "provider": "gemini", "label": "Gemini 3.1 Flash-Lite",
+     "hint": "Lowest cost. Fine for reading messages; light for analysis."},
+    {"id": "gemini-3.5-flash-lite", "provider": "gemini", "label": "Gemini 3.5 Flash-Lite",
      "hint": "Low cost, newer."},
-    {"id": "gemini-3.8-flash", "provider": "vertex", "label": "Gemini 3.8 Flash",
-     "hint": "More capable, higher cost."},
-    {"id": "claude-opus-5-5", "provider": "anthropic", "label": "Claude Opus 5.5", "hint": "Most capable."},
-    {"id": "claude-sonnet-5-5", "provider": "anthropic", "label": "Claude Sonnet 5.5", "hint": "Fast and capable."},
-    {"id": "claude-haiku-5-5", "provider": "anthropic", "label": "Claude Haiku 5.5", "hint": "Fast, low cost."},
+    {"id": "gemini-3.8-flash", "provider": "gemini", "label": "Gemini 3.8 Flash",
+     "hint": "Recommended for the assistant: better at analysis and multi-step work."},
 ]
-PROVIDER_LABELS = {"vertex": "Google Gemini (Vertex AI)", "anthropic": "Anthropic Claude"}
+PROVIDER_LABELS = {"gemini": "Google Gemini"}
+CHANGE_POLICIES = ("confirm_all", "confirm_significant")
+MODEL_PATTERN = re.compile(r"^(models/)?gemini[a-z0-9.\-]*$")
 
 
-def provider_configured(provider: str) -> bool:
+def ai_credentials(session: Optional[Session] = None) -> Optional[Dict[str, str]]:
+    """How to reach Gemini, or None. A key saved in Settings wins; otherwise the
+    server's own Vertex AI credentials (environment), if any."""
+    if session is not None:
+        row = session.get(IntegrationSetting, AI)
+        key = credentials(row).get("api_key") if row is not None else None
+        if key:
+            return {"mode": "api_key", "api_key": key, "source": "settings"}
     settings = get_settings()
-    if provider == "vertex":
-        return bool(settings.vertex_api_key or settings.vertex_project)
-    if provider == "anthropic":
-        return bool(settings.anthropic_api_key)
-    return False
+    if settings.vertex_api_key:
+        return {"mode": "vertex_key", "api_key": settings.vertex_api_key, "source": "server"}
+    if settings.vertex_project:
+        return {"mode": "vertex_adc", "project": settings.vertex_project,
+                "location": settings.vertex_location, "source": "server"}
+    return None
+
+
+def provider_configured(session: Optional[Session] = None) -> bool:
+    return ai_credentials(session) is not None
 
 
 def available_models() -> List[Dict[str, str]]:
-    """The models the server has credentials for, in preference order."""
-    return [model for model in AI_MODELS if provider_configured(model["provider"])]
+    return list(AI_MODELS)
 
 
 def model_info(model_id: str) -> Optional[Dict[str, str]]:
@@ -65,14 +77,24 @@ def model_info(model_id: str) -> Optional[Dict[str, str]]:
 
 
 def default_model() -> str:
-    models = available_models()
-    return models[0]["id"] if models else AI_MODELS[0]["id"]
+    return "gemini-3.8-flash"
 
 #: Per integration: default plain settings, and the names of its credentials.
 DEFINITIONS: Dict[str, Dict[str, Any]] = {
-    # The AI's credentials live on the server, not here: users only switch it
-    # on or off and choose a model.
-    AI: {"config": {"model": ""}, "secrets": []},
+    # "enabled" switches on reading WhatsApp and email into enquiries; the
+    # assistant is available whenever Gemini is reachable and "assistant" is on.
+    AI: {
+        "config": {
+            "model": "",
+            "assistant": True,
+            # confirm_all: every change waits for the user's OK.
+            # confirm_significant: routine edits (contacts, notes, follow-ups)
+            # go straight through; money, stock and cancellations still wait.
+            "change_policy": "confirm_all",
+            "temperature": 0.2,
+        },
+        "secrets": ["api_key"],
+    },
     WHATSAPP: {
         "config": {
             "phone_number_id": "",
@@ -259,11 +281,25 @@ def record_system(session: Session, name: str, **values: Any) -> None:
     session.commit()
 
 
+def _validate_ai(config: Dict[str, Any]) -> None:
+    model = str(config.get("model") or "").strip()
+    if model and not MODEL_PATTERN.match(model):
+        raise ValidationError("Choose a Gemini model, such as gemini-3.8-flash.")
+    config["model"] = model.replace("models/", "", 1)
+    if config.get("change_policy") not in CHANGE_POLICIES:
+        raise ValidationError("Choose when the assistant must ask before changing data.")
+    try:
+        temperature = float(config.get("temperature", 0.2))
+    except (TypeError, ValueError):
+        raise ValidationError("Temperature must be a number between 0 and 1.")
+    if not 0 <= temperature <= 1:
+        raise ValidationError("Temperature must be between 0 and 1.")
+    config["temperature"] = temperature
+
+
 def _validate_config(name: str, config: Dict[str, Any]) -> None:
-    if name == AI and config.get("model") and config["model"] not in {
-        model["id"] for model in available_models()
-    }:
-        raise ValidationError("Choose one of the listed models.")
+    if name == AI:
+        _validate_ai(config)
     for key, default in DEFINITIONS[name]["config"].items():
         if isinstance(default, bool) and not isinstance(config.get(key), bool):
             config[key] = str(config.get(key)).lower() in ("1", "true", "yes", "on")
@@ -298,11 +334,9 @@ def _require_ready(name: str, config: Dict[str, Any], secrets: Dict[str, str]) -
     """An integration can only be switched on with everything it needs."""
     missing: List[str] = []
     if name == AI:
-        model = model_info(config.get("model") or default_model())
-        if model is None or not provider_configured(model["provider"]):
-            raise ValidationError(
-                "The AI is not set up on the server yet. Ask the administrator to add its credentials."
-            )
+        settings = get_settings()
+        if not (secrets.get("api_key") or settings.vertex_api_key or settings.vertex_project):
+            raise ValidationError("Add a Gemini API key first.")
     if name == WHATSAPP:
         if not config["phone_number_id"]:
             missing.append("the phone number ID")
