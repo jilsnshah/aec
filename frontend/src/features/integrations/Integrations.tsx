@@ -1,0 +1,579 @@
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Bot, Check, Copy, FileText, Inbox, Mail, MessageCircle, RefreshCw, Wand2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { errorText } from '@/api/client'
+import { api } from '@/api/endpoints'
+import { useAction, useList } from '@/api/queries'
+import type { IntegrationOut, IntegrationsOut } from '@/api/types'
+import { useQuery } from '@tanstack/react-query'
+import { cn } from '@/lib/cn'
+import { fmtAgo, fmtDateTime } from '@/lib/format'
+import { Badge, Button, Empty, Field, Notice, Spinner, Toggle } from '@/ui/core'
+import { Segmented } from '@/ui/overlays'
+
+type FieldDef =
+  | { key: string; label: string; kind?: 'text' | 'number' | 'secret'; hint?: string; placeholder?: string; wide?: boolean }
+  | { key: string; label: string; kind: 'check'; hint?: string }
+  | { key: string; label: string; kind: 'select'; options: { value: string; label: string }[]; hint?: string }
+type Group = { title?: string; hint?: string; fields: FieldDef[] }
+
+const WEBHOOK = () => `${window.location.origin}/api/integrations/whatsapp/webhook`
+
+const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
+  whatsapp: [
+    {
+      title: 'Receive messages',
+      hint: "Meta's Cloud API sends each customer message here; AI reads it and opens an enquiry.",
+      fields: [
+        { key: 'phone_number_id', label: 'Phone number ID', hint: 'Meta for Developers › your app › WhatsApp › API Setup.' },
+        { key: 'business_account_id', label: 'WhatsApp Business Account ID' },
+        { key: 'verify_token', label: 'Verify token', hint: 'Any secret phrase. Paste the same one into Meta.' },
+        { key: 'app_secret', label: 'App secret', kind: 'secret', hint: 'When set, only requests signed by Meta are accepted.' },
+      ],
+    },
+    {
+      title: 'Send invoices',
+      hint: "Invoices from Tally go to the customer's WhatsApp as soon as Tally creates them.",
+      fields: [
+        { key: 'send_invoices', label: 'Send each invoice to the customer on WhatsApp', kind: 'check' },
+        { key: 'access_token', label: 'Access token', kind: 'secret', hint: 'A permanent system-user token with whatsapp_business_messaging.' },
+        { key: 'invoice_template', label: 'Invoice template name', placeholder: 'invoice_pdf', hint: 'A utility template with a document header.' },
+        { key: 'template_language', label: 'Template language', placeholder: 'en' },
+        { key: 'country_code', label: 'Default country code', placeholder: '91' },
+        { key: 'graph_version', label: 'Graph API version', placeholder: 'v23.0' },
+      ],
+    },
+  ],
+  email: [
+    {
+      title: 'Mailbox',
+      hint: 'Unread mail is read over IMAP and the enquiries in it are captured.',
+      fields: [
+        { key: 'imap_host', label: 'IMAP server', placeholder: 'imap.gmail.com' },
+        { key: 'imap_port', label: 'Port', kind: 'number', hint: '993 for IMAP over SSL.' },
+        { key: 'username', label: 'Email address', placeholder: 'sales@yourbusiness.com' },
+        { key: 'password', label: 'Password', kind: 'secret', hint: 'For Gmail and Outlook, use an app password.' },
+        { key: 'folder', label: 'Folder', placeholder: 'INBOX' },
+        { key: 'poll_minutes', label: 'Check every (minutes)', kind: 'number' },
+      ],
+    },
+  ],
+  tally: [
+    {
+      title: 'Connection',
+      hint: "TallyPrime's HTTP server: F1 › Settings › Connectivity › TallyPrime acts as Server (port 9000).",
+      fields: [
+        { key: 'server_url', label: 'Tally server address', placeholder: 'http://192.168.1.20:9000', wide: true },
+        { key: 'company', label: 'Company name', hint: 'Exactly as it appears in Tally.' },
+        { key: 'auth_token', label: 'Access token', kind: 'secret', hint: 'Only if a gateway in front of Tally asks for one.' },
+      ],
+    },
+    {
+      title: 'What to sync',
+      fields: [
+        { key: 'sync_sales_orders', label: 'Sales orders become Sales Order vouchers', kind: 'check' },
+        { key: 'create_invoices', label: 'Invoice each sales order in Tally (its number is used on the PDF)', kind: 'check' },
+        { key: 'sync_purchase_orders', label: 'Placed purchase orders become Purchase Order vouchers', kind: 'check' },
+      ],
+    },
+    {
+      title: 'Ledgers and voucher types',
+      hint: 'Must match the names in your Tally company. Parties and stock items are created if missing.',
+      fields: [
+        { key: 'sales_ledger', label: 'Sales ledger' },
+        { key: 'purchase_ledger', label: 'Purchase ledger' },
+        { key: 'customer_group', label: 'Customer group' },
+        { key: 'supplier_group', label: 'Supplier group' },
+        { key: 'godown', label: 'Godown' },
+        { key: 'sales_order_type', label: 'Sales order voucher type' },
+        { key: 'sales_invoice_type', label: 'Sales invoice voucher type' },
+        { key: 'purchase_order_type', label: 'Purchase order voucher type' },
+      ],
+    },
+    {
+      title: 'GST',
+      fields: [
+        { key: 'tax_mode', label: 'Tax on invoices', kind: 'select', options: [{ value: 'none', label: 'No tax' }, { value: 'cgst_sgst', label: 'CGST + SGST (within state)' }, { value: 'igst', label: 'IGST (other state)' }] },
+        { key: 'gst_rate', label: 'GST rate (%)', kind: 'number' },
+        { key: 'cgst_ledger', label: 'CGST ledger' },
+        { key: 'sgst_ledger', label: 'SGST ledger' },
+        { key: 'igst_ledger', label: 'IGST ledger' },
+      ],
+    },
+    {
+      title: 'Seller details on the invoice PDF',
+      fields: [
+        { key: 'seller_name', label: 'Business name' },
+        { key: 'seller_gstin', label: 'GSTIN' },
+        { key: 'seller_phone', label: 'Phone' },
+        { key: 'seller_address', label: 'Address', wide: true },
+      ],
+    },
+  ],
+}
+
+type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'messages' | 'syncs'
+const SECTIONS: { key: SectionKey; label: string; hint: string; icon: ReactNode; group: string }[] = [
+  { key: 'ai', label: 'AI', hint: 'Reads messages, opens enquiries', icon: <Bot size={16} />, group: 'Connections' },
+  { key: 'whatsapp', label: 'WhatsApp', hint: 'Messages in, invoices out', icon: <MessageCircle size={16} />, group: 'Connections' },
+  { key: 'email', label: 'Email', hint: 'Read a sales mailbox', icon: <Mail size={16} />, group: 'Connections' },
+  { key: 'tally', label: 'Tally', hint: 'Vouchers and invoices', icon: <FileText size={16} />, group: 'Connections' },
+  { key: 'messages', label: 'Received messages', hint: 'What came in, what AI did', icon: <Inbox size={16} />, group: 'Activity' },
+  { key: 'syncs', label: 'Tally sync log', hint: 'What went to Tally', icon: <RefreshCw size={16} />, group: 'Activity' },
+]
+
+export function Integrations() {
+  const { section } = useParams()
+  const navigate = useNavigate()
+  const current = (SECTIONS.find((item) => item.key === section)?.key ?? 'ai') as SectionKey
+  const data = useQuery({ queryKey: ['integrations'], queryFn: api.integrations.get })
+  const on: Partial<Record<SectionKey, boolean>> = data.data ? { ai: data.data.ai.enabled, whatsapp: data.data.whatsapp.enabled, email: data.data.email.enabled, tally: data.data.tally.enabled } : {}
+
+  return (
+    <div className="flex h-full min-h-0 gap-3 p-3 pl-0 max-lg:flex-col max-md:p-2">
+      <nav className="pane flex w-[290px] shrink-0 flex-col gap-5 overflow-y-auto p-3 max-lg:max-h-[220px] max-lg:w-full">
+        <div className="px-2 pt-1">
+          <h1 className="text-[16px] font-semibold tracking-[-0.015em]">Integrations</h1>
+          <p className="text-[12px] text-fg-3">Turn WhatsApp and email into enquiries; keep Tally in step.</p>
+        </div>
+        {['Connections', 'Activity'].map((group) => (
+          <div key={group}>
+            <div className="eyebrow px-2 pb-2">{group}</div>
+            {SECTIONS.filter((item) => item.group === group).map((item) => (
+              <button
+                key={item.key}
+                onClick={() => navigate(`/integrations/${item.key}`)}
+                className={cn('relative flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors', current === item.key ? 'bg-sky/[0.09] ring-1 ring-sky/20 ring-inset' : 'hover:bg-white/[0.035]')}
+              >
+                <span className={cn('grid size-8 place-items-center rounded-lg bg-ink-700 ring-1 ring-white/8', current === item.key ? 'text-sky' : 'text-fg-2')}>{item.icon}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium">{item.label}</span>
+                  <span className="block truncate text-[11.5px] text-fg-3">{item.hint}</span>
+                </span>
+                {item.key in on ? <span className={cn('size-2 rounded-full', on[item.key] ? 'bg-sky' : 'bg-white/15')} title={on[item.key] ? 'On' : 'Off'} /> : null}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <section className="pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" key={current}>
+        {data.isPending ? (
+          <Spinner />
+        ) : !data.data ? (
+          <Empty title="Settings could not be loaded" />
+        ) : current === 'ai' ? (
+          <AiPane data={data.data} />
+        ) : current === 'messages' ? (
+          <MessagesPane />
+        ) : current === 'syncs' ? (
+          <SyncsPane />
+        ) : (
+          <ConnectionPane data={data.data} name={current} />
+        )}
+      </section>
+    </div>
+  )
+}
+
+function PaneHeader({ icon, title, body, integration, onToggle, busy, extra }: { icon: ReactNode; title: string; body: string; integration?: IntegrationOut; onToggle?: (value: boolean) => void; busy?: boolean; extra?: ReactNode }) {
+  return (
+    <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-6 py-5">
+      <div className="pointer-events-none absolute -top-24 right-[-10%] h-48 w-[60%] rounded-full bg-sky/[0.07] blur-3xl" />
+      <div className="relative flex items-center gap-4">
+        <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-b from-ink-600 to-ink-700 text-sky ring-1 ring-white/10">{icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[18px] font-semibold tracking-[-0.02em]">{title}</h2>
+            {integration ? <Badge tone={integration.enabled ? 'sky' : 'muted'} dot>{integration.enabled ? 'On' : 'Off'}</Badge> : null}
+          </div>
+          <p className="text-[12.5px] text-fg-3">{body}</p>
+        </div>
+        {extra}
+        {integration && onToggle ? (
+          <label className="flex items-center gap-2.5 text-[12.5px] text-fg-2">
+            {busy ? <RefreshCw size={13} className="animate-spin" /> : null}
+            <Toggle checked={integration.enabled} onChange={onToggle} label={`Turn ${title} ${integration.enabled ? 'off' : 'on'}`} />
+          </label>
+        ) : null}
+      </div>
+    </header>
+  )
+}
+
+function AiPane({ data }: { data: IntegrationsOut }) {
+  const ai = data.ai
+  const [model, setModel] = useState(String(ai.config.model ?? ''))
+  useEffect(() => setModel(String(ai.config.model ?? '')), [ai.config.model])
+  const save = useAction((enabled?: boolean) => api.integrations.update('ai', { enabled, config: { model }, credentials: {} }), { success: 'AI settings saved' })
+  const test = useAction(api.integrations.testAi, { quiet: true })
+  const chosen = data.models.find((item) => item.id === model)
+  return (
+    <>
+      <PaneHeader icon={<Bot size={20} />} title="AI" body="Reads each WhatsApp message and email and records the enquiries in it. It never replies to customers." integration={ai} busy={save.isPending} onToggle={(value) => save.mutate(value)} />
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
+        {data.models.length === 0 ? <Notice tone="warn">No AI provider is configured on the server. Ask the administrator to add credentials.</Notice> : null}
+        <div className="grid max-w-[720px] grid-cols-2 gap-4 max-md:grid-cols-1">
+          <Field label="Model" hint={chosen?.hint}>
+            {(props) => (
+              <select {...props} className="field" value={model} onChange={(event) => setModel(event.target.value)}>
+                {data.models.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label="Provider" hint="Credentials are managed by the administrator on the server.">
+            {(props) => <input {...props} className="field" readOnly value={chosen?.provider === 'anthropic' ? 'Anthropic Claude' : chosen ? 'Google Gemini (Vertex AI)' : '—'} />}
+          </Field>
+        </div>
+        {test.data ? <Notice tone={test.data.ok ? 'ok' : 'bad'}>{test.data.ok ? `${test.data.model} answered: “${test.data.reply}”` : test.data.reply}</Notice> : test.error ? <Notice tone="bad">{errorText(test.error)}</Notice> : null}
+      </div>
+      <footer className="flex shrink-0 items-center gap-2 border-t border-white/7 px-6 py-3.5">
+        <Button icon={<Wand2 size={14} />} busy={test.isPending} onClick={() => test.mutate(undefined)} disabled={data.models.length === 0}>
+          Test connection
+        </Button>
+        <span className="flex-1" />
+        <Button kind="primary" busy={save.isPending} disabled={model === String(ai.config.model ?? '')} onClick={() => save.mutate(undefined)}>
+          Save
+        </Button>
+      </footer>
+    </>
+  )
+}
+
+const ICONS = { whatsapp: <MessageCircle size={20} />, email: <Mail size={20} />, tally: <FileText size={20} /> }
+const TITLES = { whatsapp: 'WhatsApp', email: 'Email', tally: 'Tally' }
+const BODIES = {
+  whatsapp: 'Receive customer messages from your WhatsApp Business number through Meta’s Cloud API.',
+  email: 'Read unread mail from a mailbox and capture the enquiries in it.',
+  tally: 'Send sales and purchase orders to TallyPrime as vouchers, and invoice each sale.',
+}
+
+function ConnectionPane({ data, name }: { data: IntegrationsOut; name: 'whatsapp' | 'email' | 'tally' }) {
+  const integration = data[name]
+  const groups = FORMS[name]
+  const fields = groups.flatMap((group) => group.fields)
+  const initial = useMemo(() => {
+    const form: Record<string, string> = {}
+    for (const field of fields) {
+      if (field.kind === 'secret') form[field.key] = ''
+      else form[field.key] = integration.config[field.key] == null ? '' : String(integration.config[field.key])
+    }
+    return form
+  }, [integration]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [form, setForm] = useState(initial)
+  useEffect(() => setForm(initial), [initial])
+  const dirty = Object.keys(form).some((key) => form[key] !== initial[key])
+
+  const save = useAction(
+    (enabled?: boolean) => {
+      const config: Record<string, unknown> = {}
+      const credentials: Record<string, string> = {}
+      for (const field of fields) {
+        if (field.kind === 'secret') {
+          if (form[field.key]) credentials[field.key] = form[field.key]
+        } else if (field.kind === 'check') config[field.key] = form[field.key] === 'true'
+        else if (field.kind === 'number') config[field.key] = form[field.key] === '' ? null : Number(form[field.key])
+        else config[field.key] = form[field.key]
+      }
+      return api.integrations.update(name, { enabled, config, credentials })
+    },
+    { success: `${TITLES[name]} saved` },
+  )
+  const testTally = useAction(api.integrations.testTally, { quiet: true })
+  const checkMail = useAction(api.integrations.checkEmail, { success: (result) => `${result.new_messages} new message${result.new_messages === 1 ? '' : 's'}` })
+  const template = useAction(api.integrations.template, { quiet: true })
+  const credentials = integration.credentials as Record<string, { set: boolean; hint: string | null }>
+  const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }))
+
+  return (
+    <>
+      <PaneHeader icon={ICONS[name]} title={TITLES[name]} body={BODIES[name]} integration={integration} busy={save.isPending} onToggle={(value) => save.mutate(value)} />
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        {name === 'whatsapp' && integration.enabled && !data.ai.enabled ? (
+          <div className="pt-5">
+            <Notice tone="warn">Messages are being received, but AI is off, so nobody reads them yet.</Notice>
+          </div>
+        ) : null}
+        {name === 'email' && integration.config.last_error ? (
+          <div className="pt-5">
+            <Notice tone="bad">Last check failed: {String(integration.config.last_error)}</Notice>
+          </div>
+        ) : null}
+        {name === 'whatsapp' ? (
+          <div className="pt-5">
+            <div className="label">Webhook URL</div>
+            <CopyField value={WEBHOOK()} />
+            <p className="mt-1.5 text-[12px] text-fg-3">Paste this into Meta with the verify token below. Meta can only reach a public HTTPS address.</p>
+          </div>
+        ) : null}
+        {groups.map((group) => (
+          <section key={group.title} className="border-b border-white/6 py-5 last:border-0">
+            {group.title ? <h3 className="text-[13.5px] font-semibold">{group.title}</h3> : null}
+            {group.hint ? <p className="mt-0.5 mb-4 text-[12px] text-fg-3">{group.hint}</p> : <div className="mb-3" />}
+            <div className="grid max-w-[820px] grid-cols-2 gap-x-4 gap-y-4 max-md:grid-cols-1">
+              {group.fields.map((field) =>
+                field.kind === 'check' ? (
+                  <label key={field.key} className="col-span-2 flex items-center gap-3 text-[13px]">
+                    <Toggle checked={form[field.key] === 'true'} onChange={(value) => set(field.key, String(value))} label={field.label} />
+                    {field.label}
+                  </label>
+                ) : field.kind === 'select' ? (
+                  <Field key={field.key} label={field.label} hint={field.hint}>
+                    {(props) => (
+                      <select {...props} className="field" value={form[field.key]} onChange={(event) => set(field.key, event.target.value)}>
+                        {field.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                ) : (
+                  <Field key={field.key} label={field.label} hint={field.hint} className={'wide' in field && field.wide ? 'col-span-2' : undefined}>
+                    {(props) =>
+                      field.key === 'verify_token' ? (
+                        <div className="flex gap-2">
+                          <input {...props} className="field" value={form[field.key]} onChange={(event) => set(field.key, event.target.value)} />
+                          <Button onClick={() => set(field.key, crypto.randomUUID().replace(/-/g, ''))}>Generate</Button>
+                        </div>
+                      ) : (
+                        <input
+                          {...props}
+                          className={cn('field', field.kind === 'number' && 'field-num')}
+                          type={field.kind === 'secret' ? 'password' : 'text'}
+                          inputMode={field.kind === 'number' ? 'decimal' : undefined}
+                          autoComplete={field.kind === 'secret' ? 'new-password' : 'off'}
+                          placeholder={field.kind === 'secret' ? (credentials[field.key]?.set ? `Saved (${credentials[field.key].hint ?? 'set'}) — type to replace` : 'Not set') : field.placeholder}
+                          value={form[field.key]}
+                          onChange={(event) => set(field.key, event.target.value)}
+                        />
+                      )
+                    }
+                  </Field>
+                ),
+              )}
+            </div>
+          </section>
+        ))}
+        {testTally.data ? (
+          <Notice tone={testTally.data.company_found ? 'ok' : 'warn'}>
+            {testTally.data.company_found ? 'Connected. The company was found.' : `Connected, but the company was not found. Open companies: ${testTally.data.companies.join(', ') || 'none'}.`}
+          </Notice>
+        ) : testTally.error ? (
+          <Notice tone="bad">{errorText(testTally.error)}</Notice>
+        ) : null}
+        {template.data ? <Notice tone={template.data.status === 'APPROVED' ? 'ok' : 'warn'}>Template “{template.data.template}”: {template.data.status}</Notice> : template.error ? <Notice tone="bad">{errorText(template.error)}</Notice> : null}
+      </div>
+      <footer className="flex shrink-0 items-center gap-2 border-t border-white/7 px-6 py-3.5">
+        {name === 'tally' ? (
+          <Button icon={<RefreshCw size={14} />} busy={testTally.isPending} onClick={() => testTally.mutate(undefined)}>
+            Test connection
+          </Button>
+        ) : null}
+        {name === 'email' ? (
+          <>
+            <Button icon={<Inbox size={14} />} busy={checkMail.isPending} onClick={() => checkMail.mutate(undefined)} disabled={!integration.enabled}>
+              Check inbox now
+            </Button>
+            <span className="text-[12px] text-fg-3">{integration.config.last_checked_at ? `Checked ${fmtAgo(String(integration.config.last_checked_at))}` : 'Not checked yet'}</span>
+          </>
+        ) : null}
+        {name === 'whatsapp' ? (
+          <Button icon={<Check size={14} />} busy={template.isPending} onClick={() => template.mutate(undefined)}>
+            Check template
+          </Button>
+        ) : null}
+        <span className="flex-1" />
+        <Button onClick={() => setForm(initial)} disabled={!dirty}>
+          Revert
+        </Button>
+        <Button kind="primary" busy={save.isPending} disabled={!dirty} onClick={() => save.mutate(undefined)}>
+          Save
+        </Button>
+      </footer>
+    </>
+  )
+}
+
+function CopyField({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="flex max-w-[820px] gap-2">
+      <input className="field num" readOnly value={value} data-selectable />
+      <Button
+        icon={copied ? <Check size={14} /> : <Copy size={14} />}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value)
+            setCopied(true)
+            window.setTimeout(() => setCopied(false), 1600)
+          } catch {
+            toast.error('Copy failed — select the address and copy it by hand.')
+          }
+        }}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </Button>
+    </div>
+  )
+}
+
+const OUTCOME: Record<string, ['ok' | 'warn' | 'bad' | 'muted' | 'sky', string]> = {
+  enquiry_created: ['ok', 'Enquiry opened'],
+  not_enquiry: ['muted', 'Not an enquiry'],
+  no_match: ['warn', 'No matching products'],
+  failed: ['bad', 'Failed'],
+  pending: ['sky', 'Reading…'],
+  skipped: ['muted', 'AI was off'],
+}
+
+function MessagesPane() {
+  const [channel, setChannel] = useState('all')
+  const messages = useList('messages', api.integrations.messages, { channel: channel === 'all' ? undefined : channel, limit: 100 })
+  const retry = useAction(api.integrations.retryMessage, { success: 'Read again' })
+  const rows = messages.data?.items ?? []
+  return (
+    <>
+      <PaneHeader
+        icon={<Inbox size={20} />}
+        title="Received messages"
+        body="Everything that came in on WhatsApp and email, and what the AI did with it."
+        extra={
+          <Segmented
+            value={channel}
+            onChange={setChannel}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'whatsapp', label: 'WhatsApp' },
+              { value: 'email', label: 'Email' },
+            ]}
+          />
+        }
+      />
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+        {messages.isPending ? (
+          <Spinner />
+        ) : rows.length === 0 ? (
+          <Empty icon={<Inbox size={20} />} title="No messages yet" body="When WhatsApp or email is on, messages appear here." />
+        ) : (
+          rows.map((message) => {
+            const [tone, label] = OUTCOME[message.status] ?? ['muted', message.status]
+            return (
+              <article key={message.id} className="card flex gap-3.5 p-4">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-ink-700 text-fg-2 ring-1 ring-white/8">{message.channel === 'whatsapp' ? <MessageCircle size={16} /> : <Mail size={16} />}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold">{message.sender_name ?? message.sender}</span>
+                    <span className="text-[12px] text-fg-3">{message.sender_name ? message.sender : ''}</span>
+                    <span className="ml-auto text-[11.5px] text-fg-3">{fmtDateTime(message.received_at)}</span>
+                  </div>
+                  {message.subject ? <div className="mt-0.5 text-[12.5px] font-medium text-fg-2">{message.subject}</div> : null}
+                  <p className="mt-1 line-clamp-3 text-[13px] text-fg-2" data-selectable>
+                    {message.body}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <Badge tone={tone} dot>
+                      {label}
+                    </Badge>
+                    {message.enquiry_id ? (
+                      <Link to={`/enquiries/${message.enquiry_id}`} className="num text-[12px] font-medium text-sky hover:text-sky-2">
+                        {message.enquiry_number}
+                      </Link>
+                    ) : null}
+                    {message.summary ? <span className="text-[12px] text-fg-3">{message.summary}</span> : null}
+                    {message.error ? <span className="text-[12px] text-bad">{message.error}</span> : null}
+                    {['failed', 'skipped'].includes(message.status) ? (
+                      <Button small className="ml-auto" icon={<RefreshCw size={12} />} onClick={() => retry.mutate(message.id)} busy={retry.isPending && retry.variables === message.id}>
+                        Read again
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            )
+          })
+        )}
+      </div>
+    </>
+  )
+}
+
+const KIND: Record<string, string> = { sales_order: 'Sales order', sales_invoice: 'Sales invoice', purchase_order: 'Purchase order' }
+function SyncsPane() {
+  const [status, setStatus] = useState('all')
+  const syncs = useList('tally-syncs', api.integrations.syncs, { status: status === 'all' ? undefined : status, limit: 200 })
+  const retry = useAction(api.integrations.retrySync, { success: 'Sent to Tally again' })
+  const rows = syncs.data?.items ?? []
+  return (
+    <>
+      <PaneHeader
+        icon={<RefreshCw size={20} />}
+        title="Tally sync log"
+        body="Every order and invoice sent to Tally, and whether the invoice reached the customer."
+        extra={
+          <Segmented
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'pending', label: 'Waiting' },
+              { value: 'failed', label: 'Failed' },
+              { value: 'synced', label: 'Done' },
+            ]}
+          />
+        }
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {syncs.isPending ? (
+          <Spinner />
+        ) : rows.length === 0 ? (
+          <Empty icon={<RefreshCw size={20} />} title="Nothing sent to Tally" body="When Tally is on, orders appear here as they sync." />
+        ) : (
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Record</th>
+                <th>Status</th>
+                <th>Tally no.</th>
+                <th>Invoice to customer</th>
+                <th className="r" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <div className="num text-[13px] font-medium">{row.reference}</div>
+                    <div className="text-[11.5px] text-fg-3">
+                      {KIND[row.kind] ?? row.kind} · {fmtAgo(row.created_at)}
+                    </div>
+                  </td>
+                  <td>
+                    <Badge tone={row.status === 'synced' ? 'ok' : row.status === 'failed' ? 'bad' : 'sky'} dot>
+                      {row.status === 'synced' ? 'In Tally' : row.status === 'failed' ? 'Failed' : 'Waiting'}
+                    </Badge>
+                    {row.error ? <div className="mt-1 max-w-[320px] truncate text-[11.5px] text-bad" title={row.error}>{row.error}</div> : null}
+                  </td>
+                  <td className="num text-[13px]">{row.tally_number ?? '—'}</td>
+                  <td className="text-[12.5px] text-fg-2">{row.kind === 'sales_invoice' ? (row.notify_status === 'sent' ? `Sent ${fmtAgo(row.notified_at)}` : row.notify_error ?? row.notify_status) : '—'}</td>
+                  <td className="r">
+                    {row.status === 'failed' ? (
+                      <Button small icon={<RefreshCw size={12} />} onClick={() => retry.mutate(row.id)}>
+                        Retry
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  )
+}

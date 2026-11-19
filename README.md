@@ -256,49 +256,36 @@ a per-customer roll-up, and the delivery action itself.
 
 ## The interface
 
-The frontend follows macOS/iOS conventions: a grouped sidebar (Overview and
-Fulfilment, then Sales, Purchasing and Inventory), a sticky frosted toolbar on
-every page with the title, primary action and filters, and content in
-rounded, lightly shadowed cards. Colour is reserved for meaning — each stock
-figure has one colour used everywhere (ready, waiting, to deliver, short) —
-and the accent blue marks what can be clicked.
+AEC Desk is built as a desktop application, not a scrolling website. The
+window never scrolls as a page: a frosted title bar (search, **New** menu,
+account) sits over a labelled module dock, and every module is a fixed
+workspace of panes. Only lists inside panes scroll. See `frontend/DESIGN.md`
+for the full plan.
 
-- **Themes** — light, dark or follow the system, from the switch at the foot
-  of the sidebar. The choice is remembered per browser.
-- **Keyboard** — `⌘K` / `Ctrl K` opens the command palette (go to any screen,
-  create any record, find orders, customers and products by number or name);
-  `/` focuses the page's search box; `Esc` closes the topmost dialog, sheet or
-  menu; arrow keys move through menus and the palette.
-- **Deep links** — `?new=1` opens a list page's create dialog (for example
-  `/orders?new=1`), `/products?open=<id>` opens a product's inspector,
-  `/pending-fulfilment?filter=ready|awaiting|partial` pre-selects a filter.
-- **Workflows** — Stock In and Goods Receipts are numbered steps that collapse
-  to a summary once done, with a live before/after panel beside them; nothing
-  is written until the final confirmation. Delivery is one shared dialog used
-  from the order, the customer and the Fulfilment screen.
-- **Feedback** — saves confirm with a toast (archive offers *Undo*);
-  destructive actions ask first; lists show skeletons while loading and an
-  explanatory empty state when there is nothing to show.
-- **Motion and access** — dialogs, sheets and menus animate in and out with
-  spring easing, and all motion is switched off under *Reduce motion*.
-  Dialogs trap focus and restore it on close; controls carry labels for
-  screen readers.
-- **Phone widths** — below 960 px the sidebar becomes a drawer; tables scroll
-  sideways inside their card instead of widening the page.
-- **List or grid** — every listing (Sales Orders, Enquiries, Customers,
-  Purchase Orders, Goods Receipts history, Suppliers, Products, Fulfilment) has
-  a table view and a card view, switched from the toolbar and remembered per
-  listing. Phones start on cards.
-- **Pagination** — every listing ends in a pager: the range shown ("51–75 of
-  312 orders"), rows per page (25, 50 or 100, remembered per listing) and page
-  numbers. The page is part of the URL (`?page=3`), so Back and reloads keep
-  your place; changing a filter or sort returns to page 1.
-- **Export** — each listing's *Export* button downloads every row matching the
-  current search, filter and sort as CSV (UTF-8, opens cleanly in Excel), not
-  just the page on screen.
-- **Overview chart** — value booked or delivered per day for the last 30 days,
-  with a tooltip per day (pointer or arrow keys) and an equivalent table for
-  screen readers. Days run midnight to midnight in `BUSINESS_TIMEZONE`.
+- **Split views** — Enquiries, Sales Orders, Customers, Purchase Orders,
+  Goods Receipts, Suppliers and Products show a compact list on the left and
+  the chosen record's inspector (figures, tabs, actions) on the right. The URL
+  follows the selection, so links and the back button work.
+- **Sheets** — every create and edit form drops from the title bar, with the
+  form on the left and a live summary on the right.
+- **Home** — one board that fits the window: headline figures, a running
+  sales chart, a to-do queue (buy what is short, receive what is due) and
+  recent activity.
+- **Fulfilment** — a board with three lanes: Ready, On order and Short. Each
+  card carries its next action: Deliver, Receive or Buy.
+- **Integrations** — a settings window: connections on the left (AI,
+  WhatsApp, Email, Tally) and the message and Tally logs.
+- **Look** — black, white and light blue only. Status colours are muted and
+  carry meaning (short is red, warnings amber, done green).
+- **Keyboard** — `⌘K` / `Ctrl K` opens the command palette: go to any module,
+  create any record, or find orders, purchases, customers and products by
+  number or name. `Esc` closes the topmost sheet, menu or palette.
+- **Deep links** — `?new=1` opens a module's create sheet (for example
+  `/orders?new=1`); `/receipts?new=1&po=<id>` starts a receipt for a purchase
+  order; `/fulfilment?customer=<id>` filters the board; `/stock-in?product=<id>`
+  opens Stock In for a product; `/integrations/<section>` opens a settings pane.
+- **Narrow windows** — the dock becomes a bottom tab bar, split views show one
+  pane at a time with a way back to the list, and Home and Fulfilment stack.
 
 ---
 
@@ -349,16 +336,21 @@ In a second terminal:
 cd frontend
 
 npm install
-cp .env.example .env                # point VITE_API_BASE_URL at your backend
-
-npm run dev
+npm run dev                         # proxies /api to http://127.0.0.1:8000
 ```
 
-The app is then on <http://localhost:5173>.
+The app is then on <http://localhost:5173>. The dev server proxies `/api` to
+the backend, so the session cookie stays same-origin exactly as in production.
+If the backend runs elsewhere, start the dev server with
+`API_PROXY_TARGET=http://127.0.0.1:<port> npm run dev`.
 
-> If you run the backend on a port other than 8000, set
-> `VITE_API_BASE_URL=http://localhost:<port>` in `frontend/.env` **and** add the
-> frontend's origin to `CORS_ORIGINS` in `backend/.env`.
+The frontend's API types are generated from the backend's OpenAPI schema. After
+changing the API, regenerate them with the backend running:
+
+```bash
+cd frontend && npm run api:types    # reads http://127.0.0.1:8105/openapi.json by default
+# or: OPENAPI_URL=http://127.0.0.1:8000/openapi.json npm run api:types
+```
 
 ### 4. Tests and checks
 
@@ -403,12 +395,14 @@ variables and contains no secrets.
 | `BUSINESS_TIMEZONE` | `Asia/Kolkata` | IANA zone that daily figures (the Overview chart) are counted in. |
 | `SQL_ECHO` | `false` | Log every SQL statement. |
 
-**`frontend/.env`**
+**Frontend (development only)**
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Base URL of the API. |
-| `VITE_PORT` | `5173` | Dev server port. |
+| `API_PROXY_TARGET` | `http://127.0.0.1:8000` | Where the dev server sends `/api` requests. |
+
+In production the backend serves the built app from the same origin, so the
+frontend needs no configuration.
 
 ---
 
@@ -570,13 +564,15 @@ backend/
   seed.py              Development-only demo data
 
 frontend/
+  DESIGN.md            The plan: modules, window layout, look, stack
   src/
-    api/               Typed client and response types
-    lib/               Decimal, formatting and async helpers
-    components/        Design-system primitives, overlays, tables, forms,
-                       navigation, command palette and shared dialogs
-    pages/             One file per screen (list + detail pages, workflows)
-    styles.css         Design tokens and every component style
+    api/               Generated schema types, fetch client, endpoints, query hooks
+    app/               Window shell: title bar, dock, command palette, sign-in gate
+    ui/                Building blocks: buttons, sheets, menus, tabs, split view,
+                       pickers, line editor, allocation editor, charts
+    features/          One folder per module (home, fulfilment, orders, …)
+    lib/               Formatting, statuses, URL helpers
+    styles/app.css     Tailwind theme tokens (black, white, light blue)
 ```
 
 API routers only parse, delegate and serialise. Every rule — validation,
@@ -709,8 +705,9 @@ multi-warehouse or batch/serial tracking.
   transactionally and asserted against the ledger in tests, but there is no
   periodic reconciliation job.
 - The frontend has no automated tests in the repository; it is covered by
-  TypeScript, the production build, the backend's API tests and manual
-  browser checks of the main workflows at desktop and phone widths.
+  TypeScript, the production build, the backend's API tests, and browser
+  runs of the main workflows (order, deliver, buy with settlement, receive,
+  enquiry conversion, stock in) at desktop and phone widths.
 - Fulfilment has no date-range filter in the interface; the API supports one.
 - Fulfilment is a report, not a listing: the server returns up to 500
   outstanding lines with totals across all of them, and the page divides those

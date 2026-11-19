@@ -1,179 +1,58 @@
-const QUANTITY_FORMAT = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 3,
-})
-/** ISO 4217 code, so the deployment decides its own currency. */
-const CURRENCY: string = import.meta.env.VITE_CURRENCY ?? 'INR'
+/** Numbers, money and dates as the business reads them (India, rupees). */
 
-const MONEY_FORMAT = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: CURRENCY,
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-/** Same scale, no symbol — for columns where the heading already says money. */
-const AMOUNT_FORMAT = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-const UNIT_PRICE_FORMAT = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: CURRENCY,
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 4,
-})
-const PERCENT_FORMAT = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-})
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-})
-const DATETIME_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const moneyRound = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+const amount = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const quantity = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 })
+const compact = new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 })
 
-/** A bare quantity, trimmed of trailing zeros: "15.000" -> "15". */
-export function formatQuantity(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return String(value)
-  return QUANTITY_FORMAT.format(parsed)
+export const n = (value: string | number | null | undefined) => {
+  const parsed = typeof value === 'number' ? value : Number(value ?? 0)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-/** A quantity with its unit of measure: "15 pcs". */
-export function formatQuantityWithUnit(
-  value: string | number | null | undefined,
-  unit: string | null | undefined,
-): string {
-  const quantity = formatQuantity(value)
-  if (quantity === '—') return quantity
-  return unit ? `${quantity} ${unit}` : quantity
-}
+export const fmtMoney = (value: string | number | null | undefined) => money.format(n(value))
+export const fmtMoneyRound = (value: string | number | null | undefined) => moneyRound.format(n(value))
+export const fmtAmount = (value: string | number | null | undefined) => amount.format(n(value))
+export const fmtQty = (value: string | number | null | undefined) => quantity.format(n(value))
+export const fmtCompactMoney = (value: number) => `₹${compact.format(value)}`
+export const fmtPercent = (value: string | number | null | undefined) => `${n(value).toFixed(1)}%`
 
-const COMPACT_MONEY_FORMAT = new Intl.NumberFormat(undefined, {
-  style: 'currency',
-  currency: CURRENCY,
-  notation: 'compact',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
-})
+const dateFormat = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+const shortDate = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' })
+const dateTime = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+const longDate = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-/** Money for axis labels and tight spaces: "₹15K". */
-export function formatCompactMoney(value: number): string {
-  return COMPACT_MONEY_FORMAT.format(value)
-}
+export const fmtDate = (value: string | null | undefined) => (value ? dateFormat.format(new Date(value)) : '—')
+export const fmtShortDate = (value: string | Date) => shortDate.format(typeof value === 'string' ? new Date(value) : value)
+export const fmtDateTime = (value: string | null | undefined) => (value ? dateTime.format(new Date(value)) : '—')
+export const fmtToday = () => longDate.format(new Date())
 
-export function formatMoney(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return String(value)
-  return MONEY_FORMAT.format(parsed)
-}
-
-/** A money amount without the currency symbol, for dense numeric columns. */
-export function formatAmount(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return String(value)
-  return AMOUNT_FORMAT.format(parsed)
-}
-
-/** A per-unit price or cost, which may carry up to four decimals. */
-export function formatUnitPrice(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return String(value)
-  return UNIT_PRICE_FORMAT.format(parsed)
-}
-
-export function formatPercent(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return String(value)
-  return `${PERCENT_FORMAT.format(parsed)}%`
-}
-
-export function formatDate(value: string | null | undefined): string {
+export function fmtAgo(value: string | null | undefined): string {
   if (!value) return '—'
-  return DATE_FORMAT.format(new Date(value))
+  const seconds = (Date.now() - new Date(value).getTime()) / 1000
+  if (seconds < 60) return 'just now'
+  const minutes = seconds / 60
+  if (minutes < 60) return `${Math.floor(minutes)} min ago`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.floor(hours)} h ago`
+  const days = hours / 24
+  if (days < 30) return `${Math.floor(days)} d ago`
+  return fmtDate(value)
 }
 
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  return DATETIME_FORMAT.format(new Date(value))
-}
+export const daysSince = (value: string) => Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)
 
-export const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  PARTIALLY_FULFILLED: 'Partly delivered',
-  FULFILLED: 'Delivered',
-  CANCELLED: 'Cancelled',
-}
+export const initials = (name: string) =>
+  name
+    .replace(/^demo\s+/i, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || '?'
 
-export const ENQUIRY_STATUS_LABELS: Record<string, string> = {
-  OPEN: 'Open',
-  CONVERTED: 'Converted',
-  LOST: 'Lost',
-}
+export const plural = (count: number, word: string, many = `${word}s`) => `${count} ${count === 1 ? word : many}`
 
-export const PO_STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  ORDERED: 'Ordered',
-  PARTIALLY_RECEIVED: 'Partly received',
-  RECEIVED: 'Received',
-  CANCELLED: 'Cancelled',
-}
-
-export const FULFILMENT_STATUS_LABELS: Record<string, string> = {
-  AWAITING_STOCK: 'Short',
-  ON_ORDER: 'On order',
-  RESERVED: 'Ready',
-  READY_TO_DELIVER: 'Ready to deliver',
-  PARTIALLY_DELIVERED: 'Partly delivered',
-}
-
-export const MOVEMENT_LABELS: Record<string, string> = {
-  OPENING_STOCK: 'Opening stock',
-  STOCK_RECEIPT: 'Stock receipt',
-  GOODS_RECEIPT: 'Goods receipt',
-  CUSTOMER_DELIVERY: 'Customer delivery',
-  ORDER_FULFILMENT: 'Order fulfilment (legacy)',
-  ADJUSTMENT: 'Adjustment',
-}
-
-export const ALLOCATION_SOURCE_LABELS: Record<string, string> = {
-  ORDER_CREATION: 'Stock on hand at order time',
-  STOCK_RECEIPT: 'Covered by a stock receipt',
-  GOODS_RECEIPT: 'Covered by a goods receipt',
-}
-
-const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-const LONG_DATE = new Intl.DateTimeFormat(undefined, {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-
-/** "just now", "12 minutes ago", "yesterday", then a date. */
-export function formatRelative(value: string | null | undefined): string {
-  if (!value) return '—'
-  const seconds = (new Date(value).getTime() - Date.now()) / 1000
-  const abs = Math.abs(seconds)
-  if (abs < 45) return 'just now'
-  if (abs < 3600) return RELATIVE.format(Math.round(seconds / 60), 'minute')
-  if (abs < 86_400) return RELATIVE.format(Math.round(seconds / 3600), 'hour')
-  if (abs < 86_400 * 7) return RELATIVE.format(Math.round(seconds / 86_400), 'day')
-  return formatDate(value)
-}
-
-export function formatLongDate(value: Date = new Date()): string {
-  return LONG_DATE.format(value)
-}
+/** A typed quantity is valid when it is a non-negative number with at most three decimals. */
+export const isQty = (value: string) => /^\d+(\.\d{1,3})?$/.test(value.trim())
