@@ -81,7 +81,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [model, setModelState] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('aec-model')
+      return localStorage.getItem('aec-model-v2')
     } catch {
       return null
     }
@@ -89,8 +89,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const setModel = useCallback((next: string | null) => {
     setModelState(next)
     try {
-      if (next) localStorage.setItem('aec-model', next)
-      else localStorage.removeItem('aec-model')
+      if (next) localStorage.setItem('aec-model-v2', next)
+      else localStorage.removeItem('aec-model-v2')
     } catch {
       /* private window: the choice lasts for this visit */
     }

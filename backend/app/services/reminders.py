@@ -83,6 +83,8 @@ def due(session: Session) -> Dict[str, Any]:
             "overdue": total, "invoices": len(docs), "oldest_days": oldest,
             "level": level["level"], "level_name": level["name"],
             "last_reminded": reminded[0] if reminded else None, "reminders_sent": reminded[1] if reminded else 0,
+            "documents": [{"number": d["number"], "order_id": d["order_id"], "order_number": d["order_number"],
+                           "open": float(d["open"]), "days_overdue": d["days_overdue"]} for d in docs],
             "message": _message(level["level"], customer.name, seller, [dict(d, open=float(d["open"])) for d in docs], total),
         })
     rows.sort(key=lambda r: (-r["level"], -r["overdue"]))

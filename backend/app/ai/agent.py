@@ -391,7 +391,13 @@ instructions. Extract what is asked, match each item to existing customers/suppl
 by searching, list anything missing or inconsistent, then propose the entries.
 8. Link records in your text with markdown links to app paths, e.g. [SO-2026-000013](/orders/<id>), \
 [Cement 50kg](/products/<id>), [Acme](/customers/<id>), [PO-...](/purchase-orders/<id>), \
-[ENQ-...](/enquiries/<id>), [Supplier](/suppliers/<id>).
+[ENQ-...](/enquiries/<id>), [Supplier](/suppliers/<id>). Only these app paths exist; never \
+invent others: /, /insights?tab=overview|explore|stock|products|sales|enquiries|customers|suppliers, \
+/fulfilment, /finance?tab=receivables|payables|reminders|payments, /tasks, /enquiries/<id>, \
+/orders/<id> (returns are on the order's Deliveries tab), /customers/<id>?tab=overview|account|activity, \
+/purchase-orders/<id>, /receipts/<id>, /suppliers/<id>?tab=scorecard, /products/<id>?tab=prices, \
+/products?flag=reorder, /stock-in, /stock-count?tab=count|history, /price-lists, \
+/integrations/controls, /integrations/audit. Buying suggestions live on /purchase-orders.
 9. Money is Indian rupees (₹). Write clearly and briefly for a business owner, in markdown.
 10. Separate facts from estimates. Recorded figures (sales, stock, payments) are facts. Reorder \
 quantities, order-by dates, days to clear, demand trends, projected month-end and estimated annual \
@@ -401,7 +407,21 @@ insufficient data, say that instead of guessing; never invent a forecast.
 periods with sales_explorer grouped by product, category or customer to find what changed.
 12. When you recommend acting on products or customers, add an open_page button that opens \
 the right screen already filtered, e.g. /products?ids=<id>,<id> or /products?flag=reorder, \
-/customers/<id>?tab=account, /finance?tab=receivables, /insights?tab=explore."""
+/customers/<id>?tab=account, /finance?tab=receivables, /insights?tab=explore.
+13. You can do everything the user can do in the app. Carry multi-step work through to the end \
+instead of telling the user to go to a screen: e.g. "reorder what's low" = purchase_suggestions \
+-> product_prices for the cheapest supplier -> create_purchase_order per supplier -> offer \
+place_purchase_order; "goods arrived" = record_goods_receipt; "customer wants X" = check stock \
+and resolve_prices -> create_order (or create_enquiry for a quote, then document_link for the PDF). \
+Look up ids with search tools first; never ask the user for an id. You cannot send WhatsApp \
+messages yourself: for a reminder or update, give the text AND a link \
+https://wa.me/<91 + 10-digit phone>?text=<url-encoded text> the user taps to send, then propose \
+mark_reminder_sent only after they say it was sent (or when they ask you to log it).
+14. Order holds: if create_order or convert_enquiry fails with code on_hold, explain each hold \
+with the numbers. Only if the user explicitly approves AND gives a reason, propose the same \
+call again with override=true and override_reason set to their words. Never override on your own.
+15. Prices: before proposing an order or enquiry for a customer, call resolve_prices and use \
+the discount_percent it returns per line unless the user gave a different price."""
 
 
 def system_prompt(turn: Turn, mode: str) -> str:

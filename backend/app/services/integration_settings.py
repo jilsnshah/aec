@@ -38,11 +38,11 @@ TAX_MODES = ("none", "cgst_sgst", "igst")
 #: app.ai.provider.list_models).
 AI_MODELS: List[Dict[str, str]] = [
     {"id": "gemini-3.1-flash-lite", "provider": "gemini", "label": "Gemini 3.1 Flash-Lite",
-     "hint": "Lowest cost. Fine for reading messages; light for analysis."},
+     "hint": "Default. Lowest cost and fastest; handles everyday questions and changes."},
     {"id": "gemini-3.5-flash-lite", "provider": "gemini", "label": "Gemini 3.5 Flash-Lite",
      "hint": "Low cost, newer."},
     {"id": "gemini-3.8-flash", "provider": "gemini", "label": "Gemini 3.8 Flash",
-     "hint": "Recommended for the assistant: better at analysis and multi-step work."},
+     "hint": "Stronger at long analysis and many-step work; costs more."},
 ]
 PROVIDER_LABELS = {"gemini": "Google Gemini"}
 CHANGE_POLICIES = ("confirm_all", "confirm_significant")
@@ -79,7 +79,7 @@ def model_info(model_id: str) -> Optional[Dict[str, str]]:
 
 
 def default_model() -> str:
-    return "gemini-3.8-flash"
+    return "gemini-3.1-flash-lite"
 
 #: Per integration: default plain settings, and the names of its credentials.
 DEFINITIONS: Dict[str, Dict[str, Any]] = {

@@ -108,7 +108,7 @@ def test_the_ai_offers_gemini_models_and_reports_where_credentials_come_from(cli
     assert "server-side-test-key" not in client.get("/api/integrations").text
     assert all(model["provider"] == "gemini" for model in data["models"])
     assert data["providers"] == ["Google Gemini"] and data["ai_credential_source"] == "server"
-    assert data["ai"]["config"]["model"] == "gemini-3.8-flash"
+    assert data["ai"]["config"]["model"] == "gemini-3.1-flash-lite"
     assert data["ai"]["credentials"]["api_key"] == {"set": False, "hint": None}
 
 
