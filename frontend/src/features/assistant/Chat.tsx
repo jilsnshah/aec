@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { ArrowUp, FileText, Image as ImageIcon, KeyRound, Loader2, Paperclip, Sheet, Sparkles, Square, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowUp, Check, ChevronDown, Cpu, FileText, Image as ImageIcon, KeyRound, Loader2, Paperclip, Sheet, Sparkles, Square, X } from 'lucide-react'
 import { ai, type Attachment, type ChatMessage } from '@/api/ai'
 import { errorText } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { Avatar } from '@/ui/core'
+import { Menu } from '@/ui/overlays'
 import { useAuth } from '@/app/auth'
 import { BlockView, Markdown, Steps } from './blocks'
 import { useAiStatus, useAssistant, type Draft } from './store'
@@ -124,7 +126,7 @@ function Welcome({ compact, onPick, recordHint }: { compact: boolean; onPick: (p
 function Message({ message, busy, onConfirm, onCancel }: { message: ChatMessage; busy: boolean; onConfirm: (id: string) => void; onCancel: (id: string) => void }) {
   if (message.role === 'user') return <UserBubble message={message} />
   return (
-    <AssistantBody steps={message.steps} content={message.content} error={message.error ?? null}>
+    <AssistantBody steps={message.steps} content={message.content} error={message.error ?? null} model={message.model}>
       {message.blocks.map((block) => (
         <BlockView key={block.id} block={block} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
       ))}
@@ -134,7 +136,7 @@ function Message({ message, busy, onConfirm, onCancel }: { message: ChatMessage;
 
 function DraftView({ draft, busy, onConfirm, onCancel }: { draft: Draft; busy: boolean; onConfirm: (id: string) => void; onCancel: (id: string) => void }) {
   return (
-    <AssistantBody steps={draft.steps} content={draft.content} error={draft.error} live>
+    <AssistantBody steps={draft.steps} content={draft.content} error={draft.error} model={draft.model} live>
       {draft.blocks.map((block) => (
         <BlockView key={block.id} block={block} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
       ))}
@@ -153,14 +155,19 @@ function Thinking() {
   )
 }
 
-function AssistantBody({ steps, content, error, live, children }: { steps: ChatMessage['steps']; content: string; error: string | null; live?: boolean; children?: ReactNode }) {
+function AssistantBody({ steps, content, error, live, model, children }: { steps: ChatMessage['steps']; content: string; error: string | null; live?: boolean; model?: string | null; children?: ReactNode }) {
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
       <span className="icon-tile mt-0.5 size-8 shrink-0 rounded-[11px]!">
         <Sparkles size={15} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-        <Steps steps={steps} live={live} />
+        {steps.length || model ? (
+          <div className="flex items-center gap-3">
+            <Steps steps={steps} live={live} />
+            {model ? <ModelLabel id={model} /> : null}
+          </div>
+        ) : null}
         {content ? <Markdown text={content} /> : null}
         {children}
         {error ? <div className="rounded-xl bg-white/[0.05] px-3 py-2 text-[12.5px] text-fg-2 ring-1 ring-white/8">⚠ {error}</div> : null}
@@ -313,9 +320,79 @@ function Composer({ compact, busy, onSend, onStop, conversationId, disabled }: {
             </button>
           )}
         </div>
+        {!disabled ? (
+          <div className="flex items-center gap-2 px-1 pt-1">
+            <ModelPicker />
+            {!compact ? <span className="ml-auto pr-1 text-[11px] whitespace-nowrap text-fg-4 max-md:hidden">Enter to send · Shift+Enter for a new line</span> : null}
+          </div>
+        ) : null}
       </div>
       {error ? <p className="mt-1.5 text-center text-[12px] text-bad">{error}</p> : null}
       {!compact ? <p className="mt-2 text-center text-[11px] text-fg-4">The assistant works from your live data and asks before changing anything. Check important figures.</p> : null}
     </div>
+  )
+}
+
+/** "gemini-3.8-flash" -> "Gemini 3.8 Flash", for ids the list does not name. */
+export function prettyModel(id: string) {
+  return id.split('-').map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part)).join(' ').replace('Flash Lite', 'Flash-Lite')
+}
+
+export function useModelName() {
+  const { model } = useAssistant()
+  const status = useAiStatus()
+  const models = useModels()
+  const id = model ?? status.data?.model ?? ''
+  return models.data?.find((item) => item.id === id)?.label ?? (id ? prettyModel(id) : '')
+}
+
+function useModels() {
+  const status = useAiStatus()
+  return useQuery({ queryKey: ['ai', 'models'], queryFn: ai.models, staleTime: 300_000, enabled: status.data?.mode === 'live' })
+}
+
+function ModelLabel({ id }: { id: string }) {
+  const models = useModels()
+  const label = models.data?.find((item) => item.id === id)?.label ?? prettyModel(id)
+  return <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-fg-4" title={id}><Cpu size={11} /> {label}</span>
+}
+
+/** Choose the Gemini model for the next replies, right in the chat. The
+ *  choice is kept on this computer; "Settings default" follows Settings. */
+function ModelPicker() {
+  const { model, setModel } = useAssistant()
+  const status = useAiStatus()
+  const models = useModels()
+  if (status.data?.mode !== 'live') return null
+  const fallback = status.data.model
+  const list = models.data ?? []
+  const current = model ?? fallback
+  const name = (id: string) => list.find((item) => item.id === id)?.label ?? prettyModel(id)
+  return (
+    <Menu
+      side="top"
+      align="start"
+      trigger={
+        <button className="flex h-7 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium whitespace-nowrap text-fg-2 transition hover:bg-white/[0.06] hover:text-fg" aria-label="Choose model">
+          <Cpu size={13} />
+          {name(current)}
+          {model === null ? <span className="text-fg-4">· default</span> : null}
+          <ChevronDown size={12} className="text-fg-4" />
+        </button>
+      }
+      items={[
+        { label: `Settings default · ${name(fallback)}`, icon: model === null ? <Check size={14} /> : undefined, onSelect: () => setModel(null) },
+        ...list.map((item, index) => ({
+          label: item.label,
+          hint: item.id === fallback ? 'default' : undefined,
+          icon: model === item.id ? <Check size={14} /> : undefined,
+          separator: index === 0,
+          onSelect: () => setModel(item.id),
+        })),
+        ...(model && !list.some((item) => item.id === model)
+          ? [{ label: model, icon: <Check size={14} />, onSelect: () => setModel(model), separator: true }]
+          : []),
+      ]}
+    />
   )
 }

@@ -11,6 +11,7 @@ import { moduleFor } from '@/app/nav'
 
 export interface Draft {
   id: string | null
+  model?: string | null
   content: string
   steps: Step[]
   blocks: Block[]
@@ -33,6 +34,9 @@ interface AssistantState {
   cancel: (actionId: string) => Promise<void>
   stop: () => void
   context: PageContext
+  /** The model picked in the chat; null means the one chosen in Settings. */
+  model: string | null
+  setModel: (model: string | null) => void
 }
 
 const Context = createContext<AssistantState | null>(null)
@@ -75,6 +79,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
+  const [model, setModelState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('aec-model')
+    } catch {
+      return null
+    }
+  })
+  const setModel = useCallback((next: string | null) => {
+    setModelState(next)
+    try {
+      if (next) localStorage.setItem('aec-model', next)
+      else localStorage.removeItem('aec-model')
+    } catch {
+      /* private window: the choice lasts for this visit */
+    }
+  }, [])
   const abort = useRef<AbortController | null>(null)
   const queued = useRef<string | null>(null)
 
@@ -112,7 +132,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           setMessages((list) => [...list.filter((m) => !m.id.startsWith('local-')), event.data])
           break
         case 'message_start':
-          setDraft({ id: event.data.message_id, content: '', steps: [], blocks: [], error: null })
+          setDraft({ id: event.data.message_id, model: event.data.model, content: '', steps: [], blocks: [], error: null })
           break
         case 'token':
           setDraft((d) => (d ? { ...d, content: d.content + event.data.text } : d))
@@ -184,7 +204,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setMessages((list) => [...list, { id: `local-${Date.now()}`, role: 'user', content: text, blocks: [], steps: [], attachments, context }])
         setDraft({ id: null, content: '', steps: [], blocks: [], error: null })
         abort.current = new AbortController()
-        await ai.send(id, { text, attachments: attachments.map((a) => a.id), context }, handle, abort.current.signal)
+        await ai.send(id, { text, attachments: attachments.map((a) => a.id), context, model }, handle, abort.current.signal)
       } catch (error) {
         setDraft((d) => ({ ...(d ?? { id: null, content: '', steps: [], blocks: [] }), error: errorText(error) }))
       } finally {
@@ -193,7 +213,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         if (id) client.invalidateQueries({ queryKey: ['ai', 'conversation', id] })
       }
     },
-    [busy, conversationId, client, context, handle],
+    [busy, conversationId, client, context, handle, model],
   )
 
   const confirm = useCallback(
@@ -201,7 +221,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setBusy(true)
       try {
         abort.current = new AbortController()
-        await ai.confirm(actionId, handle, abort.current.signal)
+        await ai.confirm(actionId, handle, abort.current.signal, model)
       } catch (error) {
         toast.error(errorText(error))
       } finally {
@@ -209,7 +229,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'ai' })
       }
     },
-    [handle, finish, client],
+    [handle, finish, client, model],
   )
 
   const cancel = useCallback(
@@ -250,8 +270,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [conversationId, busy, send])
 
   const value = useMemo<AssistantState>(
-    () => ({ open, setOpen, conversationId, select, newChat, messages, loading: detail.isFetching && !messages.length, draft, busy, send, ask, confirm, cancel, stop, context }),
-    [open, conversationId, select, newChat, messages, detail.isFetching, draft, busy, send, ask, confirm, cancel, stop, context],
+    () => ({ open, setOpen, conversationId, select, newChat, messages, loading: detail.isFetching && !messages.length, draft, busy, send, ask, confirm, cancel, stop, context, model, setModel }),
+    [open, conversationId, select, newChat, messages, detail.isFetching, draft, busy, send, ask, confirm, cancel, stop, context, model, setModel],
   )
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

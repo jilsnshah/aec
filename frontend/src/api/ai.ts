@@ -100,6 +100,7 @@ export interface ChatMessage {
   attachments: Attachment[]
   context?: PageContext | null
   error?: string | null
+  model?: string | null
   created_at?: string | null
 }
 export interface PageContext {
@@ -121,7 +122,7 @@ export interface Capabilities {
 
 export type StreamEvent =
   | { event: 'user_message'; data: ChatMessage }
-  | { event: 'message_start'; data: { message_id: string; mode: AiMode } }
+  | { event: 'message_start'; data: { message_id: string; mode: AiMode; model?: string | null } }
   | { event: 'token'; data: { text: string } }
   | { event: 'tool_start'; data: Step }
   | { event: 'tool_end'; data: Step }
@@ -193,9 +194,10 @@ export const ai = {
   create: (title?: string) => http.post<Conversation>('/api/ai/conversations', { title }),
   rename: (id: string, title: string) => http.patch<Conversation>(`/api/ai/conversations/${id}`, { title }),
   remove: (id: string) => fetch(`/api/ai/conversations/${id}`, { method: 'DELETE', credentials: 'include' }),
-  send: (id: string, body: { text: string; attachments: string[]; context?: PageContext | null }, onEvent: (e: StreamEvent) => void, signal?: AbortSignal) =>
+  send: (id: string, body: { text: string; attachments: string[]; context?: PageContext | null; model?: string | null }, onEvent: (e: StreamEvent) => void, signal?: AbortSignal) =>
     stream(`/api/ai/conversations/${id}/messages`, body, onEvent, signal),
-  confirm: (actionId: string, onEvent: (e: StreamEvent) => void, signal?: AbortSignal) => stream(`/api/ai/actions/${actionId}/confirm`, {}, onEvent, signal),
+  confirm: (actionId: string, onEvent: (e: StreamEvent) => void, signal?: AbortSignal, model?: string | null) =>
+    stream(`/api/ai/actions/${actionId}/confirm`, { model: model ?? null }, onEvent, signal),
   cancel: (actionId: string) => http.post<{ status: string }>(`/api/ai/actions/${actionId}/cancel`),
   upload: async (file: File, conversationId?: string): Promise<Attachment> => {
     const form = new FormData()

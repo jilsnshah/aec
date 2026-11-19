@@ -34,8 +34,26 @@ class PageContext(BaseModel):
     record: Optional[Dict[str, Any]] = None
 
 
+def _model_choice(model: Optional[str]) -> Optional[str]:
+    """A model picked in the chat, if any; it must be a Gemini model id."""
+    from ..services import integration_settings
+
+    if not model:
+        return None
+    model = model.strip().replace("models/", "", 1)
+    if not integration_settings.MODEL_PATTERN.match(model):
+        raise ValidationError("Choose a Gemini model.")
+    return model
+
+
+class ActionIn(BaseModel):
+    model: Optional[str] = Field(default=None, max_length=80)
+
+
 class MessageIn(BaseModel):
     text: str = Field(default="", max_length=20000)
+    #: Overrides the model chosen in Settings for this reply.
+    model: Optional[str] = Field(default=None, max_length=80)
     attachments: List[uuid.UUID] = Field(default_factory=list, max_length=documents.MAX_FILES_PER_MESSAGE)
     context: Optional[PageContext] = None
 
@@ -193,13 +211,14 @@ def send_message(conversation_id: uuid.UUID, payload: MessageIn, request: Reques
     conversation.updated_at = utcnow()
     db.commit()
     user_view = agent.message_view(message)
+    model = _model_choice(payload.model)
     factory = _factory(db)
     cookie = request.cookies.get(auth_service.COOKIE)
     user_id, username, conv_id = user.id, user.username, conversation.id
 
     def start(emit):
         emit("user_message", user_view)
-        agent.respond(factory, conv_id, user_id, username, cookie, context, emit)
+        agent.respond(factory, conv_id, user_id, username, cookie, context, emit, model)
 
     return _sse(agent.stream(start))
 
@@ -208,8 +227,8 @@ def send_message(conversation_id: uuid.UUID, payload: MessageIn, request: Reques
 
 
 @router.post("/actions/{action_id}/confirm")
-def confirm_action(action_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
-                   user: User = Depends(require_user)):
+def confirm_action(action_id: uuid.UUID, request: Request, payload: Optional[ActionIn] = None,
+                   db: Session = Depends(get_db), user: User = Depends(require_user)):
     """Run a proposed change, then let the assistant report the real outcome."""
     action = db.get(AiAction, action_id)
     if action is None or action.user_id != user.id:
@@ -217,6 +236,7 @@ def confirm_action(action_id: uuid.UUID, request: Request, db: Session = Depends
     if action.status != "pending":
         raise ValidationError("This change was already {}.".format(action.status))
     factory = _factory(db)
+    model = _model_choice(payload.model if payload else None)
     cookie = request.cookies.get(auth_service.COOKIE)
     user_id, username, conversation_id = user.id, user.username, action.conversation_id
 
@@ -238,7 +258,7 @@ def confirm_action(action_id: uuid.UUID, request: Request, db: Session = Depends
             # Wait for the user to decide on the rest before the assistant speaks again.
             emit("idle", {"pending": still_pending})
             return
-        agent.respond(factory, conversation_id, user_id, username, cookie, None, emit)
+        agent.respond(factory, conversation_id, user_id, username, cookie, None, emit, model)
 
     return _sse(agent.stream(start))
 

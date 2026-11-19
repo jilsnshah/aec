@@ -360,3 +360,15 @@ def test_conversations_belong_to_their_user(ai, db):
     app.dependency_overrides[require_user] = lambda: other
     assert ai.get("/api/ai/conversations/{}".format(conversation)).status_code == 404
     assert ai.get("/api/ai/conversations").json() == []
+
+
+def test_a_model_can_be_picked_in_the_chat(ai, monkeypatch):
+    picked = {}
+    script = Script(steps=[say("Hello.")], seen=[])
+    monkeypatch.setattr(provider, "chat_model", lambda session, model=None, *a, **k: picked.setdefault("model", model) and script or script)
+    conversation = chat(ai)
+    message = ended(send(ai, conversation, "hi", model="gemini-3.1-flash-lite"))
+    assert picked["model"] == "gemini-3.1-flash-lite"
+    assert message["model"] == "gemini-3.1-flash-lite"
+    response = ai.post("/api/ai/conversations/{}/messages".format(conversation), json={"text": "hi", "model": "gpt-4o"})
+    assert response.status_code == 422

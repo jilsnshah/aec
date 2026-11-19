@@ -573,8 +573,11 @@ def respond(
     cookie: Optional[str],
     page: Optional[Dict[str, Any]],
     emit: Callable[[str, Dict[str, Any]], None],
+    model_name: Optional[str] = None,
 ) -> None:
-    """Write the assistant's reply to the conversation's latest messages."""
+    """Write the assistant's reply to the conversation's latest messages.
+
+    ``model_name`` is the model picked in the chat; otherwise the one in Settings."""
     session = session_factory()
     try:
         status = provider.status(session)
@@ -585,11 +588,12 @@ def respond(
         turn = Turn(conversation_id=conversation_id, user_id=user_id, username=username, cookie=cookie,
                     session_factory=session_factory, message_id=reply.id, emit=emit,
                     policy=row.config.get("change_policy", "confirm_all"), page=page)
-        emit("message_start", {"message_id": str(reply.id), "mode": status["mode"]})
+        used = None if status["mode"] == "development" else (model_name or row.config.get("model") or settings_service.default_model())
+        emit("message_start", {"message_id": str(reply.id), "mode": status["mode"], "model": used})
         error = None
         content = ""
         try:
-            model = provider.chat_model(session)
+            model = provider.chat_model(session, model_name)
             history = load_history(session, turn, exclude=reply.id)
             session.commit()  # release the read transaction while the model works
             content = run_turn(turn, model, history, status["mode"])["content"]
@@ -604,7 +608,7 @@ def respond(
         stored.content = content
         stored.blocks_json = _json(turn.blocks) if turn.blocks else None
         datasets = {key: value for key, value in turn.new_datasets.items() if len(_json(value)) < DATASET_LIMIT_BYTES}
-        stored.steps_json = _json({"steps": turn.steps, "datasets": datasets})
+        stored.steps_json = _json({"steps": turn.steps, "datasets": datasets, "model": used})
         stored.error = error
         conversation = session.get(AiConversation, conversation_id)
         conversation.updated_at = utcnow()
@@ -624,6 +628,7 @@ def message_view(message: AiMessage) -> Dict[str, Any]:
         "content": message.content,
         "blocks": json.loads(message.blocks_json or "[]"),
         "steps": steps.get("steps", []) if isinstance(steps, dict) else [],
+        "model": steps.get("model") if isinstance(steps, dict) else None,
         "attachments": json.loads(message.attachments_json or "[]"),
         "context": json.loads(message.context_json or "null"),
         "error": message.error,

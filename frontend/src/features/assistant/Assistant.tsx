@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
 import { fmtAgo } from '@/lib/format'
 import { Button, Empty, Tip } from '@/ui/core'
 import { Menu, useConfirm } from '@/ui/overlays'
-import { Chat } from './Chat'
+import { Chat, useModelName } from './Chat'
 import { useAiStatus, useAssistant } from './store'
 
 /* ---------------------------------------------------------------- floating */
@@ -20,6 +20,7 @@ export function AssistantDock() {
   const location = useLocation()
   const navigate = useNavigate()
   const status = useAiStatus()
+  const modelName = useModelName()
   const list = useQuery({ queryKey: ['ai', 'conversations'], queryFn: ai.conversations, enabled: open })
   if (location.pathname.startsWith('/assistant')) return null
   return (
@@ -41,7 +42,7 @@ export function AssistantDock() {
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="text-[13.5px] font-semibold">Assistant</div>
                 <div className="truncate text-[11px] text-fg-3">
-                  {status.data?.mode === 'live' ? status.data.model : status.data?.mode === 'development' ? 'Development mode' : 'Not connected'}
+                  {status.data?.mode === 'live' ? modelName : status.data?.mode === 'development' ? 'Development mode' : 'Not connected'}
                 </div>
               </div>
               <Menu
