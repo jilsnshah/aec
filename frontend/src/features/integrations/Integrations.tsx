@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn'
 import { fmtAgo, fmtDateTime } from '@/lib/format'
 import { Badge, Button, Empty, Field, Notice, Spinner, Toggle } from '@/ui/core'
 import { Segmented } from '@/ui/overlays'
+import { HeaderArt } from '@/ui/art'
 
 type FieldDef =
   | { key: string; label: string; kind?: 'text' | 'number' | 'secret'; hint?: string; placeholder?: string; wide?: boolean }
@@ -179,6 +180,7 @@ export function Integrations() {
 function PaneHeader({ icon, title, body, integration, onToggle, busy, extra }: { icon: ReactNode; title: string; body: string; integration?: IntegrationOut; onToggle?: (value: boolean) => void; busy?: boolean; extra?: ReactNode }) {
   return (
     <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-6 py-5">
+      <HeaderArt seed={6} />
       <div className="relative flex items-center gap-4">
         <span className="grid size-11 place-items-center rounded-full bg-peri/25 text-sky">{icon}</span>
         <div className="min-w-0 flex-1">

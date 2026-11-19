@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import { ChevronLeft } from 'lucide-react'
 import { Skeleton } from './core'
+import { HeaderArt } from './art'
 
 /** A record workspace: a list on the left, the chosen record on the right.
  *  On a narrow window only one shows at a time, with a way back to the list. */
@@ -67,7 +68,7 @@ export function ListRow({ selected, onSelect, group, children, alert }: { select
       {selected ? (
         <motion.span
           layoutId={`row-${group}`}
-          className="absolute inset-0 rounded-[14px] bg-peri/[0.18]"
+          className="absolute inset-0 rounded-[14px] bg-peri/[0.17] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--c-peri)_40%,transparent),0_8px_20px_-14px_var(--c-blue)]"
           transition={{ type: 'spring', stiffness: 520, damping: 42 }}
         />
       ) : null}
@@ -94,6 +95,7 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
 export function InspectorHeader({ eyebrow, title, badges, actions, meta }: { eyebrow?: ReactNode; title: ReactNode; badges?: ReactNode; actions?: ReactNode; meta?: ReactNode }) {
   return (
     <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-7 pt-6 pb-5 max-md:px-4">
+      <HeaderArt seed={String(title).length % 7} />
             <div className="relative flex items-start gap-4 max-md:flex-col max-md:gap-3">
         <div className="min-w-0 flex-1">
           {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}

@@ -1,7 +1,7 @@
 import { Command } from 'cmdk'
 import { motion } from 'motion/react'
 import { Suspense, useEffect, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, KeyRound, LogOut, Moon, Plus, Search, Sun } from 'lucide-react'
 import { api } from '@/api/endpoints'
@@ -9,9 +9,10 @@ import { useSummary } from '@/api/queries'
 import { cn } from '@/lib/cn'
 import { Avatar, Button, Tip } from '@/ui/core'
 import { Menu } from '@/ui/overlays'
+import { Backdrop } from '@/ui/art'
 import { useAuth } from './auth'
 import { Wordmark } from './Logo'
-import { MODULES, type Module } from './nav'
+import { MODULES, moduleFor, type Module } from './nav'
 import { PasswordSheet } from './PasswordSheet'
 import { useTheme } from './theme'
 
@@ -40,11 +41,12 @@ export function Shell() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative isolate flex h-full flex-col">
+      <Backdrop />
       <TopBar onSearch={() => setPalette(true)} />
       <main className="min-h-0 min-w-0 flex-1">
         <Suspense fallback={null}>
-          <Outlet />
+          <Page />
         </Suspense>
       </main>
       <Palette open={palette} onClose={() => setPalette(false)} />
@@ -52,7 +54,18 @@ export function Shell() {
   )
 }
 
-const round = 'grid size-10 shrink-0 place-items-center rounded-full bg-ink-850 text-fg-2 shadow-pane transition hover:text-fg active:scale-95'
+/** Each module eases in when opened; moving between records inside a module
+ *  does not replay it. */
+function Page() {
+  const { pathname } = useLocation()
+  return (
+    <motion.div key={moduleFor(pathname).to} className="h-full" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
+      <Outlet />
+    </motion.div>
+  )
+}
+
+const round = 'pane grid size-10 shrink-0 place-items-center rounded-full! text-fg-2 transition hover:text-fg active:scale-95'
 
 function TopBar({ onSearch }: { onSearch: () => void }) {
   const navigate = useNavigate()
@@ -101,7 +114,7 @@ function AccountMenu() {
       <Menu
         trigger={
           <button className="flex items-center gap-1.5 rounded-full p-0.5 pr-2 text-fg-3 transition hover:text-fg" aria-label="Account">
-            <Avatar name={user.username} size={36} />
+            <Avatar name={user.username} size={38} className="bg-[linear-gradient(145deg,var(--c-peri),var(--c-blue))] text-[#fff] shadow-[0_6px_14px_-6px_var(--c-blue)]" />
             <ChevronDown size={14} />
           </button>
         }

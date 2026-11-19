@@ -13,6 +13,7 @@ import { Segmented } from '@/ui/overlays'
 import { DeliverSheet } from '@/features/orders/DeliverSheet'
 import { PurchaseSheet } from '@/features/purchasing/PurchaseSheet'
 import { ReceiveSheet } from '@/features/receipts/ReceiveSheet'
+import { HeaderArt } from '@/ui/art'
 
 type LaneKey = 'ready' | 'onOrder' | 'short'
 const LANES: { key: LaneKey; title: string; hint: string; icon: ReactNode; color: string; qty: (row: CommitmentRow) => number }[] = [
@@ -41,6 +42,7 @@ export function Fulfilment() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 px-6 pt-1 pb-5 max-lg:overflow-y-auto max-md:gap-2 max-md:p-2">
       <header className="pane relative flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 overflow-hidden px-5 py-4">
+        <HeaderArt seed={5} />
         <div className="relative">
           <h1 className="text-[18px] font-semibold tracking-[-0.02em]">Fulfilment</h1>
           <p className="text-[12.5px] text-fg-3">Everything customers are still owed, oldest order first</p>
@@ -190,7 +192,7 @@ function CommitmentCard({ row, lane, qty, onAction }: { row: CommitmentRow; lane
       </Button>
     )
   return (
-    <motion.article layout initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="card group p-3.5 transition-colors hover:bg-ink-750">
+    <motion.article layout initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="card group p-3.5 transition-shadow duration-300 hover:shadow-[var(--shadow-lift)]">
       <div className="flex items-start gap-2.5">
         <Avatar name={row.customer_name} size={28} />
         <div className="min-w-0 flex-1">

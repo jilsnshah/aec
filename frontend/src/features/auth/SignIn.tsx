@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
 import { Logo } from '@/app/Logo'
+import { Backdrop, Contours } from '@/ui/art'
 import { Button, Field, Notice } from '@/ui/core'
 
 export function SignIn() {
@@ -28,14 +29,16 @@ export function SignIn() {
   }
 
   return (
-    <main className="relative grid h-full place-items-center overflow-y-auto px-4 py-6">
+    <main className="relative isolate grid h-full place-items-center overflow-y-auto px-4 py-6">
+      <Backdrop />
       <motion.div
         initial={{ opacity: 0, y: 14, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         className="grid w-full max-w-[880px] grid-cols-[1.05fr_1fr] gap-4 max-md:max-w-[400px] max-md:grid-cols-1"
       >
-        <section className="pane-contrast relative flex min-h-[460px] flex-col justify-between overflow-hidden p-9 max-md:hidden">
+        <section className="pane-contrast relative flex min-h-[460px] [&>*:not(svg)]:relative flex-col justify-between overflow-hidden p-9 max-md:hidden">
+          <Contours className="absolute -right-[30%] -bottom-[45%] size-[130%] text-[rgb(255_255_255/0.1)]" rings={14} seed={4} />
           <div className="flex items-center gap-2.5">
             <Logo size={30} tile="fill-[#fff]" />
             <span className="text-[19px] font-bold tracking-[-0.035em]">AEC Desk</span>

@@ -14,6 +14,7 @@ import { AllocationEditor, useAllocation, type Claimant } from '@/ui/allocate'
 import { Button, Empty, Field, Notice, SearchBox } from '@/ui/core'
 import { useProducts } from '@/ui/lines'
 import { ListPane, ListRow, ListSkeleton, SplitView } from '@/ui/split'
+import { HeaderArt } from '@/ui/art'
 
 /** Stock that arrived without a purchase order. Waiting customers can be
  *  given theirs straight away. */
@@ -138,6 +139,7 @@ function Entry({ productId }: { productId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="relative shrink-0 overflow-hidden border-b border-white/7 px-6 pt-5 pb-4">
+        <HeaderArt seed={2} />
         <div className="eyebrow mb-1.5">Stock in · {product.sku}</div>
         <h2 className="text-[21px] font-semibold tracking-[-0.022em]">{product.name}</h2>
         <p className="mt-1 text-[13px] text-fg-3">Stock rises now. Customers who are short can be given theirs from it.</p>

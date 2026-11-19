@@ -217,7 +217,7 @@ export function Notice({ tone = 'sky', children, icon }: { tone?: 'sky' | 'warn'
   )
 }
 
-export function Avatar({ name, size = 30 }: { name: string; size?: number }) {
+export function Avatar({ name, size = 30, className }: { name: string; size?: number; className?: string }) {
   const letters = name
     .replace(/^demo\s+/i, '')
     .split(/\s+/)
@@ -227,7 +227,7 @@ export function Avatar({ name, size = 30 }: { name: string; size?: number }) {
     .join('')
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-full bg-peri/30 font-semibold text-sky"
+      className={cn('grid shrink-0 place-items-center icon-disc font-semibold', className)}
       style={{ width: size, height: size, fontSize: size * 0.36 }}
       aria-hidden="true"
     >

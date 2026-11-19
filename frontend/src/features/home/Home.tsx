@@ -8,8 +8,9 @@ import type { InventorySummaryOut } from '@/api/types'
 import { useAuth } from '@/app/auth'
 import { cn } from '@/lib/cn'
 import { fmtCompactMoney, fmtMoney, fmtMoneyRound, fmtPercent, fmtQty, fmtShortDate, fmtToday, n, plural } from '@/lib/format'
-import { OrderBadge, PurchaseBadge } from '@/lib/status'
-import { CountUp, Empty, Skeleton } from '@/ui/core'
+import { OrderBadge, PurchaseBadge, STATE } from '@/lib/status'
+import { Contours } from '@/ui/art'
+import { CountUp, Empty, Meter, Skeleton } from '@/ui/core'
 import { Segmented } from '@/ui/overlays'
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -31,6 +32,15 @@ export function Home() {
           {greeting()}, {user?.username}
         </h1>
         <p className="text-[13px] text-fg-3">{fmtToday()}</p>
+        <div className="ml-auto flex flex-wrap gap-2 max-lg:ml-0 max-lg:w-full">
+          {data ? (
+            <>
+              <Chip to="/fulfilment?lane=ready" dot="bg-blue">{fmtQty(data.total_reserved_stock)} ready to load</Chip>
+              <Chip to="/fulfilment?lane=short" dot="bg-bad">{plural(data.products_short?.length ?? 0, 'product')} to buy</Chip>
+              <Chip to="/orders" dot="bg-peri">{plural(data.open_orders, 'open order')}</Chip>
+            </>
+          ) : null}
+        </div>
       </div>
       <div className="grid min-h-[600px] flex-1 grid-cols-12 grid-rows-[auto_minmax(0,0.95fr)_minmax(0,1.15fr)] gap-4 max-lg:flex max-lg:min-h-0 max-lg:flex-col max-md:gap-2">
         <Kpis data={data} />
@@ -44,16 +54,29 @@ export function Home() {
   )
 }
 
-function Card({ className, children, delay = 0, dark }: { className?: string; children: ReactNode; delay?: number; dark?: boolean }) {
+function Card({ className, children, delay = 0, dark, lift }: { className?: string; children: ReactNode; delay?: number; dark?: boolean; lift?: boolean }) {
+  const surface = cn(dark ? 'pane-contrast' : 'pane', 'relative flex min-h-0 flex-col overflow-hidden')
+  if (lift) {
+    // The entrance animation owns the outer transform, so the hover lift lives on the inner surface.
+    return (
+      <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay, ease }} className={cn('min-h-0', className)}>
+        <div className={cn(surface, 'lift h-full')}>{children}</div>
+      </motion.section>
+    )
+  }
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease }}
-      className={cn(dark ? 'pane-contrast' : 'pane', 'relative flex min-h-0 flex-col overflow-hidden', className)}
-    >
+    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay, ease }} className={cn(surface, className)}>
       {children}
     </motion.section>
+  )
+}
+
+function Chip({ to, dot, children }: { to: string; dot: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="pane lift flex h-8 items-center gap-2 rounded-full! px-3.5 text-[12px] font-medium text-fg-2 hover:text-fg">
+      <span className={cn('size-2 rounded-full', dot)} />
+      {children}
+    </Link>
   )
 }
 
@@ -70,8 +93,28 @@ function CardHead({ title, hint, actions }: { title: string; hint?: string; acti
 }
 
 const IconDot = ({ children, tone = 'peri' }: { children: ReactNode; tone?: 'peri' | 'bad' }) => (
-  <span className={cn('grid size-8 shrink-0 place-items-center rounded-full', tone === 'bad' ? 'bg-bad/14 text-bad' : 'bg-peri/30 text-sky')}>{children}</span>
+  <span className={cn('size-9 shrink-0', tone === 'bad' ? 'grid place-items-center rounded-full bg-bad/12 text-bad ring-1 ring-bad/15 ring-inset' : 'icon-disc')}>{children}</span>
 )
+
+/** A small running-total line with a soft fill. */
+function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return <div className="h-9" />
+  const max = Math.max(1, ...values)
+  const points = values.map((value, index) => [(index / (values.length - 1)) * 100, 34 - (value / max) * 30] as const)
+  const line = points.map(([x, y], index) => `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join('')
+  return (
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="h-9 w-full overflow-visible" aria-hidden="true">
+      <defs>
+        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: 'var(--color-blue)', stopOpacity: 0.28 }} />
+          <stop offset="1" style={{ stopColor: 'var(--color-blue)', stopOpacity: 0 }} />
+        </linearGradient>
+      </defs>
+      <motion.path d={`${line}L100 36L0 36Z`} fill="url(#spark-fill)" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 0.6 }} />
+      <motion.path d={line} fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" style={{ stroke: 'var(--color-blue)' }} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease }} />
+    </svg>
+  )
+}
 
 /* ---------------------------------------------------------------- figures */
 function Kpis({ data }: { data?: InventorySummaryOut }) {
@@ -80,12 +123,24 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
   const recent = days.slice(half).reduce((sum, day) => sum + n(day.delivered_value), 0)
   const before = days.slice(0, half).reduce((sum, day) => sum + n(day.delivered_value), 0)
   const change = before > 0 ? ((recent - before) / before) * 100 : null
+  let running = 0
+  const cumulative = days.map((day) => (running += n(day.delivered_value)))
   const items = [
     {
       label: 'To deliver',
       icon: <Truck size={15} />,
       value: data ? <CountUp value={n(data.total_pending_quantity)} format={(v) => fmtQty(Math.round(v * 1000) / 1000)} /> : null,
       note: data ? <span className="text-fg-3">{plural(data.open_orders, 'open order')}</span> : null,
+      extra: data ? (
+        <Meter
+          className="h-2"
+          parts={[
+            { label: 'Ready', value: n(data.total_reserved_stock), color: STATE.ready },
+            { label: 'On order', value: Math.max(0, n(data.total_pending_quantity) - n(data.total_reserved_stock) - n(data.total_unallocated_quantity)), color: STATE.onOrder },
+            { label: 'Short', value: n(data.total_unallocated_quantity), color: STATE.short },
+          ]}
+        />
+      ) : null,
       to: '/fulfilment',
     },
     {
@@ -93,6 +148,7 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
       icon: <PackageCheck size={15} />,
       value: data ? <CountUp value={recent + before} format={fmtMoneyRound} /> : null,
       note: change === null ? null : <span className={change >= 0 ? 'text-ok' : 'text-bad'} title="Last 15 days against the 15 before">{`${change >= 0 ? '+' : ''}${change.toFixed(0)}%`} <span className="text-fg-3">30 days</span></span>,
+      extra: <Sparkline values={cumulative} />,
       to: '/orders',
     },
     {
@@ -101,14 +157,23 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
       tone: n(data?.total_unallocated_quantity) > 0 ? ('bad' as const) : undefined,
       value: data ? <CountUp value={n(data.total_unallocated_quantity)} format={(v) => fmtQty(Math.round(v * 1000) / 1000)} /> : null,
       note: data ? <span className={data.products_short?.length ? 'text-bad' : 'text-fg-3'}>{plural(data.products_short?.length ?? 0, 'product')} to buy</span> : null,
+      extra: (
+        <div className="flex min-w-0 gap-1.5 overflow-hidden">
+          {(data?.products_short ?? []).slice(0, 2).map((row) => (
+            <span key={row.product_id} className="truncate rounded-full bg-bad/10 px-2.5 py-1 text-[11px] font-medium text-bad">
+              {row.name}
+            </span>
+          ))}
+        </div>
+      ),
       to: '/fulfilment?lane=short',
     },
   ]
   return (
     <div className="col-span-7 grid shrink-0 grid-cols-3 gap-4 max-md:grid-cols-1 max-md:gap-2">
       {items.map((item, index) => (
-        <Card key={item.label} delay={0.04 * index}>
-          <Link to={item.to} className="group flex h-full flex-col gap-4 p-5">
+        <Card key={item.label} delay={0.04 * index} lift>
+          <Link to={item.to} className="group flex h-full flex-col gap-3.5 p-5">
             <div className="flex items-center gap-2.5">
               <IconDot tone={item.tone}>{item.icon}</IconDot>
               <span className="text-[14px] font-medium">{item.label}</span>
@@ -118,6 +183,7 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
               <span className={cn('num text-[30px] leading-none font-semibold tracking-[-0.035em]', item.tone === 'bad' && 'text-bad')}>{item.value ?? <Skeleton className="h-7 w-24" />}</span>
               <span className="text-[11.5px] font-medium whitespace-nowrap">{item.note}</span>
             </div>
+            <div className="mt-auto flex h-9 items-end">{item.extra}</div>
           </Link>
         </Card>
       ))}
@@ -138,14 +204,44 @@ function ReadyGauge({ data }: { data?: InventorySummaryOut }) {
       <CardHead title="Ready to deliver" hint="Share of owed goods in hand" />
       <div className="flex min-h-0 flex-1 flex-col items-center px-5 pt-1 pb-4">
         <div className="relative flex min-h-0 w-full flex-1 items-end justify-center">
-          <svg viewBox="-14 -14 248 134" className="h-full max-h-[150px] w-auto max-w-full">
-            <path d={arc} pathLength={100} fill="none" strokeWidth={26} className="stroke-blue" />
+          <svg viewBox="-16 -16 252 136" className="h-full max-h-[160px] w-auto max-w-full overflow-visible">
+            <defs>
+              <linearGradient id="gauge-blue" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" style={{ stopColor: 'var(--color-blue-2)' }} />
+                <stop offset="1" style={{ stopColor: 'var(--color-blue)' }} />
+              </linearGradient>
+              <linearGradient id="gauge-peri" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0" style={{ stopColor: 'var(--color-peri)' }} />
+                <stop offset="1" style={{ stopColor: 'color-mix(in oklab, var(--color-peri) 70%, white)' }} />
+              </linearGradient>
+            </defs>
+            {Array.from({ length: 37 }, (_, index) => {
+              const angle = Math.PI + (index / 36) * Math.PI
+              const lit = (index / 36) * 100 <= share
+              const long = index % 6 === 0
+              return (
+                <motion.line
+                  key={index}
+                  x1={110 + Math.cos(angle) * 108}
+                  y1={110 + Math.sin(angle) * 108}
+                  x2={110 + Math.cos(angle) * (long ? 117 : 113)}
+                  y2={110 + Math.sin(angle) * (long ? 117 : 113)}
+                  strokeWidth={long ? 1.6 : 1.1}
+                  strokeLinecap="round"
+                  className={lit ? 'stroke-peri' : 'stroke-fg-4/40'}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 + index * 0.015 }}
+                />
+              )
+            })}
+            <path d={arc} pathLength={100} fill="none" strokeWidth={24} stroke="url(#gauge-blue)" />
             <motion.path
               d={arc}
               pathLength={100}
               fill="none"
-              strokeWidth={26}
-              className="stroke-peri"
+              strokeWidth={24}
+              stroke="url(#gauge-peri)"
               initial={{ strokeDasharray: '0 100' }}
               animate={{ strokeDasharray: `${Math.max(0, share - gap)} 100` }}
               transition={{ duration: 1.1, ease }}
@@ -175,7 +271,8 @@ function ProfitCard({ data }: { data?: InventorySummaryOut }) {
   const profit = n(data?.gross_profit)
   const costShare = revenue > 0 ? Math.min(100, (cost / revenue) * 100) : 0
   return (
-    <Card dark className="col-span-4 justify-between gap-3 p-6 max-lg:min-h-[240px]" delay={0.14}>
+    <Card dark className="col-span-4 justify-between gap-3 p-6 max-lg:min-h-[240px] [&>*:not(svg)]:relative" delay={0.14}>
+      <Contours className="absolute -top-[55%] -right-[18%] size-[120%] text-[rgb(255_255_255/0.09)]" rings={13} seed={7} />
       <div>
         <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Gross profit</h2>
         <p className="mt-0.5 text-[12px] opacity-55">On goods delivered so far</p>
@@ -270,15 +367,16 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
                   onMouseEnter={() => setHover(index)}
                   onMouseLeave={() => setHover(null)}
                 >
+                  <span className={cn('absolute inset-0 rounded-[14px] transition-colors', hover === index ? 'bg-peri/22' : 'bg-peri/[0.1]')} />
                   <motion.div
-                    className={cn('relative w-full overflow-hidden rounded-[12px] bg-peri transition-opacity', hover !== null && hover !== index && 'opacity-45')}
+                    className={cn('relative w-full overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--c-peri)_62%,white),var(--c-peri))] shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition-opacity', hover !== null && hover !== index && 'opacity-45')}
                     initial={{ height: 0 }}
                     animate={{ height: `${(bucket.booked / top) * 100}%` }}
                     transition={{ duration: 0.9, delay: 0.15 + index * 0.06, ease }}
                     style={{ minHeight: bucket.booked > 0 ? 6 : 0 }}
                   >
                     <motion.div
-                      className="absolute inset-x-0 bottom-0 rounded-[12px] bg-blue"
+                      className="absolute inset-x-0 bottom-0 rounded-[14px] bg-[linear-gradient(180deg,var(--c-blue-2),var(--c-blue))] shadow-[inset_0_1px_0_rgb(255_255_255/0.3)]"
                       initial={{ height: 0 }}
                       animate={{ height: `${bucket.booked > 0 ? Math.min(100, (bucket.delivered / bucket.booked) * 100) : 0}%` }}
                       transition={{ duration: 0.9, delay: 0.45 + index * 0.06, ease }}
@@ -430,7 +528,7 @@ function OrderDots({ data }: { data?: InventorySummaryOut }) {
                 {Array.from({ length: rows }, (_, slot) => rows - 1 - slot).map((index) => (
                   <motion.span
                     key={index}
-                    className={cn('aspect-square h-full max-h-[24px] rounded-full', index < filled ? 'bg-blue' : 'bg-peri/35')}
+                    className={cn('aspect-square h-full max-h-[24px] rounded-full', index < filled ? 'bg-[radial-gradient(circle_at_35%_30%,var(--c-blue-2),var(--c-blue))] shadow-[0_3px_8px_-3px_var(--c-blue)]' : 'bg-peri/30')}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.25 + column * 0.04 + index * 0.025, type: 'spring', stiffness: 420, damping: 22 }}

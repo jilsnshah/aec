@@ -71,6 +71,12 @@ system setting decides.
 * Data colours: periwinkle `#8ea7f3` and royal blue `#1f4fe6`, used together
   as in the bars, gauge and dots. Status pills are light fills with coloured
   text (blue open, green delivered, red short).
+* Artistic layer, kept calm: the window sits on soft colour fields that drift
+  very slowly under a fine paper grain, with faint topographic contour lines.
+  Cards are frosted glass with a lit top edge, so the colour shows faintly
+  through, and they rise a little under the pointer. Record headers and the
+  strong card carry the same contour art. Bars sit in pale tracks with gentle
+  gradients, and the gauge has a ticked dial that lights up to the value.
 * Plus Jakarta Sans (variable, self-hosted), tabular figures where numbers
   line up. Motion stays quiet: gliding pills and highlights, figures that count
   up, bars and gauge that grow in, sheets that spring open. No neon, no glow.

@@ -39,11 +39,21 @@
   --c-contrast: #0b0c10;
   --c-on-contrast: #ffffff;
   --c-tint: #10183a;
-  --c-strong: #0b0c10;
+  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(63 108 242 / 0.42), transparent 58%), radial-gradient(60% 80% at 0% 100%, rgb(142 167 243 / 0.16), transparent 60%), #0b0c10;
 
-  --pane-border: transparent;
+  --pane-bg: rgb(255 255 255 / 0.72);
+  --card-bg: rgb(255 255 255 / 0.86);
+  --card-border: rgb(255 255 255 / 0.95);
+  --shadow-card: 0 1px 2px rgb(16 24 58 / 0.04), 0 6px 16px -10px rgb(31 52 130 / 0.2);
+  --pane-border: rgb(255 255 255 / 0.85);
   --hair: rgb(16 24 58 / 0.07);
-  --shadow-pane: 0 1px 2px rgb(16 24 58 / 0.04), 0 8px 24px -12px rgb(16 24 58 / 0.12);
+  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(16 24 58 / 0.04), 0 12px 32px -14px rgb(31 52 130 / 0.18);
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(16 24 58 / 0.05), 0 22px 44px -16px rgb(31 52 130 / 0.3);
+  --blob-1: rgb(142 167 243 / 0.55);
+  --blob-2: rgb(196 210 252 / 0.9);
+  --blob-3: rgb(110 140 240 / 0.28);
+  --contour: rgb(255 255 255 / 0.55);
+  --grain-opacity: 0.05;
   --shadow-float: 0 30px 80px -24px rgb(16 24 58 / 0.35), 0 0 0 1px rgb(16 24 58 / 0.06);
   --shadow-pop: 0 14px 40px -12px rgb(16 24 58 / 0.28), 0 0 0 1px rgb(16 24 58 / 0.07);
   --scrim: rgb(20 28 60 / 0.28);
@@ -80,11 +90,21 @@
   --c-contrast: #f3f5f9;
   --c-on-contrast: #0b0c10;
   --c-tint: #ffffff;
-  --c-strong: linear-gradient(150deg, #2f5ff0, #1c3fc0);
+  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(160 185 255 / 0.4), transparent 55%), linear-gradient(150deg, #2f5ff0, #1a3ab5);
 
-  --pane-border: rgb(255 255 255 / 0.05);
+  --pane-bg: rgb(20 22 29 / 0.74);
+  --card-bg: rgb(255 255 255 / 0.035);
+  --card-border: rgb(255 255 255 / 0.06);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --pane-border: rgb(255 255 255 / 0.06);
   --hair: rgb(255 255 255 / 0.08);
-  --shadow-pane: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.6);
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 2px 4px rgb(0 0 0 / 0.3), 0 26px 50px -18px rgb(0 0 0 / 0.75);
+  --blob-1: rgb(47 95 240 / 0.22);
+  --blob-2: rgb(90 110 190 / 0.14);
+  --blob-3: rgb(142 167 243 / 0.1);
+  --contour: rgb(142 167 243 / 0.09);
+  --grain-opacity: 0.07;
   --shadow-float: 0 40px 100px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.09);
   --shadow-pop: 0 20px 50px -10px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.09);
   --scrim: rgb(0 0 0 / 0.55);
@@ -238,21 +258,55 @@
 
   /* A pane: the building block of every workspace */
   .pane {
-    background: var(--color-ink-850);
+    background: var(--pane-bg);
     border: 1px solid var(--pane-border);
     border-radius: var(--radius-pane);
     box-shadow: var(--shadow-pane);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    backdrop-filter: blur(22px) saturate(1.5);
+  }
+  /* A card that rises a little under the pointer */
+  .lift {
+    transition:
+      transform 260ms var(--ease-out-quint),
+      box-shadow 260ms var(--ease-out-quint);
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lift);
+  }
+  /* Fine paper grain over the backdrop */
+  .grain {
+    opacity: var(--grain-opacity);
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.2 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  [data-theme='dark'] .grain {
+    mix-blend-mode: soft-light;
+  }
+  /* An icon in a soft gradient disc */
+  .icon-disc {
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--color-sky);
+    background: linear-gradient(145deg, color-mix(in oklab, var(--c-peri) 38%, transparent), color-mix(in oklab, var(--c-peri) 14%, transparent));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 0 0 1px color-mix(in oklab, var(--c-peri) 22%, transparent);
   }
   .card {
-    background: var(--color-ink-900);
-    border: 1px solid var(--hair);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 16px;
+    box-shadow: var(--shadow-card);
   }
   /* The black card: one strong surface per screen */
   .pane-contrast {
     background: var(--c-strong);
     color: #fff;
     border-radius: var(--radius-pane);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.12),
+      0 24px 48px -20px rgb(11 20 60 / 0.55);
   }
 
   /* Buttons */
@@ -285,9 +339,13 @@
     opacity: 0.4;
   }
   .btn-primary {
-    background: var(--c-contrast);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.14), transparent 55%),
+      var(--c-contrast);
     color: var(--c-on-contrast);
-    box-shadow: 0 6px 16px -8px rgb(11 12 16 / 0.5);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.12),
+      0 8px 18px -8px rgb(11 12 16 / 0.55);
   }
   .btn-primary:hover:not(:disabled) {
     background: color-mix(in oklab, var(--c-contrast) 86%, var(--c-blue));
