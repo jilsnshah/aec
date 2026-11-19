@@ -541,7 +541,8 @@ def product_names(session: Session, product_id: uuid.UUID) -> Dict[str, Any]:
     return {
         "product_id": product_id, "base_unit": product.unit_of_measure,
         "aliases": [{"id": a.id, "kind": a.kind, "value": a.value, "supplier_id": a.supplier_id, "supplier_name": names.get(a.supplier_id)} for a in aliases],
-        "units": [{"id": u.id, "name": u.name, "factor": float(u.factor)} for u in units],
+        "units": [{"id": u.id, "name": u.name, "factor": float(u.factor), "for_sales": u.for_sales, "for_purchase": u.for_purchase} for u in units],
+        "sales_unit": product.sales_unit, "purchase_unit": product.purchase_unit, "whole_units": product.whole_units,
     }
 
 
@@ -577,7 +578,8 @@ def remove_alias(session: Session, product_id: uuid.UUID, alias_id: uuid.UUID) -
     return product_names(session, product_id)
 
 
-def save_unit(session: Session, product_id: uuid.UUID, name: str, factor: Any, unit_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
+def save_unit(session: Session, product_id: uuid.UUID, name: str, factor: Any, unit_id: Optional[uuid.UUID] = None,
+              for_sales: bool = True, for_purchase: bool = True) -> Dict[str, Any]:
     begin_write(session)
     product = session.get(Product, product_id)
     if product is None:
@@ -596,7 +598,15 @@ def save_unit(session: Session, product_id: uuid.UUID, name: str, factor: Any, u
     row = session.get(ProductUnit, unit_id) if unit_id else ProductUnit(product_id=product_id)
     if row is None or row.product_id != product_id:
         raise NotFoundError("Unit not found.")
-    row.name, row.factor = name, value
+    old_name = row.name
+    row.name, row.factor, row.for_sales, row.for_purchase = name, value, bool(for_sales), bool(for_purchase)
+    for key in ("sales_unit", "purchase_unit"):
+        if old_name and getattr(product, key) == old_name:
+            setattr(product, key, name)
+    if not row.for_sales and product.sales_unit == name:
+        product.sales_unit = None
+    if not row.for_purchase and product.purchase_unit == name:
+        product.purchase_unit = None
     session.add(row)
     try:
         session.commit()
@@ -611,6 +621,10 @@ def remove_unit(session: Session, product_id: uuid.UUID, unit_id: uuid.UUID) -> 
     row = session.get(ProductUnit, unit_id)
     if row is None or row.product_id != product_id:
         raise NotFoundError("Unit not found.")
+    product = session.get(Product, product_id)
+    for key in ("sales_unit", "purchase_unit"):
+        if getattr(product, key) == row.name:
+            setattr(product, key, None)
     session.delete(row)
     _commit(session)
     return product_names(session, product_id)
@@ -646,6 +660,6 @@ def find_products(session: Session, text: str, limit: int = 8) -> List[Dict[str,
     units = {}
     if hits:
         for unit in session.execute(select(ProductUnit).where(ProductUnit.product_id.in_([h[1].id for h in hits]))).scalars():
-            units.setdefault(unit.product_id, []).append({"name": unit.name, "factor": float(unit.factor)})
+            units.setdefault(unit.product_id, []).append({"name": unit.name, "factor": float(unit.factor), "for_sales": unit.for_sales})
     return [{"product_id": p.id, "name": p.name, "sku": p.sku, "unit": p.unit_of_measure, "matched_by": why, "other_units": units.get(p.id, [])}
             for _, p, why in hits[:limit]]

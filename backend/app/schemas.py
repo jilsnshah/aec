@@ -77,6 +77,14 @@ class ProductCreate(BaseModel):
     reorder_level: Optional[Decimal] = Field(default=None, ge=0, description="Minimum stock to keep.")
     preferred_supplier_id: Optional[uuid.UUID] = Field(default=None, description="Usual supplier.")
     lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Days from ordering to arrival.")
+    brand: Optional[str] = Field(default=None, max_length=64)
+    hsn_code: Optional[str] = Field(default=None, max_length=16, description="HSN code for GST.")
+    gst_rate: Optional[Decimal] = Field(default=None, ge=0, le=100, description="GST % for this product; empty uses Settings.")
+    weight_kg: Optional[Decimal] = Field(default=None, ge=0, description="Weight of one base unit in kg.")
+    specs: Optional[List[Dict[str, str]]] = Field(default=None, description="Further details as [{name, value}]: grade, size, colour...")
+    sales_unit: Optional[str] = Field(default=None, max_length=32, description="Unit sales lines start in; empty for the base unit.")
+    purchase_unit: Optional[str] = Field(default=None, max_length=32, description="Unit purchase lines start in; empty for the base unit.")
+    whole_units: Optional[bool] = Field(default=None, description="Only whole base units (no 2.5 bags).")
 
 
 class ProductUpdate(BaseModel):
@@ -92,6 +100,14 @@ class ProductUpdate(BaseModel):
     reorder_level: Optional[Decimal] = Field(default=None, ge=0, description="Minimum stock to keep.")
     preferred_supplier_id: Optional[uuid.UUID] = Field(default=None, description="Usual supplier.")
     lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Days from ordering to arrival.")
+    brand: Optional[str] = Field(default=None, max_length=64)
+    hsn_code: Optional[str] = Field(default=None, max_length=16, description="HSN code for GST.")
+    gst_rate: Optional[Decimal] = Field(default=None, ge=0, le=100, description="GST % for this product; empty uses Settings.")
+    weight_kg: Optional[Decimal] = Field(default=None, ge=0, description="Weight of one base unit in kg.")
+    specs: Optional[List[Dict[str, str]]] = Field(default=None, description="Further details as [{name, value}]: grade, size, colour...")
+    sales_unit: Optional[str] = Field(default=None, max_length=32, description="Unit sales lines start in; empty for the base unit.")
+    purchase_unit: Optional[str] = Field(default=None, max_length=32, description="Unit purchase lines start in; empty for the base unit.")
+    whole_units: Optional[bool] = Field(default=None, description="Only whole base units (no 2.5 bags).")
 
 
 class ProductOut(ORMModel):
@@ -109,6 +125,16 @@ class ProductOut(ORMModel):
     preferred_supplier_id: Optional[uuid.UUID] = None
     preferred_supplier_name: Optional[str] = None
     lead_time_days: Optional[int] = None
+    brand: Optional[str] = None
+    hsn_code: Optional[str] = None
+    gst_rate: Optional[Decimal] = None
+    weight_kg: Optional[Decimal] = None
+    specs: List[Dict[str, Any]] = Field(default_factory=list)
+    sales_unit: Optional[str] = None
+    purchase_unit: Optional[str] = None
+    whole_units: bool = False
+    #: Every unit it is counted in, base first: [{name, factor, base, for_sales, for_purchase}].
+    units: List[Dict[str, Any]] = Field(default_factory=list)
     physical_stock: Decimal
     #: Of the physical stock, how much is already promised to an order.
     reserved_stock: Decimal = Decimal("0")
@@ -236,10 +262,11 @@ class OutstandingLine(BaseModel):
 
 class OrderLineCreate(BaseModel):
     product_id: uuid.UUID
-    quantity_ordered: Decimal = Field(gt=0)
+    quantity_ordered: Decimal = Field(gt=0, description="In ``unit`` if given, else in the product's base unit.")
     unit_price: Optional[Decimal] = Field(
-        default=None, ge=0, description="Price per unit before discount. Defaults to the product MRP."
+        default=None, ge=0, description="Price per unit (per ``unit`` if given) before discount. Defaults to the product MRP."
     )
+    unit: Optional[str] = Field(default=None, max_length=32, description="Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.")
     discount_percent: Decimal = Field(
         default=Decimal("0"), ge=0, le=100, description="Line discount as a percentage."
     )
@@ -276,6 +303,14 @@ class OrderItemOut(ORMModel):
     discount_percent: Decimal
     unit_price_net: Decimal
     product: ProductRef
+    #: The unit the line was entered in (the product's base unit if none).
+    unit: Optional[str] = None
+    unit_name: str = ""
+    unit_factor: Decimal = Decimal("1")
+    #: The quantity in ``unit_name``; the other quantities are in the base unit.
+    unit_quantity: Optional[Decimal] = None
+    #: Price per ``unit_name``.
+    unit_rate: Optional[Decimal] = None
 
 
 class OrderCancellationOut(ORMModel):
@@ -367,7 +402,8 @@ class OrderDetailOut(OrderOut):
 
 class EnquiryLineCreate(BaseModel):
     product_id: uuid.UUID
-    quantity: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0, description="In ``unit`` if given, else in the product's base unit.")
+    unit: Optional[str] = Field(default=None, max_length=32, description="Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.")
     discount_percent: Decimal = Field(
         default=Decimal("0"), ge=0, le=100, description="Discount for this product, 0-100."
     )
@@ -417,6 +453,14 @@ class EnquiryItemOut(ORMModel):
     quoted_unit_price: Decimal
     line_total: Decimal
     discount_amount: Decimal
+    #: The unit the line was entered in (the product's base unit if none).
+    unit: Optional[str] = None
+    unit_name: str = ""
+    unit_factor: Decimal = Decimal("1")
+    #: The quantity in ``unit_name``; the other quantities are in the base unit.
+    unit_quantity: Optional[Decimal] = None
+    #: Price per ``unit_name``.
+    unit_rate: Optional[Decimal] = None
 
 
 class EnquiryOut(ORMModel):
@@ -758,8 +802,9 @@ class SupplierDetailOut(SupplierOut):
 
 class PurchaseOrderLineCreate(BaseModel):
     product_id: uuid.UUID
-    quantity_ordered: Decimal = Field(gt=0)
-    unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
+    quantity_ordered: Decimal = Field(gt=0, description="In ``unit`` if given, else in the product's base unit.")
+    unit_cost: Decimal = Field(default=Decimal("0"), ge=0, description="Cost per unit (per ``unit`` if given).")
+    unit: Optional[str] = Field(default=None, max_length=32, description="Unit the quantity (and price) are in, e.g. tonne; must be one of the product's units. Omit for the base unit.")
     notes: Optional[str] = None
 
 
@@ -798,6 +843,14 @@ class PurchaseOrderItemOut(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID
     product: ProductRef
+    #: The unit the line was entered in (the product's base unit if none).
+    unit: Optional[str] = None
+    unit_name: str = ""
+    unit_factor: Decimal = Decimal("1")
+    #: The quantity in ``unit_name``; the other quantities are in the base unit.
+    unit_quantity: Optional[Decimal] = None
+    #: Price per ``unit_name``.
+    unit_rate: Optional[Decimal] = None
     line_number: int
     quantity_ordered: Decimal
     quantity_received: Decimal

@@ -139,6 +139,8 @@ class AliasIn(BaseModel):
 class UnitIn(BaseModel):
     name: str = Field(description="e.g. tonne, bundle.")
     factor: str = Field(description="How many base units one of these holds, e.g. 20 (bags per tonne).")
+    for_sales: bool = Field(default=True, description="Offered on quotes and sales orders.")
+    for_purchase: bool = Field(default=True, description="Offered on purchase orders.")
 
 
 @router.get("/products/{product_id}/names")
@@ -161,7 +163,14 @@ def remove_alias(product_id: uuid.UUID, alias_id: uuid.UUID, db: Session = Depen
 @router.post("/products/{product_id}/units", status_code=201)
 def add_unit(product_id: uuid.UUID, payload: UnitIn, db: Session = Depends(get_db)):
     """Add another unit the product is counted in, as a multiple of its base unit."""
-    return parties.save_unit(db, product_id, payload.name, payload.factor)
+    return parties.save_unit(db, product_id, payload.name, payload.factor, None, payload.for_sales, payload.for_purchase)
+
+
+@router.put("/products/{product_id}/units/{unit_id}")
+def update_unit(product_id: uuid.UUID, unit_id: uuid.UUID, payload: UnitIn, db: Session = Depends(get_db)):
+    """Change a unit's name, conversion, or whether it is used for sales and purchases.
+    Lines already written keep the conversion they were made with."""
+    return parties.save_unit(db, product_id, payload.name, payload.factor, unit_id, payload.for_sales, payload.for_purchase)
 
 
 @router.delete("/products/{product_id}/units/{unit_id}")

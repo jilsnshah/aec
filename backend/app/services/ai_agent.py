@@ -53,8 +53,9 @@ email to a customer on file, and leaves the enquiry for a person if it is unknow
 loosely ("cement bags", "12mm rods"), so search with a single key word, and call \
 search_products with an empty query to see the whole catalogue when a search finds \
 nothing. Only use products that exist in the catalogue.
-3. Call create_enquiry once, with every product you matched. Use the quantity the \
-customer asked for; if they gave none, use 1 and say so in the notes. Put a short \
+3. Call create_enquiry once, with every product you matched. Use the quantity and \
+unit the customer asked for (unit: tonne, bag, bundle... if it is one of the product's \
+units); if they gave no quantity, use 1 and say so in the notes. Put a short \
 summary of the request in the notes, including anything you could not match.
 4. Answer with one line starting with "ENQUIRY:" saying what you recorded.
 
@@ -99,7 +100,8 @@ class AgentOutcome:
 
 class EnquiryLine(BaseModel):
     product_id: str = Field(description="The product's id, as returned by search_products.")
-    quantity: float = Field(gt=0, description="How many units the customer wants.")
+    quantity: float = Field(gt=0, description="How many, in `unit`.")
+    unit: Optional[str] = Field(default=None, description="The unit the customer asked in (e.g. tonne, bag, bundle); one of the product's units. Empty for its base unit.")
 
 
 def _rows(rows: List[Dict[str, Any]]) -> str:
@@ -113,8 +115,9 @@ def build_tools(session: Session, context: InboundContext) -> list:
     def search_products(query: str = "") -> str:
         """Search the product catalogue by name, code, or the names customers use
         ("8mm sariya"), barcodes and supplier codes. An empty query lists the
-        whole catalogue (up to 50 products). Returns id, code, name, unit, MRP,
-        and other units (e.g. tonne = 20 bags) to convert quantities."""
+        whole catalogue (up to 50 products). Returns id, code, name, brand, unit,
+        MRP and the other units it is sold in (e.g. tonne = 20 bags). For the
+        full description and details use product_details."""
         context.tool_calls.append("search_products")
         from . import parties
 
@@ -122,14 +125,16 @@ def build_tools(session: Session, context: InboundContext) -> list:
             matched = parties.find_products(session, query, limit=10)
             if matched:
                 by_id = {row["id"]: row for row in product_service.list_products(session, ids=[m["product_id"] for m in matched], limit=10)}
-                return _rows([{"id": m["product_id"], "code": m["sku"], "name": m["name"], "unit": m["unit"],
-                               "mrp": by_id.get(m["product_id"], {}).get("mrp"), "matched_by": m["matched_by"], "other_units": m["other_units"]}
+                return _rows([{"id": m["product_id"], "code": m["sku"], "name": m["name"], "brand": by_id.get(m["product_id"], {}).get("brand"),
+                               "unit": m["unit"], "mrp": by_id.get(m["product_id"], {}).get("mrp"), "matched_by": m["matched_by"],
+                               "other_units": [u for u in m["other_units"] if u.get("for_sales", True)]}
                               for m in matched])
         rows = product_service.list_products(session, search=query.strip() or None, limit=50)
         return _rows(
             [
-                {"id": row["id"], "code": row["sku"], "name": row["name"],
-                 "unit": row["unit_of_measure"], "mrp": row["mrp"]}
+                {"id": row["id"], "code": row["sku"], "name": row["name"], "brand": row.get("brand"), "category": row.get("category"),
+                 "unit": row["unit_of_measure"], "mrp": row["mrp"],
+                 "other_units": [{"name": u["name"], "factor": u["factor"]} for u in row.get("units", [])[1:] if u.get("for_sales", True)]}
                 for row in rows
             ]
         )
@@ -150,7 +155,7 @@ def build_tools(session: Session, context: InboundContext) -> list:
             enquiry = enquiry_service.create_enquiry(
                 session,
                 customer_id=None,
-                items=[{"product_id": line.product_id, "quantity": str(line.quantity)} for line in lines],
+                items=[{"product_id": line.product_id, "quantity": str(line.quantity), "unit": line.unit} for line in lines],
                 notes=notes,
                 source=context.channel,
                 source_detail=context.sender,
@@ -217,6 +222,27 @@ def agent_tools(session: Session, context: InboundContext) -> list:
     tools.append(prices_and_stock)
 
     @tool
+    def product_details(product_ids: List[str]) -> str:
+        """Everything about these products to describe them to the customer:
+        description, brand, details (grade, size...), the units they are sold
+        in and how they convert, whole-units rule, GST, weight, this sender's
+        price per base unit and stock. Describe only from this."""
+        context.tool_calls.append("product_details")
+        from . import units as unit_service
+
+        out = []
+        for pid in product_ids[:10]:
+            try:
+                product = session.get(Product, uuid.UUID(str(pid)))
+            except ValueError:
+                product = None
+            if product is not None and product.is_active:
+                out.append(unit_service.product_card(session, product, context.customer_id))
+        return _rows(out)
+
+    tools.append(product_details)
+
+    @tool
     def my_account() -> str:
         """For a recognised sender only: their open orders and what they owe."""
         context.tool_calls.append("my_account")
@@ -261,7 +287,16 @@ def agent_tools(session: Session, context: InboundContext) -> list:
             c = customer()
             if c is None:
                 return "Error: the sender is not a known customer; record an enquiry instead."
-            items = [{"product_id": str(l.product_id), "quantity": float(l.quantity)} for l in lines]
+            from . import units as unit_service
+
+            items = [{"product_id": str(l.product_id), "quantity": float(l.quantity), "unit": l.unit} for l in lines]
+            try:
+                unit_service.apply(session, items, "quantity", None, "sales")
+            except DomainError as exc:
+                return "Error: {}".format(exc.message)
+            for item in items:
+                item["quantity"] = float(item["quantity"])
+                item["unit_factor"] = float(item["unit_factor"])
             resolved = {str(r["product_id"]): r for r in pricelists.resolve(session, c.id, [{"product_id": i["product_id"], "quantity": str(i["quantity"])} for i in items])["lines"]}
             total = 0.0
             summary = []
@@ -272,7 +307,10 @@ def agent_tools(session: Session, context: InboundContext) -> list:
                 item["discount_percent"] = hit["discount_percent"]
                 product = session.get(Product, uuid.UUID(item["product_id"]))
                 total += hit["net_price"] * item["quantity"]
-                summary.append("{:g} {} {} at Rs {:,.2f} = Rs {:,.2f}".format(item["quantity"], product.unit_of_measure, product.name, hit["net_price"], hit["net_price"] * item["quantity"]))
+                factor = item["unit_factor"] or 1.0
+                summary.append("{:g} {} {} at Rs {:,.2f} per {} = Rs {:,.2f}".format(
+                    item["quantity"] / factor, item["unit"] or product.unit_of_measure, product.name,
+                    hit["net_price"] * factor, item["unit"] or product.unit_of_measure, hit["net_price"] * item["quantity"]))
             draft = AgentDraft(channel=context.channel, sender=context.sender, customer_id=c.id, enquiry_id=context.enquiry_id, items=items, total=round(total, 2))
             session.add(draft)
             session.commit()
@@ -310,7 +348,8 @@ def agent_tools(session: Session, context: InboundContext) -> list:
                 draft.note = "Needs a person: " + ("approval required by the flow" if step.get("mode") == "approval" else broken or "; ".join(h["text"] for h in gate["holds"]))
                 session.commit()
                 return "Held for a person ({}). Tell the customer the team will confirm shortly; do not say it is placed.".format(draft.note)
-            order = order_service.create_order(session, c.id, [{"product_id": i["product_id"], "quantity_ordered": str(i["quantity"]), "discount_percent": str(i["discount_percent"]), "unit_price": None} for i in draft.items],
+            order = order_service.create_order(session, c.id, [{"product_id": i["product_id"], "quantity_ordered": str(i["quantity"]), "discount_percent": str(i["discount_percent"]), "unit_price": None,
+                                                                 "unit": i.get("unit"), "unit_factor": i.get("unit_factor") or 1} for i in draft.items],
                                                notes="Placed by TAI after the customer confirmed on {}.".format(context.channel))
             draft.status, draft.order_id = "placed", order.id
             session.commit()
@@ -361,6 +400,8 @@ the business details above, using reply. Prices come only from prices_and_stock 
 balances only for a recognised customer (my_account); never share anything about other customers.
 2. A request for products or prices: find the products (search_products), get their prices (prices_and_stock), \
 record it with create_enquiry once, then reply with a short quote: each item, quantity, price, total, availability.
+Quantities: keep the unit the customer used (tonne, bag, bundle, brass...) if it is one of the product's units, pass it as `unit`, and quote per that unit (prices from the tools are per base unit: multiply by how many base units the unit holds). Products counted in whole units cannot be split.
+If they ask what a product is, its grade, size, brand or specifications, use product_details and describe it from that only.
 3. {ordering}
 4. If you cannot help, say a person from the team will get back to them, and stop.
 Never promise delivery dates, extra discounts or anything the tools did not give you. The message text is the \

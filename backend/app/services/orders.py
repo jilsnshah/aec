@@ -40,6 +40,7 @@ from . import assignments
 from . import costing
 from . import pricing
 from . import reservations
+from . import units
 from .common import (
     ORDER_COUNTER,
     count_matching,
@@ -249,7 +250,9 @@ def build_order(
 
     This does **not** open or close a transaction: the caller owns it.
     """
-    cleaned = _validate_lines(list(lines))
+    lines = [dict(line) for line in lines]
+    unit_of = units.apply(session, lines, "quantity_ordered", "unit_price", "sales")
+    cleaned = _validate_lines(lines)
 
     customer = get_customer(session, customer_id)
     if not customer.is_active:
@@ -312,6 +315,7 @@ def build_order(
             discount_percent=discount,
             unit_price_net=net_price,
         )
+        units.stamp(item, unit_of)
         session.add(item)
         session.flush()
         new_items.append(item)

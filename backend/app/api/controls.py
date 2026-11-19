@@ -19,6 +19,7 @@ class DraftLine(BaseModel):
     quantity_ordered: float = 0
     unit_price: Optional[float] = None
     discount_percent: float = 0
+    unit: Optional[str] = None
 
 
 class DraftIn(BaseModel):

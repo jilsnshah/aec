@@ -76,6 +76,29 @@ class TimestampMixin:
     )
 
 
+class UnitLineMixin:
+    """A document line entered in one of the product's units (bag, tonne,
+    brass...). Quantities and prices on the line stay in the product's base
+    unit, so stock and costing never convert; ``unit`` and ``unit_factor``
+    record what the customer or supplier actually asked for."""
+
+    #: The unit the line was entered in; NULL means the product's base unit.
+    unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    #: How many base units one ``unit`` holds, frozen when the line was written.
+    unit_factor: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("1"))
+
+    def _in_unit(self, value: Optional[Decimal]) -> Optional[Decimal]:
+        if value is None:
+            return None
+        factor = self.unit_factor or Decimal("1")
+        return (Decimal(value) / factor).quantize(Decimal("0.001"))
+
+    @property
+    def unit_name(self) -> str:
+        product = getattr(self, "product", None)
+        return self.unit or (product.unit_of_measure if product is not None else "")
+
+
 class MovementType(str, enum.Enum):
     OPENING_STOCK = "OPENING_STOCK"
     #: Ad-hoc stock-in without a purchase order.
@@ -168,10 +191,35 @@ class Product(Base, TimestampMixin):
         Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
     )
     lead_time_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    #: Make or brand (UltraTech, Tata Tiscon...).
+    brand: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: HSN code for GST invoices and Tally.
+    hsn_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    #: GST rate in percent; NULL uses the rate in Settings.
+    gst_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    #: Weight of one base unit in kilograms; spreads freight by weight.
+    weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 4), nullable=True)
+    #: Any further details as name/value pairs: grade, size, colour, thickness...
+    specs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    #: The unit orders and quotes start in, and the one purchase orders start
+    #: in. NULL means the base unit.
+    sales_unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    purchase_unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    #: Counted in whole base units only (bags, pieces); no 2.5 bags.
+    whole_units: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     preferred_supplier: Mapped[Optional["Supplier"]] = relationship(foreign_keys=[preferred_supplier_id])
     order_items: Mapped[List["SalesOrderItem"]] = relationship(back_populates="product")
     movements: Mapped[List["StockMovement"]] = relationship(back_populates="product")
+    alt_units: Mapped[List["ProductUnit"]] = relationship(order_by="ProductUnit.factor", lazy="selectin", viewonly=True)
+
+    @property
+    def units(self) -> list:
+        """Every unit it is counted in, base first."""
+        return [{"name": self.unit_of_measure, "factor": 1.0, "base": True, "for_sales": True, "for_purchase": True}] + [
+            {"name": u.name, "factor": float(u.factor), "base": False, "for_sales": u.for_sales, "for_purchase": u.for_purchase}
+            for u in self.alt_units
+        ]
 
 
 class Customer(Base, TimestampMixin):
@@ -263,7 +311,7 @@ class SalesOrder(Base, TimestampMixin):
     cancellations: Mapped[List["OrderCancellation"]] = relationship(back_populates="order")
 
 
-class SalesOrderItem(Base):
+class SalesOrderItem(UnitLineMixin, Base):
     __tablename__ = "sales_order_items"
     __table_args__ = (
         CheckConstraint("quantity_ordered > 0", name="ck_order_items_ordered_positive"),
@@ -338,6 +386,15 @@ class SalesOrderItem(Base):
     order: Mapped["SalesOrder"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship(back_populates="order_items")
     allocations: Mapped[List["StockAllocation"]] = relationship(back_populates="order_item")
+
+    @property
+    def unit_quantity(self) -> Optional[Decimal]:
+        return self._in_unit(self.quantity_ordered)
+
+    @property
+    def unit_rate(self) -> Decimal:
+        """What the customer pays per ``unit`` after the discount."""
+        return (self.unit_price_net * (self.unit_factor or Decimal("1"))).quantize(Decimal("0.01"))
 
     @property
     def quantity_pending(self) -> Decimal:
@@ -625,7 +682,7 @@ class CustomerEnquiry(Base, TimestampMixin):
         return self.status == EnquiryStatus.OPEN
 
 
-class CustomerEnquiryItem(Base, TimestampMixin):
+class CustomerEnquiryItem(UnitLineMixin, Base, TimestampMixin):
     """One product line on an enquiry, priced from a snapshot of its MRP."""
 
     __tablename__ = "customer_enquiry_items"
@@ -665,6 +722,15 @@ class CustomerEnquiryItem(Base, TimestampMixin):
 
     enquiry: Mapped["CustomerEnquiry"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
+
+    @property
+    def unit_quantity(self) -> Optional[Decimal]:
+        return self._in_unit(self.quantity)
+
+    @property
+    def unit_rate(self) -> Decimal:
+        """The quoted price per ``unit``."""
+        return (self.quoted_unit_price * (self.unit_factor or Decimal("1"))).quantize(Decimal("0.01"))
 
 
 class StockReservation(Base):
@@ -848,7 +914,7 @@ class PurchaseOrder(Base, TimestampMixin):
         )
 
 
-class PurchaseOrderItem(Base, TimestampMixin):
+class PurchaseOrderItem(UnitLineMixin, Base, TimestampMixin):
     __tablename__ = "purchase_order_items"
     __table_args__ = (
         CheckConstraint("quantity_ordered > 0", name="ck_po_items_ordered_positive"),
@@ -877,6 +943,15 @@ class PurchaseOrderItem(Base, TimestampMixin):
 
     purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
+
+    @property
+    def unit_quantity(self) -> Optional[Decimal]:
+        return self._in_unit(self.quantity_ordered)
+
+    @property
+    def unit_rate(self) -> Decimal:
+        """The agreed cost per ``unit``."""
+        return (self.unit_cost * (self.unit_factor or Decimal("1"))).quantize(Decimal("0.01"))
 
     @property
     def quantity_remaining(self) -> Decimal:
@@ -1750,6 +1825,9 @@ class ProductUnit(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(32), nullable=False)
     #: How many base units one of this unit holds.
     factor: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    #: Offered on sales (orders, quotes) and on purchases.
+    for_sales: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    for_purchase: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class CustomerGroup(Base, TimestampMixin):

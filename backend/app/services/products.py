@@ -140,6 +140,15 @@ def to_view(
         "preferred_supplier_id": product.preferred_supplier_id,
         "preferred_supplier_name": product.preferred_supplier.name if product.preferred_supplier else None,
         "lead_time_days": product.lead_time_days,
+        "brand": product.brand,
+        "hsn_code": product.hsn_code,
+        "gst_rate": product.gst_rate,
+        "weight_kg": product.weight_kg,
+        "specs": product.specs or [],
+        "sales_unit": product.sales_unit,
+        "purchase_unit": product.purchase_unit,
+        "whole_units": product.whole_units,
+        "units": product.units,
         "physical_stock": physical,
         "reserved_stock": reserved,
         "available_stock": physical - reserved,
@@ -253,6 +262,39 @@ def _apply_settings(session: Session, product: Product, values: Dict[str, Any]) 
         if days is not None and not 0 <= int(days) <= 365:
             raise ValidationError("Lead time must be between 0 and 365 days.")
         product.lead_time_days = int(days) if days is not None else None
+    for key, size in (("brand", 64), ("hsn_code", 16)):
+        if key in values:
+            setattr(product, key, (values[key] or "").strip()[:size] or None)
+    if "gst_rate" in values:
+        rate = values["gst_rate"]
+        if rate is not None and not Decimal("0") <= Decimal(str(rate)) <= Decimal("100"):
+            raise ValidationError("GST rate must be between 0 and 100%.")
+        product.gst_rate = Decimal(str(rate)) if rate is not None and str(rate) != "" else None
+    if "weight_kg" in values:
+        weight = values["weight_kg"]
+        product.weight_kg = require_non_negative(Decimal(str(weight)), "Weight") if weight not in (None, "") else None
+    if "specs" in values and values["specs"] is not None:
+        clean = []
+        for spec in values["specs"]:
+            name = str((spec or {}).get("name") or "").strip()[:60]
+            value = str((spec or {}).get("value") or "").strip()[:500]
+            if name and value:
+                clean.append({"name": name, "value": value})
+        if len(clean) > 60:
+            raise ValidationError("Keep it to 60 details or fewer.")
+        product.specs = clean
+    if "whole_units" in values and values["whole_units"] is not None:
+        product.whole_units = bool(values["whole_units"])
+    for key, purpose in (("sales_unit", "sales"), ("purchase_unit", "purchase")):
+        if key in values:
+            name = (values[key] or "").strip()
+            if not name or product.id is None:
+                setattr(product, key, None if not name else name)
+                continue
+            from . import units
+
+            stored, _ = units.find(session, product, name, purpose)
+            setattr(product, key, stored)
 
 
 def categories(session: Session) -> List[Dict[str, Any]]:

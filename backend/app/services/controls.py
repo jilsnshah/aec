@@ -16,7 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..errors import HoldError
+from ..errors import DomainError, HoldError
 from ..models import AuditEvent, Customer, IntegrationSetting, Product, User
 from . import integration_settings as settings_service
 from . import records
@@ -33,8 +33,15 @@ def settings(session: Session) -> Dict[str, Any]:
 def evaluate(session: Session, customer_id: Optional[uuid.UUID], items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     """What the controls say about a draft order: holds (would block) and
     warnings (always reported)."""
+    from . import units
+
     config = settings(session)
     lines = []
+    items = [dict(item) for item in items]
+    try:
+        units.apply(session, items, "quantity_ordered", "unit_price", "sales")
+    except DomainError:
+        pass  # a bad unit is reported when the order itself is saved
     for item in items:
         product = session.get(Product, uuid.UUID(str(item["product_id"])))
         if product is None:

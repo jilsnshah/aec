@@ -54,6 +54,11 @@ DECLARATIONS = [
         parameters=types.Schema(type="OBJECT", properties={}),
     ),
     types.FunctionDeclaration(
+        name="product_details",
+        description="Everything about a product to describe it: description, brand, grade/size details, units it is sold in, price and stock.",
+        parameters=types.Schema(type="OBJECT", properties={"product_id": types.Schema(type="STRING")}, required=["product_id"]),
+    ),
+    types.FunctionDeclaration(
         name="my_balance",
         description="What the caller owes and what is overdue. Only for a recognised caller.",
         parameters=types.Schema(type="OBJECT", properties={}),
@@ -66,7 +71,8 @@ DECLARATIONS = [
             type="OBJECT",
             properties={
                 "items": types.Schema(type="ARRAY", items=types.Schema(type="OBJECT", properties={
-                    "product_id": types.Schema(type="STRING"), "quantity": types.Schema(type="NUMBER")}, required=["product_id", "quantity"])),
+                    "product_id": types.Schema(type="STRING"), "quantity": types.Schema(type="NUMBER"),
+                    "unit": types.Schema(type="STRING", description="Unit the caller said (tonne, bag, bundle...) if it is one of the product's units.")}, required=["product_id", "quantity"])),
                 "caller_name": types.Schema(type="STRING", description="Only for a new caller."),
                 "notes": types.Schema(type="STRING", description="Delivery site, timing or anything else they asked."),
             },
@@ -77,7 +83,8 @@ DECLARATIONS = [
         name="prepare_order",
         description="For a recognised caller who wants to order: prepare it at their prices and get the summary to read back. Then ask for a clear yes.",
         parameters=types.Schema(type="OBJECT", properties={"items": types.Schema(type="ARRAY", items=types.Schema(type="OBJECT", properties={
-            "product_id": types.Schema(type="STRING"), "quantity": types.Schema(type="NUMBER")}, required=["product_id", "quantity"]))}, required=["items"]),
+            "product_id": types.Schema(type="STRING"), "quantity": types.Schema(type="NUMBER"),
+                    "unit": types.Schema(type="STRING", description="Unit the caller said (tonne, bag, bundle...) if it is one of the product's units.")}, required=["product_id", "quantity"]))}, required=["items"]),
     ),
     types.FunctionDeclaration(
         name="place_order",
@@ -140,10 +147,19 @@ class CallTools:
         prices = pricelists.resolve(session, self.customer_id, [{"product_id": p.id, "quantity": "1"} for p in products])["lines"] if products else []
         by_id = {line["product_id"]: line for line in prices}
         return {"products": [
-            {"product_id": str(p.id), "name": p.name, "unit": p.unit_of_measure,
+            {"product_id": str(p.id), "name": p.name, "brand": p.brand, "unit": p.unit_of_measure,
+             "also_sold_in": ["{} ({:g} {})".format(u.name, float(u.factor), p.unit_of_measure) for u in p.alt_units if u.for_sales],
              "in_stock": float(max(Decimal("0"), p.physical_stock - reserved.get(p.id, Decimal("0")))),
              "price_per_unit": by_id.get(p.id, {}).get("net_price", float(p.mrp or 0)), "mrp": float(p.mrp or 0)}
             for p in products]}
+
+    def _product_details(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import units as unit_service
+
+        product = session.get(Product, uuid.UUID(str(args.get("product_id"))))
+        if product is None or not product.is_active:
+            return {"error": "Unknown product."}
+        return unit_service.product_card(session, product, self.customer_id)
 
     def _my_orders(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         if not self.customer_id:
@@ -168,9 +184,12 @@ class CallTools:
         return {"owed": summary["open"], "overdue": summary["overdue"], "payment_terms_days": summary["payment_terms_days"]}
 
     def _take_enquiry(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
-        items = [{"product_id": uuid.UUID(str(i["product_id"])), "quantity": str(i["quantity"]), "discount_percent": "0"} for i in args.get("items") or []]
+        from ..services import units as unit_service
+
+        items = [{"product_id": uuid.UUID(str(i["product_id"])), "quantity": str(i["quantity"]), "unit": i.get("unit"), "discount_percent": "0"} for i in args.get("items") or []]
         if not items:
             return {"error": "No items."}
+        unit_service.apply(session, items, "quantity", None, "sales")
         customer_id = self.customer_id
         # Start from the caller's best prices, like a quote typed in the app.
         resolved = {line["product_id"]: line for line in pricelists.resolve(session, customer_id, [{"product_id": i["product_id"], "quantity": i["quantity"]} for i in items])["lines"]}
@@ -195,7 +214,12 @@ class CallTools:
             return {"error": "Orders are confirmed by the team: take an enquiry instead."}
         if not self.customer_id:
             return {"error": "Caller not recognised: take an enquiry instead."}
-        items = [{"product_id": str(i["product_id"]), "quantity": float(i["quantity"])} for i in args.get("items") or []]
+        from ..services import units as unit_service
+
+        items = [{"product_id": str(i["product_id"]), "quantity": float(i["quantity"]), "unit": i.get("unit")} for i in args.get("items") or []]
+        unit_service.apply(session, items, "quantity", None, "sales")
+        for item in items:
+            item["quantity"], item["unit_factor"] = float(item["quantity"]), float(item["unit_factor"])
         resolved = {str(r["product_id"]): r for r in pricelists.resolve(session, self.customer_id, [{"product_id": i["product_id"], "quantity": str(i["quantity"])} for i in items])["lines"]}
         total, said = 0.0, []
         for item in items:
@@ -205,7 +229,9 @@ class CallTools:
             item["discount_percent"] = hit["discount_percent"]
             product = session.get(Product, uuid.UUID(item["product_id"]))
             total += hit["net_price"] * item["quantity"]
-            said.append("{:g} {} {} at {:,.0f} rupees".format(item["quantity"], product.unit_of_measure, product.name, hit["net_price"]))
+            factor = item["unit_factor"] or 1.0
+            said.append("{:g} {} {} at {:,.0f} rupees per {}".format(item["quantity"] / factor, item["unit"] or product.unit_of_measure, product.name,
+                                                                    hit["net_price"] * factor, item["unit"] or product.unit_of_measure))
         session.add(AgentDraft(channel="call", sender=self.number or "", customer_id=self.customer_id, items=items, total=round(total, 2)))
         session.commit()
         return {"read_back": said, "total": round(total, 2), "say": "Read this back with the total, before GST, and ask for a clear yes."}
@@ -228,7 +254,8 @@ class CallTools:
             draft.status, draft.note = "held", "Needs a person: " + ("approval required by the flow" if step.get("mode") == "approval" else broken or "; ".join(h["text"] for h in gate["holds"]))
             session.commit()
             return {"held": True, "say": "Tell the caller the team will confirm the order shortly. Do not say it is placed."}
-        order = order_service.create_order(session, draft.customer_id, [{"product_id": i["product_id"], "quantity_ordered": str(i["quantity"]), "discount_percent": str(i["discount_percent"]), "unit_price": None} for i in draft.items],
+        order = order_service.create_order(session, draft.customer_id, [{"product_id": i["product_id"], "quantity_ordered": str(i["quantity"]), "discount_percent": str(i["discount_percent"]), "unit_price": None,
+                                                                        "unit": i.get("unit"), "unit_factor": i.get("unit_factor") or 1} for i in draft.items],
                                            notes="Placed by PAI after the caller confirmed on the phone.")
         draft.status, draft.order_id = "placed", order.id
         session.commit()

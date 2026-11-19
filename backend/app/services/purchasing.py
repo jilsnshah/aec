@@ -33,6 +33,7 @@ from ..models import (
 )
 from ..numeric import ZERO, ZERO_MONEY, money, quantity, require_non_negative, unit_cost
 from . import costing, reservations
+from . import units
 from .common import (
     count_matching,
     lock_products,
@@ -213,6 +214,8 @@ def create_purchase_order(
     settlements: Optional[Iterable[Dict[str, Any]]] = None,
 ) -> PurchaseOrder:
     """Raise a purchase order. Confirmed straight away, it counts as stock at once."""
+    items = [dict(item) for item in items]
+    unit_of = units.apply(session, items, "quantity_ordered", "unit_cost", "purchase")
     cleaned = _clean_po_lines(items)
 
     try:
@@ -246,6 +249,8 @@ def create_purchase_order(
                     quantity_received=ZERO,
                     unit_cost=line["unit_cost"],
                     notes=line["notes"],
+                    unit=unit_of.get(product.id, (None, 1))[0],
+                    unit_factor=unit_of.get(product.id, (None, 1))[1],
                 )
             )
 
@@ -297,7 +302,9 @@ def update_purchase_order(
                     "Purchase order {} has already been placed; its lines can no longer be "
                     "changed.".format(order.po_number)
                 )
-            cleaned = _clean_po_lines(changes["items"])
+            raw = [dict(item) for item in changes["items"]]
+            unit_of = units.apply(session, raw, "quantity_ordered", "unit_cost", "purchase")
+            cleaned = _clean_po_lines(raw)
             products = _load_products(session, [line["product_id"] for line in cleaned])
             existing = {item.product_id: item for item in order.items}
 
@@ -314,6 +321,7 @@ def update_purchase_order(
                 item.quantity_ordered = line["quantity_ordered"]
                 item.unit_cost = line["unit_cost"]
                 item.notes = line["notes"]
+                units.stamp(item, unit_of)
                 keep.append(product.id)
 
             for item in list(order.items):
@@ -519,6 +527,11 @@ def to_po_view(order: PurchaseOrder) -> Dict[str, Any]:
                 "unit_cost": item.unit_cost,
                 "line_cost": money(item.unit_cost * item.quantity_ordered),
                 "notes": item.notes,
+                "unit": item.unit,
+                "unit_name": item.unit_name,
+                "unit_factor": item.unit_factor,
+                "unit_quantity": item.unit_quantity,
+                "unit_rate": item.unit_rate,
                 "quantity_assigned": assigned.get(item.id, ZERO),
                 "quantity_free": max(
                     ZERO, item.quantity_remaining - assigned.get(item.id, ZERO)

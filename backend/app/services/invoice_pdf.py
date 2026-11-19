@@ -24,6 +24,18 @@ class InvoiceLine:
     amount: Decimal
 
 
+def line_in_unit(description: str, base_quantity: Decimal, base_unit: str, base_rate: Decimal, amount: Decimal,
+                 unit: Optional[str] = None, factor: Optional[Decimal] = None) -> InvoiceLine:
+    """A document line in the unit it was sold in (2 tonne at 7,000), noting
+    the base quantity (= 40 bags) in the description."""
+    if not unit or not factor or Decimal(factor) == 1:
+        return InvoiceLine(description, base_quantity, base_unit, base_rate, amount)
+    factor = Decimal(factor)
+    base = format(Decimal(base_quantity).normalize(), "f")
+    return InvoiceLine("{} (= {} {})".format(description, base, base_unit), (Decimal(base_quantity) / factor).quantize(Decimal("0.001")).normalize(),
+                       unit, (Decimal(base_rate) * factor).quantize(Decimal("0.01")), amount)
+
+
 @dataclass
 class Invoice:
     number: str

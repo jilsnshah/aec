@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import begin_write
+from . import units
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..models import (
     Customer,
@@ -237,6 +238,8 @@ def create_enquiry(
     ``source`` says where it came from -- ``manual``, ``whatsapp`` or
     ``email`` -- and ``source_detail`` who sent it, for captured enquiries.
     """
+    items = [dict(item) for item in items]
+    unit_of = units.apply(session, items, "quantity", None, "sales")
     cleaned = _clean_items(items)
 
     try:
@@ -298,6 +301,8 @@ def create_enquiry(
                     discount_percent=quote["discount_percent"],
                     quoted_unit_price=quote["quoted_unit_price"],
                     line_total=quote["line_total"],
+                    unit=unit_of.get(product.id, (None, 1))[0],
+                    unit_factor=unit_of.get(product.id, (None, 1))[1],
                 )
             )
 
@@ -337,7 +342,9 @@ def update_enquiry(
                 setattr(enquiry, link, order_service.check_party_link(session, enquiry.customer_id, changes[link], what))
 
         if "items" in changes and changes["items"] is not None:
-            cleaned = _clean_items(changes["items"])
+            raw = [dict(item) for item in changes["items"]]
+            unit_of = units.apply(session, raw, "quantity", None, "sales")
+            cleaned = _clean_items(raw)
             products = _load_products(session, [line["product_id"] for line in cleaned])
             existing = {item.product_id: item for item in enquiry.items}
 
@@ -359,6 +366,7 @@ def update_enquiry(
                 item.discount_percent = quote["discount_percent"]
                 item.quoted_unit_price = quote["quoted_unit_price"]
                 item.line_total = quote["line_total"]
+                units.stamp(item, unit_of)
                 kept.append(item)
 
             keep_ids = {id(item) for item in kept}
@@ -469,6 +477,8 @@ def convert_enquiry(session: Session, enquiry_id: uuid.UUID) -> Dict[str, Any]:
                     "unit_price": quote["mrp_snapshot"],
                     "discount_percent": quote["discount_percent"],
                     "mrp_snapshot": quote["mrp_snapshot"],
+                    "unit": item.unit,
+                    "unit_factor": item.unit_factor,
                 }
             )
 
@@ -554,6 +564,11 @@ def to_view(enquiry: CustomerEnquiry) -> Dict[str, Any]:
                 "discount_percent": item.discount_percent,
                 "quoted_unit_price": item.quoted_unit_price,
                 "line_total": item.line_total,
+                "unit": item.unit,
+                "unit_name": item.unit_name,
+                "unit_factor": item.unit_factor,
+                "unit_quantity": item.unit_quantity,
+                "unit_rate": item.unit_rate,
                 "discount_amount": pricing.discount_amount(
                     item.mrp_snapshot, item.quoted_unit_price, item.quantity
                 ),
@@ -573,7 +588,7 @@ def quotation(session: Session, enquiry_id: uuid.UUID, valid_days: int = 7):
     from datetime import timedelta
 
     from . import integration_settings as settings_service
-    from .invoice_pdf import Invoice, InvoiceLine
+    from .invoice_pdf import Invoice, line_in_unit
 
     enquiry = get_enquiry(session, enquiry_id)
     config = settings_service.get(session, settings_service.TALLY).config
@@ -583,7 +598,7 @@ def quotation(session: Session, enquiry_id: uuid.UUID, valid_days: int = 7):
         label = item.product.name
         if item.discount_percent and item.discount_percent > 0:
             label = "{} (MRP {}, {}% off)".format(label, format(item.mrp_snapshot.quantize(Decimal("0.01")), "f"), format(item.discount_percent.normalize(), "f"))
-        lines.append(InvoiceLine(label, item.quantity, item.product.unit_of_measure, item.quoted_unit_price, item.line_total))
+        lines.append(line_in_unit(label, item.quantity, item.product.unit_of_measure, item.quoted_unit_price, item.line_total, item.unit, item.unit_factor))
     customer = enquiry.customer
     return Invoice(
         number=enquiry.enquiry_number,

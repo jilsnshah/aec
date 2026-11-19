@@ -80,7 +80,7 @@ def test_product_aliases_units_and_matching(client, owner, make_product, make_su
     assert client.post("/api/products/{}/aliases".format(other.id), json={"value": "8MM Sariya"}).status_code == 409
     assert client.post("/api/products/{}/units".format(rod.id), json={"name": "bundle", "factor": "10"}).status_code == 201
     hits = client.get("/api/products/match", params={"q": "8mm sariya"}).json()["items"]
-    assert hits[0]["name"] == "TMT bar 8mm" and hits[0]["other_units"] == [{"name": "bundle", "factor": 10.0}]
+    assert hits[0]["name"] == "TMT bar 8mm" and hits[0]["other_units"] == [{"name": "bundle", "factor": 10.0, "for_sales": True}]
     assert client.get("/api/products/match", params={"q": "8901234567890"}).json()["items"][0]["matched_by"].startswith("barcode")
     names = client.get("/api/products/{}/names".format(rod.id)).json()
     assert {a["kind"] for a in names["aliases"]} == {"alias", "barcode", "supplier_code"}

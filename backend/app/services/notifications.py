@@ -34,7 +34,7 @@ def _number(session, order: SalesOrder) -> Optional[str]:
 
 
 def confirmation_text(order: SalesOrder) -> Dict[str, Any]:
-    items = "; ".join("{:g} {} {}".format(float(i.quantity_ordered), i.product.unit_of_measure, i.product.name) for i in order.items[:4])
+    items = "; ".join("{:g} {} {}".format(float(i.unit_quantity), i.unit_name, i.product.name) for i in order.items[:4])
     if len(order.items) > 4:
         items += "; and {} more".format(len(order.items) - 4)
     total = "Rs {:,.2f}".format(float(order.total_amount))

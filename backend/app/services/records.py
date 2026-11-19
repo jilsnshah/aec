@@ -303,7 +303,18 @@ def check_order(session: Session, customer_id: Optional[uuid.UUID], items: List[
     total = 0.0
     from . import reservations
 
+    from . import units
+    from ..errors import DomainError
+
     reserved = reservations.reserved_map(session)
+    items = [dict(item) for item in items]
+    for item in items:
+        if "quantity_ordered" not in item and "quantity" in item:
+            item["quantity_ordered"] = item["quantity"]
+    try:
+        units.apply(session, items, "quantity_ordered", "unit_price", "sales")
+    except DomainError:
+        pass
     for item in items:
         try:
             product = session.get(Product, uuid.UUID(str(item.get("product_id"))))

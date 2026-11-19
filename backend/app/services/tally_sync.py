@@ -327,7 +327,10 @@ def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
     if row.kind == DELIVERY_INVOICE:
         delivery = _delivery(session, row.entity_id)
         config = settings_service.get(session, settings_service.TALLY).config
-        lines = [invoice_pdf.InvoiceLine(l.item, l.quantity, l.unit, l.rate, l.amount) for l in _delivery_lines(delivery)]
+        lines = [invoice_pdf.line_in_unit(line.order_item.product.name, line.quantity, line.order_item.product.unit_of_measure,
+                                          line.order_item.unit_price_net, _cents(line.order_item.unit_price_net * line.quantity),
+                                          line.order_item.unit, line.order_item.unit_factor)
+                 for line in delivery.items if line.quantity > 0]
         subtotal = sum((line.amount for line in lines), Decimal("0"))
         return invoice_pdf.Invoice(
             number=row.tally_number or delivery.delivery_number, on=_local_day(row.synced_at or delivery.created_at),
@@ -340,8 +343,8 @@ def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
     order = get_order(session, row.entity_id)
     config = settings_service.get(session, settings_service.TALLY).config
     lines = [
-        invoice_pdf.InvoiceLine(item.product.name, item.quantity_ordered, item.product.unit_of_measure,
-                                item.unit_price_net, _cents(item.unit_price_net * item.quantity_ordered))
+        invoice_pdf.line_in_unit(item.product.name, item.quantity_ordered, item.product.unit_of_measure,
+                                 item.unit_price_net, _cents(item.unit_price_net * item.quantity_ordered), item.unit, item.unit_factor)
         for item in order.items if item.quantity_ordered > 0
     ]
     subtotal = sum((line.amount for line in lines), Decimal("0"))
