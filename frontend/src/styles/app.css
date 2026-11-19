@@ -9,15 +9,15 @@
    tint, so white/7 lines and hovers read on both themes.
    ========================================================================== */
 :root {
-  --c-canvas: #e4e8ec;
-  --c-canvas-2: #dbe0e5;
-  --c-ink-950: #e4e8ec;
-  --c-ink-900: #f3f5f7;
+  --c-canvas: #e8e9eb;
+  --c-canvas-2: #dfe1e3;
+  --c-ink-950: #e8e9eb;
+  --c-ink-900: #f4f5f6;
   --c-ink-850: #ffffff;
   --c-ink-800: #ffffff;
   --c-ink-750: #ffffff;
-  --c-ink-700: #eef1f4;
-  --c-ink-600: #e3e7eb;
+  --c-ink-700: #eff0f1;
+  --c-ink-600: #e4e6e8;
 
   --c-fg: #0b0b0c;
   --c-fg-2: #3c4148;
@@ -51,10 +51,10 @@
   --hair: rgb(15 20 25 / 0.07);
   --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(15 20 25 / 0.04), 0 14px 34px -16px rgb(15 20 25 / 0.16);
   --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(15 20 25 / 0.05), 0 24px 44px -18px rgb(15 20 25 / 0.26);
-  --blob-1: rgb(140 214 247 / 0.38);
-  --blob-2: rgb(255 255 255 / 0.75);
-  --blob-3: rgb(140 214 247 / 0.2);
-  --contour: rgb(255 255 255 / 0.65);
+  --blob-1: rgb(255 255 255 / 0.75);
+  --blob-2: rgb(255 255 255 / 0.55);
+  --blob-3: rgb(205 208 212 / 0.45);
+  --contour: rgb(255 255 255 / 0.7);
   --grain-opacity: 0.05;
   --shadow-float: 0 30px 80px -24px rgb(16 24 58 / 0.35), 0 0 0 1px rgb(16 24 58 / 0.06);
   --shadow-pop: 0 14px 40px -12px rgb(16 24 58 / 0.28), 0 0 0 1px rgb(16 24 58 / 0.07);
@@ -65,15 +65,15 @@
   --c-on-strong: #0b0b0c;
 }
 [data-theme='dark'] {
-  --c-canvas: #0b0d0f;
-  --c-canvas-2: #101316;
-  --c-ink-950: #0b0d0f;
-  --c-ink-900: #121518;
-  --c-ink-850: #171a1e;
-  --c-ink-800: #1a1d21;
-  --c-ink-750: #1f2227;
-  --c-ink-700: #24282d;
-  --c-ink-600: #2e3238;
+  --c-canvas: #0c0d0e;
+  --c-canvas-2: #111214;
+  --c-ink-950: #0c0d0e;
+  --c-ink-900: #131416;
+  --c-ink-850: #18191c;
+  --c-ink-800: #1b1c1f;
+  --c-ink-750: #202124;
+  --c-ink-700: #25272a;
+  --c-ink-600: #2f3134;
 
   --c-fg: #f2f4f6;
   --c-fg-2: #b6bcc4;
@@ -99,7 +99,7 @@
   --c-tint: #ffffff;
   --c-strong: radial-gradient(80% 70% at 85% 0%, rgb(255 255 255 / 0.35), transparent 60%), linear-gradient(180deg, #7fd0f5 0%, #a6def8 100%);
 
-  --pane-bg: rgb(23 26 30 / 0.82);
+  --pane-bg: rgb(24 25 28 / 0.84);
   --card-bg: rgb(255 255 255 / 0.035);
   --card-border: rgb(255 255 255 / 0.06);
   --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.04);
@@ -107,10 +107,10 @@
   --hair: rgb(255 255 255 / 0.08);
   --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.6);
   --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 2px 4px rgb(0 0 0 / 0.3), 0 26px 50px -18px rgb(0 0 0 / 0.75);
-  --blob-1: rgb(56 189 248 / 0.12);
-  --blob-2: rgb(56 189 248 / 0.05);
-  --blob-3: rgb(140 214 247 / 0.06);
-  --contour: rgb(140 214 247 / 0.07);
+  --blob-1: rgb(255 255 255 / 0.035);
+  --blob-2: rgb(255 255 255 / 0.02);
+  --blob-3: rgb(255 255 255 / 0.025);
+  --contour: rgb(255 255 255 / 0.045);
   --grain-opacity: 0.07;
   --shadow-float: 0 40px 100px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.09);
   --shadow-pop: 0 20px 50px -10px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.09);
@@ -222,7 +222,7 @@
     transition: background-color 200ms ease;
   }
   [data-theme='dark'] body {
-    background: radial-gradient(1200px 700px at 85% -10%, rgb(56 189 248 / 0.06), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
+    background: radial-gradient(1200px 700px at 85% -10%, rgb(255 255 255 / 0.03), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
   }
   input,
   textarea,

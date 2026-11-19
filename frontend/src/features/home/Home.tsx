@@ -424,7 +424,7 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
                   onMouseEnter={() => setHover(index)}
                   onMouseLeave={() => setHover(null)}
                 >
-                  <span className={cn('absolute inset-0 rounded-[14px] transition-colors', hover === index ? 'bg-peri/22' : 'bg-peri/[0.1]')} />
+                  <span className={cn('absolute inset-0 rounded-[14px] transition-colors', hover === index ? 'bg-white/[0.09]' : 'bg-white/[0.045]')} />
                   <motion.div
                     className={cn('relative w-full overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--c-peri)_62%,white),var(--c-peri))] shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition-opacity', hover !== null && hover !== index && 'opacity-45')}
                     initial={{ height: 0 }}
@@ -590,7 +590,7 @@ function OrderDots({ data }: { data?: InventorySummaryOut }) {
                 {Array.from({ length: rows }, (_, slot) => rows - 1 - slot).map((index) => (
                   <motion.span
                     key={index}
-                    className={cn('aspect-square h-full max-h-[24px] rounded-full', index < filled ? 'bg-[radial-gradient(circle_at_35%_30%,var(--c-blue-2),var(--c-blue))] shadow-[0_3px_8px_-3px_var(--c-blue)]' : 'bg-peri/30')}
+                    className={cn('aspect-square h-full max-h-[24px] rounded-full', index < filled ? 'bg-[radial-gradient(circle_at_35%_30%,var(--c-blue-2),var(--c-blue))] shadow-[0_3px_8px_-3px_var(--c-blue)]' : 'bg-white/[0.07]')}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.25 + column * 0.04 + index * 0.025, type: 'spring', stiffness: 420, damping: 22 }}
