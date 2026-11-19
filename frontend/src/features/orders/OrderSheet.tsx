@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { History, ShieldCheck, Sparkles, TrendingDown } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { controlsApi, records } from '@/api/records'
+import { usePriceList } from '@/features/pricing/usePriceList'
 import { useDebounced } from '@/lib/route'
 import { useAssistant } from '@/features/assistant/store'
 import { HoldPanel, WarningList, holdFrom } from '@/ui/smart'
@@ -70,6 +71,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
       }),
   })
   const holds = gate.data?.holds ?? []
+  const pricing = { data: usePriceList(open, customer, lines, setLines) }
   const warnings = check.data?.warnings ?? []
   const checkLines = check.data?.lines ?? []
 
@@ -151,6 +153,9 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
                         )}
                       </span>
                       <span className="num">{fmtQty(line.free_stock)} free</span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-fg-3">
+                      {pricing.data?.price_list_active ? pricing.data.lines.find((r) => r.product_id === line.product_id)?.rule : 'MRP (no price list)'}
                     </div>
                   </div>
                 ))}

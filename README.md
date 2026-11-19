@@ -931,6 +931,30 @@ week raise alerts.
 Where data is too thin (bought-together needs 20+ multi-product orders; trends
 need at least 5 units a month) the screens say so rather than guess.
 
+## Controls, returns, counts, price lists and reminders
+
+Benchmarked against Business Central, NetSuite, SAP Business One, Odoo,
+ERPNext, Zoho and TallyPrime (see `docs/ERP-RESEARCH.md` for the matrix,
+gap analysis, roadmap and sources).
+
+- **Order controls** (Settings → Order controls): credit limit and overdue
+  invoices can warn or hold an order; maximum discount, minimum margin and
+  below-cost limits hold it too. An admin approves a held order with a reason;
+  approvals go to the audit log (Settings → Audit log).
+- **Sales returns** (order → More → Record a return): a credit note settles the
+  customer's oldest invoices; sellable goods go back into stock at the cost they
+  were delivered at; revenue and cost of goods net out.
+- **Stock count** (Stock → Stock count): enter counted quantities, see the
+  difference at FIFO cost, post in one go. Single adjustments (damage, loss,
+  samples, found) from a product's menu.
+- **Price lists** (Sales → Price lists): default discount plus per-product
+  fixed prices or discounts with quantity breaks; put a customer on a list and
+  their orders and quotes start at those prices.
+- **Payment reminders** (Finance → Reminders): friendly, firm and final levels
+  by days late, message ready for WhatsApp, each reminder logged with a
+  follow-up to check payment.
+- **Quotation PDF** from any enquiry.
+
 ## Tally and invoices on WhatsApp
 
 **Settings → Integrations → Tally** connects any TallyPrime. Everything is

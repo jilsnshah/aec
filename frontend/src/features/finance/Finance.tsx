@@ -1,3 +1,4 @@
+import { RemindersView } from './Reminders'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -63,6 +64,7 @@ export function Finance() {
           tabs={[
             { value: 'receivables', label: 'Receivables', count: receivables.data?.parties.filter((p) => p.open > 0).length },
             { value: 'payables', label: 'Payables', count: payables.data?.parties.filter((p) => p.open > 0).length },
+            { value: 'reminders', label: 'Reminders' },
             { value: 'payments', label: 'Payments' },
           ]}
           className="min-h-0 flex-1"
@@ -72,6 +74,9 @@ export function Finance() {
           </TabPanel>
           <TabPanel value="payables" className="p-5 pb-24">
             {payables.data ? <AgeingView data={payables.data} kind="supplier" onRecord={(party, amount) => setRecording({ direction: 'out', party, amount })} /> : <Spinner />}
+          </TabPanel>
+          <TabPanel value="reminders" className="p-5 pb-24">
+            <RemindersView />
           </TabPanel>
           <TabPanel value="payments" className="p-5 pb-24">
             <PaymentsView />

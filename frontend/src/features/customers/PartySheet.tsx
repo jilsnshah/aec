@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { errorText } from '@/api/client'
+import { priceLists } from '@/api/records'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import { Button, Field, Notice } from '@/ui/core'
@@ -17,22 +19,24 @@ interface Party {
   contact_person?: string | null
   payment_terms_days?: number
   credit_limit?: string | number | null
+  price_list_id?: string | null
   lead_time_days?: number | null
 }
 
-const blank = { name: '', phone: '', email: '', address: '', notes: '', code: '', contact_person: '', terms: '0', credit: '', lead: '' }
+const blank = { name: '', phone: '', email: '', address: '', notes: '', code: '', contact_person: '', terms: '0', credit: '', lead: '', priceList: '' }
 
 /** Create or edit a customer or supplier: who they are and how to reach them. */
 export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Kind; open: boolean; onClose: () => void; editing?: Party; onSaved?: (id: string) => void }) {
   const [form, setForm] = useState(blank)
   const [tried, setTried] = useState(false)
+  const lists = useQuery({ queryKey: ['price-lists'], queryFn: () => priceLists.list(true), enabled: open && kind === 'customer' })
   const label = kind === 'customer' ? 'customer' : 'supplier'
   const save = useAction(
     async () => {
       const clean = (value: string) => value.trim() || null
       const base = { name: form.name.trim(), phone: clean(form.phone), email: clean(form.email), address: clean(form.address), notes: clean(form.notes), payment_terms_days: Number(form.terms) || 0 }
       if (kind === 'customer') {
-        const customer = { ...base, credit_limit: form.credit.trim() === '' ? null : form.credit.trim() }
+        const customer = { ...base, credit_limit: form.credit.trim() === '' ? null : form.credit.trim(), price_list_id: form.priceList || null }
         return editing ? api.customers.update(editing.id, customer) : api.customers.create(customer)
       }
       const supplier = { ...base, code: clean(form.code), contact_person: clean(form.contact_person), lead_time_days: form.lead.trim() === '' ? null : Number(form.lead) }
@@ -43,7 +47,7 @@ export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Ki
 
   useEffect(() => {
     if (!open) return
-    setForm(editing ? { name: editing.name, phone: editing.phone ?? '', email: editing.email ?? '', address: editing.address ?? '', notes: editing.notes ?? '', code: editing.code ?? '', contact_person: editing.contact_person ?? '', terms: String(editing.payment_terms_days ?? 0), credit: editing.credit_limit == null ? '' : String(editing.credit_limit), lead: editing.lead_time_days == null ? '' : String(editing.lead_time_days) } : blank)
+    setForm(editing ? { name: editing.name, phone: editing.phone ?? '', email: editing.email ?? '', address: editing.address ?? '', notes: editing.notes ?? '', code: editing.code ?? '', contact_person: editing.contact_person ?? '', terms: String(editing.payment_terms_days ?? 0), credit: editing.credit_limit == null ? '' : String(editing.credit_limit), lead: editing.lead_time_days == null ? '' : String(editing.lead_time_days), priceList: editing.price_list_id ?? '' } : blank)
     setTried(false)
     save.reset()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,6 +118,21 @@ export function PartySheet({ kind, open, onClose, editing, onSaved }: { kind: Ki
         {kind === 'customer' ? (
           <Field label="Credit limit (₹)" optional hint="Most they may owe at once; you are warned when they go over." error={tried && creditBad ? 'Enter an amount.' : null}>
             {(props) => <input {...props} className="field field-num" inputMode="decimal" placeholder="No limit" value={form.credit} onChange={set('credit')} />}
+          </Field>
+        ) : null}
+        {kind === 'customer' ? (
+          <Field label="Price list" optional hint="Their negotiated prices; orders and quotes start at these." className="col-span-2">
+            {(props) => (
+              <select {...props} className="field" value={form.priceList} onChange={(e) => setForm({ ...form, priceList: e.target.value })}>
+                <option value="">MRP (no price list)</option>
+                {(lists.data?.items ?? []).filter((l) => l.is_active || l.id === form.priceList).map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                    {l.discount_percent ? ` (${l.discount_percent}% off)` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </Field>
         ) : (
           <Field label="Lead time (days)" optional hint="Typical days from ordering to delivery; used for reorder timing." error={tried && leadBad ? 'Enter whole days.' : null}>

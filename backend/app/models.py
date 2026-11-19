@@ -188,6 +188,9 @@ class Customer(Base, TimestampMixin):
     payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     #: Most the customer may owe at once; None means no limit.
     credit_limit: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
+    price_list_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="SET NULL", name="fk_customers_price_list"), nullable=True
+    )
 
     orders: Mapped[List["SalesOrder"]] = relationship(back_populates="customer")
 
@@ -1524,3 +1527,47 @@ class AuditEvent(Base):
     entity_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+
+class PriceList(Base):
+    """A set of negotiated prices for a group of customers (dealers,
+    contractors, builders). A customer on the list gets, for each product, the
+    matching quantity break -- a fixed price or a discount off MRP -- or else
+    the list's own discount."""
+
+    __tablename__ = "price_lists"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    discount_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0"))
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    items: Mapped[List["PriceListItem"]] = relationship(back_populates="price_list", cascade="all, delete-orphan")
+
+
+class PriceListItem(Base):
+    __tablename__ = "price_list_items"
+    __table_args__ = (
+        CheckConstraint("min_quantity >= 0", name="ck_price_items_min_qty"),
+        CheckConstraint("(price IS NULL) <> (discount_percent IS NULL)", name="ck_price_items_one_rule"),
+        UniqueConstraint("price_list_id", "product_id", "min_quantity", name="uq_price_items_break"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    price_list_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    min_quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
+    price: Mapped[Optional[Decimal]] = mapped_column(UnitCost, nullable=True)
+    discount_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+
+    price_list: Mapped["PriceList"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()

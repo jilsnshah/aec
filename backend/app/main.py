@@ -26,6 +26,7 @@ from .api import (
     integrations,
     inventory,
     orders,
+    pricelists,
     products,
     purchasing,
     records,
@@ -138,6 +139,7 @@ for router in (
     records.router,
     adjustments.router,
     controls.router,
+    pricelists.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

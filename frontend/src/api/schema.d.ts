@@ -1682,6 +1682,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/finance/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Payment Reminders
+         * @description Customers to remind about overdue invoices, with a reminder level
+         *     (friendly, firm, final) by days overdue, a ready message, and when they
+         *     were last reminded.
+         */
+        get: operations["payment_reminders_api_finance_reminders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/finance/reminders/{customer_id}/sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reminder Sent
+         * @description Record that a reminder was sent (whatsapp, call, email or visit); plans a
+         *     follow-up task to check the payment.
+         */
+        post: operations["reminder_sent_api_finance_reminders__customer_id__sent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/targets": {
         parameters: {
             query?: never;
@@ -2015,6 +2058,73 @@ export interface paths {
          */
         get: operations["audit_api_audit_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/price-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Price Lists
+         * @description Price lists with their quantity breaks and how many customers use each.
+         */
+        get: operations["list_price_lists_api_price_lists_get"];
+        put?: never;
+        /**
+         * Create Price List
+         * @description Create a price list: a default discount and per-product lines (fixed price
+         *     or discount, from a minimum quantity).
+         */
+        post: operations["create_price_list_api_price_lists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/price-lists/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Prices
+         * @description The price a customer gets on each product and quantity from their price
+         *     list (as discount off MRP and net price), and which rule gave it.
+         */
+        post: operations["resolve_prices_api_price_lists_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/price-lists/{list_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Price List */
+        get: operations["get_price_list_api_price_lists__list_id__get"];
+        /**
+         * Update Price List
+         * @description Replace a price list's settings and lines.
+         */
+        put: operations["update_price_list_api_price_lists__list_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2389,6 +2499,8 @@ export interface components {
             payment_terms_days: number;
             /** Credit Limit */
             credit_limit?: string | null;
+            /** Price List Id */
+            price_list_id?: string | null;
             /** Outstanding */
             outstanding?: components["schemas"]["OutstandingLine"][];
             /** Orders */
@@ -2433,6 +2545,8 @@ export interface components {
             payment_terms_days: number;
             /** Credit Limit */
             credit_limit?: string | null;
+            /** Price List Id */
+            price_list_id?: string | null;
             /**
              * Order Count
              * @default 0
@@ -2497,6 +2611,8 @@ export interface components {
             payment_terms_days: number;
             /** Credit Limit */
             credit_limit?: string | null;
+            /** Price List Id */
+            price_list_id?: string | null;
         };
         /** CustomerRef */
         CustomerRef: {
@@ -2526,6 +2642,8 @@ export interface components {
             payment_terms_days?: number | null;
             /** Credit Limit */
             credit_limit?: number | string | null;
+            /** Price List Id */
+            price_list_id?: string | null;
         };
         /** DailySalesRow */
         DailySalesRow: {
@@ -4065,6 +4183,43 @@ export interface components {
             /** Value */
             value: unknown;
         };
+        /** PriceItemIn */
+        PriceItemIn: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Min Quantity
+             * @default 0
+             */
+            min_quantity: string | null;
+            /** Price */
+            price?: string | null;
+            /** Discount Percent */
+            discount_percent?: string | null;
+        };
+        /** PriceListIn */
+        PriceListIn: {
+            /** Name */
+            name: string;
+            /**
+             * Discount Percent
+             * @default 0
+             */
+            discount_percent: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Items */
+            items?: components["schemas"]["PriceItemIn"][] | null;
+        };
         /** ProductCreate */
         ProductCreate: {
             /** Sku */
@@ -4833,6 +4988,14 @@ export interface components {
              */
             created_at: string;
         };
+        /** ReminderSent */
+        ReminderSent: {
+            /**
+             * Channel
+             * @default whatsapp
+             */
+            channel: string;
+        };
         /** ReservationRow */
         ReservationRow: {
             /**
@@ -4856,6 +5019,26 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ResolveIn */
+        ResolveIn: {
+            /** Customer Id */
+            customer_id?: string | null;
+            /** Lines */
+            lines: components["schemas"]["ResolveLine"][];
+        };
+        /** ResolveLine */
+        ResolveLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: string | null;
         };
         /** ReturnIn */
         ReturnIn: {
@@ -8797,6 +8980,61 @@ export interface operations {
             };
         };
     };
+    payment_reminders_api_finance_reminders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    reminder_sent_api_finance_reminders__customer_id__sent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReminderSent"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_targets_api_targets_get: {
         parameters: {
             query?: never;
@@ -9387,6 +9625,169 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_price_lists_api_price_lists_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_price_list_api_price_lists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceListIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_prices_api_price_lists_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_price_list_api_price_lists__list_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_price_list_api_price_lists__list_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                list_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceListIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

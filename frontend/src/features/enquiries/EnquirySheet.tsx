@@ -1,3 +1,4 @@
+import { usePriceList } from '@/features/pricing/usePriceList'
 import { useEffect, useState } from 'react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -15,6 +16,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
   const products = useProducts()
   const [customer, setCustomer] = useState('')
   const [lines, setLines] = useState<Line[]>([newLine()])
+  const pricing = usePriceList(open, customer, lines, setLines)
   const [notes, setNotes] = useState('')
   const [tried, setTried] = useState(false)
   const save = useAction(
@@ -45,7 +47,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
       onClose={onClose}
       width={1000}
       title={editing ? `Edit ${editing.enquiry_number}` : 'New enquiry'}
-      subtitle="MRP comes from the product. Negotiate a discount per line, then close the deal into an order."
+      subtitle={pricing?.price_list_active ? `Prices start from ${pricing.price_list} (the customer's price list). Negotiate per line, then close the deal into an order.` : "MRP comes from the product. Negotiate a discount per line, then close the deal into an order."}
       aside={
         <div className="space-y-5">
           <div>

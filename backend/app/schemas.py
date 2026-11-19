@@ -186,6 +186,7 @@ class CustomerUpdate(BaseModel):
     is_active: Optional[bool] = None
     payment_terms_days: Optional[int] = Field(default=None, ge=0, le=365)
     credit_limit: Optional[Decimal] = Field(default=None, ge=0)
+    price_list_id: Optional[uuid.UUID] = None
 
 
 class CustomerOut(ORMModel):
@@ -200,6 +201,7 @@ class CustomerOut(ORMModel):
     updated_at: datetime
     payment_terms_days: int = 0
     credit_limit: Optional[Decimal] = None
+    price_list_id: Optional[uuid.UUID] = None
 
 
 class CustomerListRow(CustomerOut):

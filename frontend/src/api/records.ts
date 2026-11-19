@@ -220,3 +220,60 @@ export const controlsApi = {
   audit: (query: { limit?: number; action?: string; entity_id?: string } = {}) =>
     http.get<{ events: { id: string; at: string; user: string | null; action: string; entity: string; entity_id: string | null; summary: string }[] }>('/api/audit', query),
 }
+
+export interface ReminderRow {
+  customer_id: string
+  name: string
+  phone: string | null
+  overdue: number
+  invoices: number
+  oldest_days: number
+  level: 1 | 2 | 3
+  level_name: string
+  last_reminded: string | null
+  reminders_sent: number
+  message: string
+}
+export const reminders = {
+  due: () => http.get<{ customers: ReminderRow[]; total_overdue: number; levels: { level: number; name: string; from_days: number }[] }>('/api/finance/reminders'),
+  sent: ({ id, channel }: { id: string; channel: string }) => http.post<{ logged: boolean }>(`/api/finance/reminders/${id}/sent`, { channel }),
+}
+
+/* ------------------------------------------------------------ price lists */
+export interface PriceListItemRow {
+  id?: string
+  product_id: string
+  product_name?: string | null
+  unit?: string | null
+  mrp?: number | null
+  min_quantity: number
+  price: number | null
+  discount_percent: number | null
+}
+export interface PriceListRow {
+  id: string
+  name: string
+  discount_percent: number
+  notes: string | null
+  valid_from: string | null
+  valid_until: string | null
+  is_active: boolean
+  customers: number | null
+  items: PriceListItemRow[]
+}
+export interface PriceListIn {
+  name: string
+  discount_percent: string
+  notes?: string | null
+  valid_from?: string | null
+  valid_until?: string | null
+  is_active?: boolean
+  items: { product_id: string; min_quantity: string; price: string | null; discount_percent: string | null }[]
+}
+export const priceLists = {
+  list: (includeInactive = true) => http.get<{ items: PriceListRow[] }>('/api/price-lists', { include_inactive: includeInactive }),
+  create: (body: PriceListIn) => http.post<PriceListRow>('/api/price-lists', body),
+  update: ({ id, ...body }: PriceListIn & { id: string }) => http.put<PriceListRow>(`/api/price-lists/${id}`, body),
+  resolve: (body: { customer_id?: string | null; lines: { product_id: string; quantity: string }[] }) =>
+    http.post<{ price_list: string | null; price_list_active: boolean; lines: { product_id: string; mrp: number; discount_percent: number; net_price: number; rule: string }[] }>('/api/price-lists/resolve', body),
+}

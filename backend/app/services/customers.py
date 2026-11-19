@@ -169,6 +169,8 @@ def update_customer(session: Session, customer_id: uuid.UUID, changes: Dict[str,
         customer.payment_terms_days = int(changes["payment_terms_days"])
     if "credit_limit" in changes:
         customer.credit_limit = changes["credit_limit"]
+    if "price_list_id" in changes:
+        customer.price_list_id = changes["price_list_id"]
     if "is_active" in changes and changes["is_active"] is not None:
         customer.is_active = bool(changes["is_active"])
     try:

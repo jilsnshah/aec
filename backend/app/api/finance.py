@@ -92,3 +92,26 @@ def customer_statement(customer_id: uuid.UUID, db: Session = Depends(get_db)):
 def supplier_statement(supplier_id: uuid.UUID, db: Session = Depends(get_db)):
     """A supplier's account: bills (goods received) and payments with a running balance."""
     return finance.statement(db, "supplier", supplier_id)
+
+
+@router.get("/finance/reminders")
+def payment_reminders(db: Session = Depends(get_db)):
+    """Customers to remind about overdue invoices, with a reminder level
+    (friendly, firm, final) by days overdue, a ready message, and when they
+    were last reminded."""
+    from ..services import reminders
+
+    return reminders.due(db)
+
+
+class ReminderSent(BaseModel):
+    channel: str = "whatsapp"
+
+
+@router.post("/finance/reminders/{customer_id}/sent")
+def reminder_sent(customer_id: uuid.UUID, payload: Optional[ReminderSent] = None, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Record that a reminder was sent (whatsapp, call, email or visit); plans a
+    follow-up task to check the payment."""
+    from ..services import reminders
+
+    return reminders.mark_sent(db, customer_id, user, payload.channel if payload else "whatsapp")
