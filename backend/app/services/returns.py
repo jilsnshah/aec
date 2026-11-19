@@ -72,6 +72,7 @@ def create_return(
     reason: str,
     note: Optional[str] = None,
     user_id: Optional[uuid.UUID] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> SalesReturn:
     begin_write(session)
     try:
@@ -113,6 +114,10 @@ def create_return(
             amount=ZERO_MONEY,
             created_by_id=user_id,
         )
+        from . import warehouses as warehouse_service
+
+        into = warehouse_service.resolve(session, warehouse_id)
+        record.warehouse_id = into
         session.add(record)
         session.flush()
         total = ZERO_MONEY
@@ -129,8 +134,8 @@ def create_return(
                 product = lock_product(session, item.product_id)
                 label = "Returned by customer ({}, {})".format(record.number, order.order_number)
                 session.add(StockCostLayer(product_id=product.id, source=MovementType.SALES_RETURN, source_id=record.id,
-                                           unit_cost=cost, quantity=qty, quantity_remaining=qty, note=label))
-                record_movement(session, product, MovementType.SALES_RETURN, qty, "sales_return", record.id, label)
+                                           unit_cost=cost, quantity=qty, quantity_remaining=qty, note=label, warehouse_id=into))
+                record_movement(session, product, MovementType.SALES_RETURN, qty, "sales_return", record.id, label, warehouse_id=into)
                 restocked = restocked + money(qty * cost)
                 waiting = reservations.unallocated_total(reservations.fifo_unallocated_items(session, product.id))
                 if waiting > ZERO:

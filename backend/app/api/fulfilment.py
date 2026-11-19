@@ -39,6 +39,7 @@ def create_delivery(
         reference=payload.reference,
         notes=payload.notes,
         idempotency_key=payload.idempotency_key,
+        warehouse_id=payload.warehouse_id,
     )
     # When Tally invoices on delivery, this delivery gets its own invoice.
     from ..services import tally_sync

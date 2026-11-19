@@ -23,6 +23,7 @@ class AdjustmentLine(BaseModel):
     reason: Optional[str] = Field(default=None, description="count, damaged, lost, expired, found, sample or correction.")
     unit_cost: Optional[str] = Field(default=None, description="For increases; defaults to the average cost.")
     note: Optional[str] = None
+    warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Warehouse counted or adjusted; omit for the whole stock (increases go to the default warehouse).")
 
 
 class AdjustmentIn(BaseModel):

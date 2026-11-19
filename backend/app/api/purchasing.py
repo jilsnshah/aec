@@ -238,6 +238,7 @@ def create_goods_receipt(payload: schemas.GoodsReceiptRequest, db: Session = Dep
         notes=payload.notes,
         idempotency_key=payload.idempotency_key,
         allow_over_receipt=payload.allow_over_receipt,
+        warehouse_id=payload.warehouse_id,
     )
 
 

@@ -345,3 +345,20 @@ def test_invoicing_on_delivery_bills_each_delivery(client, fakes, catalogue):
     assert item.findtext("ACTUALQTY") == "4 bags"  # only what this delivery carried
     pdf = client.get("/api/integrations/invoices/{}.pdf".format(order["id"]))
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+
+def test_received_transfer_goes_to_tally_as_stock_journal(client, fakes, make_product):
+    fake_tally, _ = fakes
+    connect(client)
+    cement = make_product("Cement 53 Grade", sku="OPC", unit_of_measure="bags", mrp="400.00", opening_stock=100, opening_unit_cost="300")
+    yard = client.post("/api/warehouses", json={"name": "Yard 2", "kind": "yard", "tally_godown": "Changodar Yard"}).json()
+    tr = client.post("/api/stock-transfers", json={"to_warehouse_id": yard["id"], "items": [{"product_id": str(cement.id), "quantity": "40"}],
+                                                   "costs": [{"kind": "freight", "amount": "400"}], "dispatch": True}).json()
+    got = client.post("/api/stock-transfers/{}/receive".format(tr["id"]), json={})
+    assert got.status_code == 200, got.text
+    journal = fake_tally.voucher("Stock Journal")
+    out = journal.find("INVENTORYENTRIESOUT.LIST")
+    into = journal.find("INVENTORYENTRIESIN.LIST")
+    assert out.findtext("BATCHALLOCATIONS.LIST/GODOWNNAME") == "Main Location" and out.findtext("AMOUNT") == "12000.00"
+    assert into.findtext("BATCHALLOCATIONS.LIST/GODOWNNAME") == "Changodar Yard" and into.findtext("AMOUNT") == "-12400.00"
+    assert into.findtext("ACTUALQTY") == "40 bags" and "Changodar Yard" in fake_tally.masters["GODOWN"]

@@ -149,6 +149,8 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             # "delivery": an invoice for what each delivery carries.
             "invoice_on": "order",
             "sync_purchase_orders": True,
+            # Received transfers between warehouses become Stock Journals.
+            "sync_transfers": True,
             "customer_group": "Sundry Debtors",
             "supplier_group": "Sundry Creditors",
             "godown": "Main Location",

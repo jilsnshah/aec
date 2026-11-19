@@ -26,7 +26,7 @@ from ..models import (
 )
 from ..numeric import ZERO, ZERO_MONEY, aggregate, money, quantity, require_non_negative, unit_cost
 from ..database import begin_write
-from . import costing
+from . import costing, warehouses
 from . import reservations
 from .common import (
     count_matching,
@@ -337,6 +337,7 @@ def create_product(
         unit_cost(opening_unit_cost, "Opening stock unit cost"), "Opening stock unit cost"
     )
 
+    opening_warehouse = settings.pop("warehouse_id", None)
     begin_write(session)
     existing = session.execute(select(Product.id).where(Product.sku == sku)).first()
     if existing is not None:
@@ -364,6 +365,7 @@ def create_product(
                 reference_type="product",
                 reference_id=product.id,
                 note="Opening stock recorded at product creation",
+                warehouse_id=warehouses.resolve(session, opening_warehouse),
             )
             costing.open_cost_layer(
                 session,
@@ -373,6 +375,7 @@ def create_product(
                 MovementType.OPENING_STOCK,
                 product.id,
                 "Opening stock",
+                warehouses.resolve(session, opening_warehouse),
             )
         session.commit()
     except IntegrityError as exc:

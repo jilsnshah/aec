@@ -204,8 +204,10 @@ def create_delivery(
     reference: Optional[str] = None,
     notes: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> Dict[str, Any]:
-    """Hand reserved goods to the customer.
+    """Hand reserved goods to the customer, from one warehouse if given
+    (otherwise from wherever the oldest stock is, never from goods in transit).
 
     Everything -- the ledger movements, the released reservations, the cost of
     goods and the updated order -- is written in one transaction.
@@ -290,7 +292,33 @@ def create_delivery(
 
         products = lock_products(session, [entry["item"].product_id for entry in requested])
 
+        from . import warehouses as warehouse_service
+
+        source = warehouse_service.resolve(session, warehouse_id) if warehouse_id else None
+        needed: Dict[uuid.UUID, Decimal] = {}
+        for entry in requested:
+            needed[entry["item"].product_id] = needed.get(entry["item"].product_id, ZERO) + entry["quantity"]
+        transit = warehouse_service.transit_id(session)
+        for product_id, qty in needed.items():
+            product = products[product_id]
+            if source is not None:
+                there = warehouse_service.on_hand(session, product_id, source)
+                if there < qty:
+                    from ..models import Warehouse
+
+                    raise ValidationError(
+                        "{} has only {} {} of {}; {} cannot go from there. Transfer stock in or choose another warehouse.".format(
+                            session.get(Warehouse, source).name, there, product.unit_of_measure, product.name, qty),
+                        details={"product_id": str(product_id), "available": str(there)},
+                    )
+            else:
+                on_road = warehouse_service.on_hand(session, product_id, transit)
+                if Decimal(str(product.physical_stock)) - on_road < qty:
+                    raise ValidationError(
+                        "{} {} of {} is still in transit; receive the transfer before delivering it.".format(on_road, product.unit_of_measure, product.name))
+
         delivery = CustomerDelivery(
+            warehouse_id=source,
             delivery_number=next_document_number(session, DELIVERY_COUNTER, "DN"),
             sales_order_id=order.id,
             customer_id=order.customer_id,
@@ -334,6 +362,7 @@ def create_delivery(
                 note="Delivered on {} against order {}".format(
                     delivery.delivery_number, order.order_number
                 ),
+                warehouse_id=source,
             )
             delivery_item.stock_movement_id = movement.id
 
@@ -361,7 +390,7 @@ def create_delivery(
                 )
                 session.add(allocation)
                 session.flush()
-                costing.consume_cost_layers(session, product, allocation, drawn)
+                costing.consume_cost_layers(session, product, allocation, drawn, source)
 
             item.quantity_fulfilled = item.quantity_fulfilled + qty
 

@@ -230,6 +230,7 @@ def receive_stock(
     idempotency_key: Optional[str] = None,
     purchase_unit_cost: Any = 0,
     supplier_reference: Optional[str] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> Dict[str, Any]:
     """Record an ad-hoc stock receipt and compulsorily reserve waiting orders.
 
@@ -280,7 +281,11 @@ def receive_stock(
 
         plan = reservations.validate_allocation(items, allocations, received)
 
+        from . import warehouses as warehouse_service
+
+        into = warehouse_service.resolve(session, warehouse_id)
         receipt = StockReceipt(
+            warehouse_id=into,
             receipt_number=next_document_number(session, RECEIPT_COUNTER, "GRN"),
             product_id=product.id,
             quantity=received,
@@ -303,6 +308,7 @@ def receive_stock(
             reference_type="stock_receipt",
             reference_id=receipt.id,
             note=note,
+            warehouse_id=into,
         )
         costing.open_cost_layer(
             session,
@@ -312,6 +318,7 @@ def receive_stock(
             MovementType.STOCK_RECEIPT,
             receipt.id,
             note,
+            into,
         )
 
         reservations.reserve(

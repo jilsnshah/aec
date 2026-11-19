@@ -60,6 +60,7 @@ class ProductRef(ORMModel):
 
 
 class ProductCreate(BaseModel):
+    warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Where the opening stock is; the default warehouse if omitted.")
     sku: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     unit_of_measure: str = Field(default="pcs", max_length=32)
@@ -558,6 +559,7 @@ class AllocationInput(BaseModel):
 
 class StockReceiptCreate(BaseModel):
     product_id: uuid.UUID
+    warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Where it is put; the default warehouse if omitted.")
     quantity: Decimal = Field(gt=0)
     unit_cost: Decimal = Field(
         default=Decimal("0"),
@@ -919,6 +921,7 @@ class GoodsReceiptLineInput(BaseModel):
 
 class GoodsReceiptRequest(BaseModel):
     purchase_order_id: uuid.UUID
+    warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Where the goods are put; the default warehouse if omitted.")
     lines: List[GoodsReceiptLineInput] = Field(min_length=1)
     delivery_note_reference: Optional[str] = Field(default=None, max_length=128)
     notes: Optional[str] = None
@@ -1080,6 +1083,7 @@ class DeliveryLineInput(BaseModel):
 
 class DeliveryRequest(BaseModel):
     lines: List[DeliveryLineInput] = Field(min_length=1)
+    warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Warehouse the goods leave from; omit to use the oldest stock anywhere.")
     reference: Optional[str] = Field(default=None, max_length=128)
     notes: Optional[str] = None
     idempotency_key: Optional[str] = Field(default=None, max_length=128)

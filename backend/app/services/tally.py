@@ -193,7 +193,39 @@ class TallyClient:
             "<BASEUNITS>{2}</BASEUNITS></STOCKITEM>".format(quoteattr(name), _text(name), _text(unit)),
         )
 
+    def ensure_godown(self, name: str) -> None:
+        if not self.exists("Godown", name):
+            self._import("All Masters", '<GODOWN NAME={0} ACTION="Create"><NAME.LIST><NAME>{1}</NAME></NAME.LIST></GODOWN>'.format(quoteattr(name), _text(name)))
+
     # --- vouchers ----------------------------------------------------------------
+
+    def create_stock_journal(self, on: date, number: str, narration: str, from_godown: str, to_godown: str,
+                             sent: Sequence[Line], received: Sequence[Line]) -> ImportResult:
+        """A Stock Journal moving stock between godowns. ``sent`` leaves
+        ``from_godown`` at its cost; ``received`` arrives in ``to_godown`` at
+        its landed cost (freight and handling included), so the difference is
+        the transfer's additional cost."""
+
+        def entries(tag: str, lines: Sequence[Line], godown: str, deemed: str, sign: str) -> str:
+            return "".join(
+                "<{tag}><STOCKITEMNAME>{item}</STOCKITEMNAME><ISDEEMEDPOSITIVE>{deemed}</ISDEEMEDPOSITIVE>"
+                "<RATE>{rate}</RATE><AMOUNT>{sign}{amount}</AMOUNT><ACTUALQTY>{qty}</ACTUALQTY><BILLEDQTY>{qty}</BILLEDQTY>"
+                "<BATCHALLOCATIONS.LIST><GODOWNNAME>{godown}</GODOWNNAME><BATCHNAME>Primary Batch</BATCHNAME>"
+                "<AMOUNT>{sign}{amount}</AMOUNT><ACTUALQTY>{qty}</ACTUALQTY><BILLEDQTY>{qty}</BILLEDQTY></BATCHALLOCATIONS.LIST></{tag}>".format(
+                    tag=tag, item=_text(line.item), deemed=deemed, rate=_text("{}/{}".format(_money(line.rate), line.unit)), sign=sign,
+                    amount=_money(line.amount), qty=_text("{} {}".format(_qty(line.quantity), line.unit)), godown=_text(godown))
+                for line in lines if line.quantity > 0
+            )
+
+        voucher = (
+            '<VOUCHER VCHTYPE="Stock Journal" ACTION="Create" OBJVIEW="Consumption Voucher View">'
+            "<DATE>{date}</DATE><EFFECTIVEDATE>{date}</EFFECTIVEDATE><VOUCHERTYPENAME>Stock Journal</VOUCHERTYPENAME>"
+            "<VOUCHERNUMBER>{number}</VOUCHERNUMBER><NARRATION>{narration}</NARRATION>"
+            "<PERSISTEDVIEW>Consumption Voucher View</PERSISTEDVIEW>{out}{into}</VOUCHER>"
+        ).format(date=_tally_date(on), number=_text(number), narration=_text(narration),
+                 out=entries("INVENTORYENTRIESOUT.LIST", sent, from_godown, "No", ""),
+                 into=entries("INVENTORYENTRIESIN.LIST", received, to_godown, "Yes", "-"))
+        return self._import("Vouchers", voucher)
 
     def create_voucher(
         self,

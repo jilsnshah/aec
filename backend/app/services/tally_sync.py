@@ -37,6 +37,8 @@ SALES_INVOICE = "sales_invoice"
 #: An invoice for one delivery (when Tally is set to invoice on delivery).
 DELIVERY_INVOICE = "delivery_invoice"
 PURCHASE_ORDER = "purchase_order"
+#: A received transfer between warehouses, as a Stock Journal.
+STOCK_TRANSFER = "stock_transfer"
 #: Automatic attempts before a failure waits for a person.
 MAX_ATTEMPTS = 5
 
@@ -88,6 +90,32 @@ def queue_sales_order(session: Session, order: SalesOrder) -> List[uuid.UUID]:
         ))
     session.commit()
     return [row_id for row_id in ids if row_id]
+
+
+def queue_transfer(session: Session, transfer_id: uuid.UUID) -> List[uuid.UUID]:
+    """Queue a received transfer for Tally (Stock Journal), if Tally is on."""
+    from ..models import StockTransfer
+
+    config = settings_service.get(session, settings_service.TALLY)
+    if not config.enabled or not config.config.get("sync_transfers", True):
+        return []
+    begin_write(session)
+    transfer = session.get(StockTransfer, transfer_id)
+    if transfer is None or transfer.status != "received":
+        return []
+    row_id = _queue(session, STOCK_TRANSFER, transfer.id, transfer.number)
+    session.commit()
+    return [row_id] if row_id else []
+
+
+def godown_for(config: Dict[str, Any], warehouse) -> str:
+    """The Tally godown a warehouse posts to: its own Tally name, else the
+    Settings godown for the default warehouse, else its name."""
+    if warehouse is None:
+        return config["godown"]
+    if warehouse.tally_godown:
+        return warehouse.tally_godown
+    return config["godown"] if warehouse.is_default else warehouse.name
 
 
 def queue_purchase_order(session: Session, order: PurchaseOrder) -> List[uuid.UUID]:
@@ -181,6 +209,34 @@ def ledger_name(party) -> str:
 
 
 def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tally.TallyClient) -> None:
+    if row.kind == STOCK_TRANSFER:
+        from . import warehouses as warehouse_service
+        from ..models import StockTransfer
+
+        transfer = warehouse_service._load(session, row.entity_id)
+        source, target = godown_for(config, transfer.from_warehouse), godown_for(config, transfer.to_warehouse)
+        for godown in {source, target}:
+            client.ensure_godown(godown)
+        sent, received = [], []
+        for item in transfer.items:
+            product = item.product
+            client.ensure_stock_item(product.name, product.unit_of_measure)
+            cost = (item.goods_value / item.quantity) if item.quantity else Decimal("0")
+            sent.append(tally.Line(product.name, product.unit_of_measure, item.quantity, _cents(cost), _cents(item.goods_value)))
+            if item.quantity_received > 0:
+                landed = cost * item.quantity_received + item.extra_cost
+                received.append(tally.Line(product.name, product.unit_of_measure, item.quantity_received,
+                                           _cents(landed / item.quantity_received), _cents(landed)))
+        narration = "Transfer {} from {} to {}".format(transfer.number, transfer.from_warehouse.name, transfer.to_warehouse.name)
+        if transfer.extra_cost:
+            narration += "; freight and handling Rs {:,.2f} added to cost".format(float(transfer.extra_cost))
+        if transfer.loss_value:
+            narration += "; lost in transit Rs {:,.2f}".format(float(transfer.loss_value))
+        result = client.create_stock_journal(_local_day(transfer.received_at or transfer.created_at), transfer.number, narration,
+                                             source, target, sent, received)
+        row.tally_master_id = result.master_id
+        row.tally_number = transfer.number
+        return
     if row.kind == DELIVERY_INVOICE:
         delivery = _delivery(session, row.entity_id)
         order = delivery.sales_order
@@ -195,7 +251,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
         subtotal = sum((line.amount for line in lines), Decimal("0"))
         result = client.create_voucher(
             config["sales_invoice_type"], _local_day(delivery.created_at), ledger, config["sales_ledger"], lines,
-            party_is_debit=True, godown=config["godown"], reference=delivery.delivery_number,
+            party_is_debit=True, godown=godown_for(config, delivery.warehouse), reference=delivery.delivery_number,
             narration="Delivery {} against {}".format(delivery.delivery_number, order.order_number),
             order_number=order.order_number if linked else None, taxes=sales_taxes(config, subtotal),
         )

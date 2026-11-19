@@ -94,6 +94,7 @@ def record_movement(
     reference_type: Optional[str] = None,
     reference_id: Optional[uuid.UUID] = None,
     note: Optional[str] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> StockMovement:
     """Append to the stock ledger and keep the cached balance in step.
 
@@ -107,6 +108,7 @@ def record_movement(
         reference_type=reference_type,
         reference_id=reference_id,
         note=note,
+        warehouse_id=warehouse_id,
     )
     session.add(movement)
     product.physical_stock = product.physical_stock + quantity_change

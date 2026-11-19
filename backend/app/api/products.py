@@ -65,6 +65,7 @@ def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db)
         reorder_level=payload.reorder_level,
         preferred_supplier_id=payload.preferred_supplier_id,
         lead_time_days=payload.lead_time_days,
+        warehouse_id=payload.warehouse_id,
         **payload.model_dump(include={"brand", "hsn_code", "gst_rate", "weight_kg", "specs", "sales_unit", "purchase_unit", "whole_units"}, exclude_none=True),
     )
     return product_service.product_view(db, product)

@@ -51,11 +51,11 @@ ADJUSTMENT_COUNTER = "stock_adjustment"
 COUNT_COUNTER = "stock_count"
 
 
-def _draw_layers(session: Session, product: Product, amount: Decimal) -> Decimal:
-    """Take ``amount`` out of the oldest cost layers; return its cost."""
+def _draw_layers(session: Session, product: Product, amount: Decimal, warehouse_id: Optional[uuid.UUID] = None) -> Decimal:
+    """Take ``amount`` out of the oldest cost layers (of one warehouse if given); return its cost."""
     remaining = amount
     value = ZERO_MONEY
-    for layer in costing._open_layers(session, product.id):
+    for layer in costing._open_layers(session, product.id, warehouse_id):
         if remaining <= ZERO:
             break
         take = min(layer.quantity_remaining, remaining)
@@ -93,7 +93,10 @@ def _post_one(session: Session, line: Dict[str, Any], count_number: Optional[str
     reason = line.get("reason") or ("count" if line.get("counted_quantity") is not None else "correction")
     if reason not in REASONS:
         raise ValidationError("Unknown reason '{}'.".format(reason))
-    system = product.physical_stock
+    from . import warehouses as warehouse_service
+
+    where = warehouse_service.resolve(session, line.get("warehouse_id")) if line.get("warehouse_id") else None
+    system = warehouse_service.on_hand(session, product.id, where) if where else product.physical_stock - warehouse_service.on_hand(session, product.id, warehouse_service.transit_id(session))
     counted = None
     if line.get("counted_quantity") is not None and line.get("counted_quantity") != "":
         counted = to_quantity(line["counted_quantity"], "Counted quantity")
@@ -105,11 +108,11 @@ def _post_one(session: Session, line: Dict[str, Any], count_number: Optional[str
     if change == ZERO:
         return None
     if system + change < ZERO:
-        raise ValidationError("{} has only {} in stock; it cannot go below zero.".format(product.name, system))
+        raise ValidationError("{} has only {} in stock{}; it cannot go below zero.".format(product.name, system, " there" if where else ""))
     note = (line.get("note") or "").strip() or None
     number = next_document_number(session, ADJUSTMENT_COUNTER, "ADJ")
     adjustment = StockAdjustment(
-        number=number, count_number=count_number, product_id=product.id, reason=reason,
+        number=number, count_number=count_number, product_id=product.id, reason=reason, warehouse_id=where,
         system_quantity=system, counted_quantity=counted, quantity_change=change, note=note, created_by_id=user_id,
     )
     session.add(adjustment)
@@ -118,24 +121,26 @@ def _post_one(session: Session, line: Dict[str, Any], count_number: Optional[str
     if change < ZERO:
         lost = -change
         reserved = reservations.reserved_for_product(session, product.id)
-        free = system - reserved
+        free = product.physical_stock - reserved
         if lost > free:
             adjustment.released_to_short = _release_newest(session, product, lost - max(free, ZERO))
-        value = _draw_layers(session, product, lost)
+        value = _draw_layers(session, product, lost, where)
         adjustment.value_change = -value
         adjustment.unit_cost = unit_cost(value / lost) if lost > ZERO else ZERO
-        record_movement(session, product, MovementType.ADJUSTMENT, change, "stock_adjustment", adjustment.id, label)
+        record_movement(session, product, MovementType.ADJUSTMENT, change, "stock_adjustment", adjustment.id, label, warehouse_id=where)
     else:
         given = line.get("unit_cost")
         cost = unit_cost(given, "Unit cost") if given not in (None, "") else None
         if cost is None:
             cost = costing.stock_valuation(session, product.id)["average_cost"] or product.last_purchase_price or ZERO
+        into = where or warehouse_service.default_id(session)
+        adjustment.warehouse_id = into
         layer = StockCostLayer(product_id=product.id, source=MovementType.ADJUSTMENT, source_id=adjustment.id,
-                               unit_cost=cost, quantity=change, quantity_remaining=change, note=label)
+                               unit_cost=cost, quantity=change, quantity_remaining=change, note=label, warehouse_id=into)
         session.add(layer)
         adjustment.unit_cost = cost
         adjustment.value_change = money(change * cost)
-        record_movement(session, product, MovementType.ADJUSTMENT, change, "stock_adjustment", adjustment.id, label)
+        record_movement(session, product, MovementType.ADJUSTMENT, change, "stock_adjustment", adjustment.id, label, warehouse_id=into)
         waiting = reservations.unallocated_total(reservations.fifo_unallocated_items(session, product.id))
         if waiting > ZERO:
             reservations.allocate_available_stock(session, product, min(change, waiting), AllocationSource.ADJUSTMENT, label="adjustment")

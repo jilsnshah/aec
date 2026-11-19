@@ -115,6 +115,7 @@ class ReturnIn(_BaseModel):
     reason: str = _Field(description="damaged, wrong_item, quality, excess or other.")
     note: Optional[str] = None
     lines: List[ReturnLineIn]
+    warehouse_id: Optional[uuid.UUID] = _Field(default=None, description="Where restocked goods go; the default warehouse if omitted.")
 
 
 @router.get("/{order_id}/returnable")
@@ -128,7 +129,7 @@ def create_return(order_id: uuid.UUID, payload: ReturnIn, db: Session = Depends(
     """Record goods a customer sent back (a credit note). The value is credited
     to the customer's account; lines with restock true go back into stock at the
     cost they were delivered at."""
-    record = return_service.create_return(db, order_id, [line.model_dump() for line in payload.lines], payload.reason, payload.note, user.id)
+    record = return_service.create_return(db, order_id, [line.model_dump() for line in payload.lines], payload.reason, payload.note, user.id, payload.warehouse_id)
     return return_service.view(record)
 
 

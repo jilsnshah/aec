@@ -114,6 +114,9 @@ class MovementType(str, enum.Enum):
     ADJUSTMENT = "ADJUSTMENT"
     #: Delivered goods a customer sent back in sellable condition.
     SALES_RETURN = "SALES_RETURN"
+    #: Stock leaving one warehouse for another, and arriving there.
+    TRANSFER_OUT = "TRANSFER_OUT"
+    TRANSFER_IN = "TRANSFER_IN"
 
 
 class AllocationSource(str, enum.Enum):
@@ -423,6 +426,10 @@ class StockReceipt(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     receipt_number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     product_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -468,6 +475,10 @@ class StockMovement(Base):
     reference_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     reference_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
@@ -559,6 +570,10 @@ class StockCostLayer(Base):
     quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
     quantity_remaining: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
@@ -968,6 +983,10 @@ class GoodsReceipt(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     receipt_number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     purchase_order_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=False
@@ -1035,6 +1054,10 @@ class CustomerDelivery(Base):
     __table_args__ = (Index("ix_deliveries_order_created", "sales_order_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     delivery_number: Mapped[str] = mapped_column(
         String(32), nullable=False, unique=True, index=True
     )
@@ -1056,6 +1079,7 @@ class CustomerDelivery(Base):
 
     sales_order: Mapped["SalesOrder"] = relationship()
     customer: Mapped["Customer"] = relationship()
+    warehouse: Mapped[Optional["Warehouse"]] = relationship()
     items: Mapped[List["CustomerDeliveryItem"]] = relationship(
         back_populates="delivery", cascade="all, delete-orphan"
     )
@@ -1547,6 +1571,10 @@ class StockAdjustment(Base):
     __table_args__ = (CheckConstraint("quantity_change <> 0", name="ck_adjustments_nonzero"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     count_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     product_id: Mapped[uuid.UUID] = mapped_column(
@@ -1576,6 +1604,10 @@ class SalesReturn(Base):
     __tablename__ = "sales_returns"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: The godown or yard this happened in.
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     sales_order_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -1926,3 +1958,106 @@ class AgentDraft(Base):
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="SET NULL"), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Warehouse(Base, TimestampMixin):
+    """A place stock is kept: a godown, yard, shop or a customer's site store.
+    One is the default, used whenever a warehouse is not chosen. "In transit"
+    is a system warehouse holding goods between two others."""
+
+    __tablename__ = "warehouses"
+    __table_args__ = (CheckConstraint("kind IN ('godown', 'yard', 'shop', 'site', 'transit')", name="ck_warehouses_kind"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False, default="godown")
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Who looks after it, and their phone.
+    contact: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    #: Matching Tally godown name.
+    tally_godown: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class StockTransfer(Base, TimestampMixin):
+    """Goods moving from one warehouse to another: drafted, dispatched (in
+    transit), then received. Freight and handling costs are spread over the
+    lines and added to the goods' cost at the destination."""
+
+    __tablename__ = "stock_transfers"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'in_transit', 'received', 'cancelled')", name="ck_transfers_status"),
+        CheckConstraint("cost_method IN ('quantity', 'value', 'weight')", name="ck_transfers_cost_method"),
+        CheckConstraint("from_warehouse_id <> to_warehouse_id", name="ck_transfers_different"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    from_warehouse_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True)
+    to_warehouse_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft", index=True)
+    #: How the costs are spread over the lines.
+    cost_method: Mapped[str] = mapped_column(String(10), nullable=False, default="quantity")
+    vehicle: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    transporter: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Value of the goods sent (FIFO cost at the source) and the costs added.
+    goods_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    extra_cost: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    #: Value of goods that did not arrive (written off).
+    loss_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    dispatched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    from_warehouse: Mapped["Warehouse"] = relationship(foreign_keys=[from_warehouse_id])
+    to_warehouse: Mapped["Warehouse"] = relationship(foreign_keys=[to_warehouse_id])
+    items: Mapped[List["StockTransferItem"]] = relationship(back_populates="transfer", cascade="all, delete-orphan", order_by="StockTransferItem.line_number")
+    costs: Mapped[List["StockTransferCost"]] = relationship(back_populates="transfer", cascade="all, delete-orphan")
+
+
+class StockTransferItem(UnitLineMixin, Base):
+    __tablename__ = "stock_transfer_items"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_transfer_items_quantity"),
+        CheckConstraint("quantity_received >= 0 AND quantity_received <= quantity", name="ck_transfer_items_received"),
+        UniqueConstraint("transfer_id", "product_id", name="uq_transfer_items_product"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    transfer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("stock_transfers.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    #: Base units sent and received.
+    quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    quantity_received: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0.000"))
+    #: FIFO cost of the units sent, from the source warehouse's layers.
+    goods_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    #: This line's share of the transfer costs.
+    extra_cost: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+
+    transfer: Mapped["StockTransfer"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()
+
+    @property
+    def unit_quantity(self) -> Optional[Decimal]:
+        return self._in_unit(self.quantity)
+
+
+class StockTransferCost(Base):
+    """Freight, loading, unloading, toll... paid to move the goods."""
+
+    __tablename__ = "stock_transfer_costs"
+    __table_args__ = (CheckConstraint("amount >= 0", name="ck_transfer_costs_amount"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    transfer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("stock_transfers.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="freight")
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    paid_to: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    transfer: Mapped["StockTransfer"] = relationship(back_populates="costs")

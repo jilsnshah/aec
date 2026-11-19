@@ -38,9 +38,13 @@ def open_cost_layer(
     source: MovementType,
     source_id: Optional[uuid.UUID] = None,
     note: Optional[str] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> StockCostLayer:
-    """Record a batch of stock bought at one price."""
+    """Record a batch of stock bought at one price, in a warehouse (the default one if none)."""
+    from . import warehouses
+
     layer = StockCostLayer(
+        warehouse_id=warehouse_id or warehouses.default_id(session),
         product_id=product.id,
         source=source,
         source_id=source_id,
@@ -56,15 +60,19 @@ def open_cost_layer(
     return layer
 
 
-def _open_layers(session: Session, product_id: uuid.UUID) -> List[StockCostLayer]:
-    """Layers with stock left, oldest first."""
+def _open_layers(session: Session, product_id: uuid.UUID, warehouse_id: Optional[uuid.UUID] = None) -> List[StockCostLayer]:
+    """Layers with stock left, oldest first; in one warehouse if given. Goods
+    on the road (in transit) are never drawn by a sale or an adjustment."""
+    from .warehouses import transit_id
+
+    stmt = select(StockCostLayer).where(StockCostLayer.product_id == product_id, StockCostLayer.quantity_remaining > 0)
+    if warehouse_id is not None:
+        stmt = stmt.where(StockCostLayer.warehouse_id == warehouse_id)
+    else:
+        stmt = stmt.where((StockCostLayer.warehouse_id.is_(None)) | (StockCostLayer.warehouse_id != transit_id(session)))
     return list(
         session.execute(
-            select(StockCostLayer)
-            .where(
-                StockCostLayer.product_id == product_id,
-                StockCostLayer.quantity_remaining > 0,
-            )
+            stmt
             .order_by(StockCostLayer.created_at.asc(), StockCostLayer.id.asc())
         )
         .scalars()
@@ -77,6 +85,7 @@ def consume_cost_layers(
     product: Product,
     allocation: StockAllocation,
     consumed_quantity: Decimal,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> Decimal:
     """Draw ``consumed_quantity`` from the oldest layers and cost the allocation.
 
@@ -87,7 +96,7 @@ def consume_cost_layers(
     remaining = consumed_quantity
     total_cost = ZERO_MONEY
 
-    for layer in _open_layers(session, product.id):
+    for layer in _open_layers(session, product.id, warehouse_id):
         if remaining <= ZERO:
             break
         take = layer.quantity_remaining if layer.quantity_remaining < remaining else remaining
@@ -130,6 +139,7 @@ def consume_cost_layers(
             MovementType.ADJUSTMENT,
             None,
             "Auto-created to cover a cost-layer shortfall",
+            warehouse_id,
         )
         line_cost = money(remaining * layer.unit_cost)
         layer.quantity_remaining = ZERO

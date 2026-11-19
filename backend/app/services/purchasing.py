@@ -846,6 +846,7 @@ def create_goods_receipt(
     notes: Optional[str] = None,
     idempotency_key: Optional[str] = None,
     allow_over_receipt: bool = False,
+    warehouse_id: Optional[uuid.UUID] = None,
 ) -> Dict[str, Any]:
     """Book goods in against a purchase order and settle waiting customers.
 
@@ -890,7 +891,11 @@ def create_goods_receipt(
             session, [line["purchase_order_item"].product_id for line in cleaned]
         )
 
+        from . import warehouses as warehouse_service
+
+        into = warehouse_service.resolve(session, warehouse_id)
         receipt = GoodsReceipt(
+            warehouse_id=into,
             receipt_number=next_document_number(session, GOODS_RECEIPT_COUNTER, "GR"),
             purchase_order_id=order.id,
             supplier_id=order.supplier_id,
@@ -928,6 +933,7 @@ def create_goods_receipt(
                 reference_type="goods_receipt_item",
                 reference_id=receipt_item.id,
                 note="Received on {} against {}".format(receipt.receipt_number, order.po_number),
+                warehouse_id=into,
             )
             receipt_item.stock_movement_id = movement.id
 
@@ -939,6 +945,7 @@ def create_goods_receipt(
                 MovementType.GOODS_RECEIPT,
                 receipt_item.id,
                 "Goods receipt {}".format(receipt.receipt_number),
+                into,
             )
 
             # The compulsory bit: the customers this purchase was covering, and

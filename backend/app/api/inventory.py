@@ -61,6 +61,7 @@ def create_stock_receipt(payload: schemas.StockReceiptCreate, db: Session = Depe
         idempotency_key=payload.idempotency_key,
         purchase_unit_cost=payload.unit_cost,
         supplier_reference=payload.supplier_reference,
+        warehouse_id=payload.warehouse_id,
     )
 
 
