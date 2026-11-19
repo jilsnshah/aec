@@ -141,6 +141,8 @@ def create_customer(session: Session, **fields: Any) -> Customer:
         email=(fields.get("email") or None),
         address=(fields.get("address") or None),
         notes=(fields.get("notes") or None),
+        payment_terms_days=int(fields.get("payment_terms_days") or 0),
+        credit_limit=fields.get("credit_limit"),
     )
     session.add(customer)
     try:
@@ -163,6 +165,10 @@ def update_customer(session: Session, customer_id: uuid.UUID, changes: Dict[str,
     for field in ("phone", "email", "address", "notes"):
         if field in changes:
             setattr(customer, field, changes[field] or None)
+    if changes.get("payment_terms_days") is not None:
+        customer.payment_terms_days = int(changes["payment_terms_days"])
+    if "credit_limit" in changes:
+        customer.credit_limit = changes["credit_limit"]
     if "is_active" in changes and changes["is_active"] is not None:
         customer.is_active = bool(changes["is_active"])
     try:

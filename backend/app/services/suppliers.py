@@ -160,6 +160,8 @@ def create_supplier(session: Session, **fields: Any) -> Supplier:
             email=(fields.get("email") or None),
             address=(fields.get("address") or None),
             notes=(fields.get("notes") or None),
+            payment_terms_days=int(fields.get("payment_terms_days") or 0),
+            lead_time_days=fields.get("lead_time_days"),
         )
         session.add(supplier)
         session.commit()
@@ -198,6 +200,10 @@ def update_supplier(session: Session, supplier_id: uuid.UUID, changes: Dict[str,
         for field in ("contact_person", "phone", "email", "address", "notes"):
             if field in changes:
                 setattr(supplier, field, changes[field] or None)
+        if changes.get("payment_terms_days") is not None:
+            supplier.payment_terms_days = int(changes["payment_terms_days"])
+        if "lead_time_days" in changes:
+            supplier.lead_time_days = changes["lead_time_days"]
 
         if "is_active" in changes and changes["is_active"] is not None:
             supplier.is_active = bool(changes["is_active"])

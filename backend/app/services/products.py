@@ -21,6 +21,7 @@ from ..models import (
     SalesOrderItem,
     StockCostLayer,
     StockMovement,
+    Supplier,
 )
 from ..numeric import ZERO, ZERO_MONEY, aggregate, money, quantity, require_non_negative, unit_cost
 from ..database import begin_write
@@ -133,6 +134,11 @@ def to_view(
         "is_active": product.is_active,
         "created_at": product.created_at,
         "updated_at": product.updated_at,
+        "category": product.category,
+        "reorder_level": product.reorder_level,
+        "preferred_supplier_id": product.preferred_supplier_id,
+        "preferred_supplier_name": product.preferred_supplier.name if product.preferred_supplier else None,
+        "lead_time_days": product.lead_time_days,
         "physical_stock": physical,
         "reserved_stock": reserved,
         "available_stock": physical - reserved,
@@ -160,10 +166,26 @@ def product_view(session: Session, product: Product) -> Dict[str, Any]:
     )
 
 
-def _product_filter(search: Optional[str], include_inactive: bool):
+def _product_filter(
+    search: Optional[str],
+    include_inactive: bool,
+    category: Optional[str] = None,
+    supplier_id: Optional[uuid.UUID] = None,
+    ids: Optional[List[uuid.UUID]] = None,
+):
     stmt = select(Product)
     if not include_inactive:
         stmt = stmt.where(Product.is_active.is_(True))
+    if category:
+        wanted = [part.strip() for part in category.split(",") if part.strip()]
+        if "(none)" in wanted:
+            stmt = stmt.where(or_(Product.category.in_([w for w in wanted if w != "(none)"]), Product.category.is_(None)))
+        else:
+            stmt = stmt.where(Product.category.in_(wanted))
+    if supplier_id:
+        stmt = stmt.where(Product.preferred_supplier_id == supplier_id)
+    if ids:
+        stmt = stmt.where(Product.id.in_(ids))
     if search:
         pattern = "%{}%".format(search.strip().lower())
         stmt = stmt.where(
@@ -176,9 +198,9 @@ def _product_filter(search: Optional[str], include_inactive: bool):
 
 
 def count_products(
-    session: Session, search: Optional[str] = None, include_inactive: bool = False
+    session: Session, search: Optional[str] = None, include_inactive: bool = False, **filters: Any
 ) -> int:
-    return count_matching(session, _product_filter(search, include_inactive))
+    return count_matching(session, _product_filter(search, include_inactive, **filters))
 
 
 def list_products(
@@ -189,8 +211,9 @@ def list_products(
     sort_dir: str = "asc",
     limit: Optional[int] = None,
     offset: int = 0,
+    **filters: Any,
 ) -> List[Dict[str, Any]]:
-    stmt = _product_filter(search, include_inactive)
+    stmt = _product_filter(search, include_inactive, **filters)
     column = _stock_expression() if sort_by == "stock" else SORTABLE_FIELDS.get(sort_by, Product.name)
     # The id tiebreak keeps pages stable when many rows share a sort value.
     stmt = stmt.order_by(column.desc() if sort_dir == "desc" else column.asc(), Product.id)
@@ -212,6 +235,35 @@ def list_products(
     ]
 
 
+def _apply_settings(session: Session, product: Product, values: Dict[str, Any]) -> None:
+    """Category, minimum stock, preferred supplier and lead time."""
+    if "category" in values:
+        product.category = (values["category"] or "").strip()[:64] or None
+    if values.get("reorder_level") is not None:
+        product.reorder_level = require_non_negative(quantity(values["reorder_level"], "Minimum stock"), "Minimum stock")
+    if "preferred_supplier_id" in values:
+        supplier_id = values["preferred_supplier_id"]
+        if supplier_id is not None and session.get(Supplier, supplier_id) is None:
+            raise NotFoundError("That supplier does not exist.")
+        product.preferred_supplier_id = supplier_id
+    if "lead_time_days" in values:
+        days = values["lead_time_days"]
+        if days is not None and not 0 <= int(days) <= 365:
+            raise ValidationError("Lead time must be between 0 and 365 days.")
+        product.lead_time_days = int(days) if days is not None else None
+
+
+def categories(session: Session) -> List[Dict[str, Any]]:
+    """Every category in use, with how many active products it has."""
+    rows = session.execute(
+        select(Product.category, func.count(Product.id))
+        .where(Product.is_active.is_(True))
+        .group_by(Product.category)
+        .order_by(Product.category)
+    ).all()
+    return [{"name": name or "(none)", "products": count} for name, count in rows]
+
+
 def create_product(
     session: Session,
     sku: str,
@@ -221,6 +273,7 @@ def create_product(
     description: Optional[str] = None,
     opening_stock: Any = 0,
     opening_unit_cost: Any = 0,
+    **settings: Any,
 ) -> Product:
     """Create a product, optionally with validated opening stock.
 
@@ -253,6 +306,7 @@ def create_product(
         description=(description or None),
         physical_stock=ZERO,
     )
+    _apply_settings(session, product, {key: value for key, value in settings.items() if value is not None})
     session.add(product)
 
     try:
@@ -328,6 +382,8 @@ def update_product(session: Session, product_id: uuid.UUID, changes: Dict[str, A
 
     if "is_active" in changes and changes["is_active"] is not None:
         product.is_active = bool(changes["is_active"])
+
+    _apply_settings(session, product, changes)
 
     try:
         session.commit()

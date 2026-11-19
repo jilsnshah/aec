@@ -3,7 +3,7 @@ read these, so the numbers always agree."""
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -87,3 +87,51 @@ def alerts(db: Session = Depends(get_db)):
 def briefing(db: Session = Depends(get_db)):
     """Today at a glance."""
     return insights.briefing(db)
+
+
+def _split(raw: Optional[str]) -> Optional[List[str]]:
+    return [part.strip() for part in raw.split(",") if part.strip()] if raw else None
+
+
+@router.get("/explore")
+def explore(
+    measure: str = Query(default="booked_value", description="booked_value, quantity_booked, orders, discount, revenue, quantity_delivered, cost_of_goods or gross_profit."),
+    group_by: str = Query(default="month", description="product, category, customer, month, week, weekday, day or none."),
+    period: str = Query(default="last_90", description="As for overview."),
+    start: Optional[date] = Query(default=None),
+    end: Optional[date] = Query(default=None),
+    categories: Optional[str] = Query(default=None, description="Comma-separated categories."),
+    product_ids: Optional[str] = Query(default=None, description="Comma-separated product ids."),
+    customer_ids: Optional[str] = Query(default=None, description="Comma-separated customer ids."),
+    sort: str = Query(default="value", pattern="^(value|name)$"),
+    limit: int = Query(default=100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Any sales measure by any grouping over any window, with the previous
+    window alongside, shares and a Pareto running share."""
+    return insights.explore(db, measure, group_by, period, start, end, _split(categories), _split(product_ids), _split(customer_ids), sort, limit)
+
+
+@router.get("/heatmap")
+def heatmap(measure: str = Query(default="booked_value"), weeks: int = Query(default=12, ge=4, le=52), db: Session = Depends(get_db)):
+    """A measure by weekday and week: the business's weekly rhythm."""
+    return insights.heatmap(db, measure, weeks)
+
+
+@router.get("/products")
+def products(
+    period: str = Query(default="last_90"),
+    start: Optional[date] = Query(default=None),
+    end: Optional[date] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Product intelligence: growth, ABC class, margin quadrant, enquiry
+    conversion, and products bought together when there is enough data."""
+    return insights.product_intelligence(db, period, start, end)
+
+
+@router.get("/segments")
+def segments(db: Session = Depends(get_db)):
+    """Customers by segment (champion, loyal, at risk, dormant, new,
+    occasional) with buying frequency, estimated annual value and what they owe."""
+    return insights.customer_segments(db)

@@ -154,7 +154,17 @@ class Product(Base, TimestampMixin):
     #: Most recent purchase price per unit; a convenience default, not a valuation.
     #: Stock is valued from the open cost layers (see :class:`StockCostLayer`).
     last_purchase_price: Mapped[Optional[Decimal]] = mapped_column(UnitCost, nullable=True)
+    #: Grouping for analysis and filtering (e.g. Cement, Steel, Packaging).
+    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    #: Minimum stock to keep on hand; the reorder point adds lead-time demand to it.
+    reorder_level: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
+    #: Who this product is usually bought from, and how many days they take.
+    preferred_supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
+    )
+    lead_time_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
+    preferred_supplier: Mapped[Optional["Supplier"]] = relationship(foreign_keys=[preferred_supplier_id])
     order_items: Mapped[List["SalesOrderItem"]] = relationship(back_populates="product")
     movements: Mapped[List["StockMovement"]] = relationship(back_populates="product")
 
@@ -170,6 +180,10 @@ class Customer(Base, TimestampMixin):
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    #: Days of credit: an invoice (a delivery) falls due this many days after it.
+    payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: Most the customer may owe at once; None means no limit.
+    credit_limit: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
 
     orders: Mapped[List["SalesOrder"]] = relationship(back_populates="customer")
 
@@ -735,6 +749,10 @@ class Supplier(Base, TimestampMixin):
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    #: Days of credit the supplier gives on goods received.
+    payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: Typical days from placing an order to the goods arriving.
+    lead_time_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     purchase_orders: Mapped[List["PurchaseOrder"]] = relationship(back_populates="supplier")
 
@@ -1292,3 +1310,109 @@ class AiToolCall(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
+
+
+# ---------------------------------------------------------------------------
+# Money in and out, targets, preferences
+# ---------------------------------------------------------------------------
+
+
+class Payment(Base):
+    """Money received from a customer or paid to a supplier.
+
+    Receivables are what customers owe for goods delivered, less what they
+    paid; payables are what the business owes for goods received, less what it
+    paid. Payments settle the oldest open invoices first. A payment is never
+    deleted: a mistaken one is voided, with a reason.
+    """
+
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    #: in (from a customer) or out (to a supplier)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    sales_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="SET NULL"), nullable=True
+    )
+    purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    paid_on: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    #: cash, bank, upi, cheque, card or other
+    method: Mapped[str] = mapped_column(String(16), nullable=False, default="bank")
+    reference: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    customer: Mapped[Optional["Customer"]] = relationship()
+    supplier: Mapped[Optional["Supplier"]] = relationship()
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
+        CheckConstraint(
+            "(direction = 'in' AND customer_id IS NOT NULL AND supplier_id IS NULL) OR "
+            "(direction = 'out' AND supplier_id IS NOT NULL AND customer_id IS NULL)",
+            name="ck_payments_party",
+        ),
+    )
+
+
+class SalesTarget(Base):
+    """A monthly sales target for the whole business."""
+
+    __tablename__ = "sales_targets"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: First day of the month, local time.
+    month: Mapped[str] = mapped_column(String(7), nullable=False)  # YYYY-MM
+    #: booked (orders placed) or revenue (goods delivered)
+    metric: Mapped[str] = mapped_column(String(16), nullable=False, default="booked")
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("month", "metric", name="uq_sales_targets_month_metric"),)
+
+
+class UserPreference(Base):
+    """A per-user setting, e.g. the Home layout."""
+
+    __tablename__ = "user_preferences"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    value_json: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_user_preferences_user_key"),)
+
+
+class SavedView(Base):
+    """A named set of filters on a page, kept per user (or shared)."""
+
+    __tablename__ = "saved_views"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    page: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    state_json: Mapped[str] = mapped_column(Text, nullable=False)
+    shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

@@ -18,6 +18,7 @@ from .api import (
     auth,
     customers,
     enquiries,
+    finance,
     fulfilment,
     insights,
     integrations,
@@ -26,6 +27,7 @@ from .api import (
     products,
     purchasing,
     tasks,
+    workspace,
 )
 from .config import get_settings
 from .api.auth import require_user
@@ -128,6 +130,8 @@ for router in (
     insights.router,
     tasks.router,
     ai.router,
+    finance.router,
+    workspace.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

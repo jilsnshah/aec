@@ -73,6 +73,10 @@ class ProductCreate(BaseModel):
         ge=0,
         description="What each opening-stock unit cost to buy. Opens the first FIFO cost layer.",
     )
+    category: Optional[str] = Field(default=None, max_length=64, description="Product group, e.g. Cement or Steel.")
+    reorder_level: Optional[Decimal] = Field(default=None, ge=0, description="Minimum stock to keep.")
+    preferred_supplier_id: Optional[uuid.UUID] = Field(default=None, description="Usual supplier.")
+    lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Days from ordering to arrival.")
 
 
 class ProductUpdate(BaseModel):
@@ -84,6 +88,10 @@ class ProductUpdate(BaseModel):
     mrp: Optional[Decimal] = Field(default=None, ge=0)
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    category: Optional[str] = Field(default=None, max_length=64, description="Product group, e.g. Cement or Steel.")
+    reorder_level: Optional[Decimal] = Field(default=None, ge=0, description="Minimum stock to keep.")
+    preferred_supplier_id: Optional[uuid.UUID] = Field(default=None, description="Usual supplier.")
+    lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Days from ordering to arrival.")
 
 
 class ProductOut(ORMModel):
@@ -96,6 +104,11 @@ class ProductOut(ORMModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    category: Optional[str] = None
+    reorder_level: Decimal = Decimal("0")
+    preferred_supplier_id: Optional[uuid.UUID] = None
+    preferred_supplier_name: Optional[str] = None
+    lead_time_days: Optional[int] = None
     physical_stock: Decimal
     #: Of the physical stock, how much is already promised to an order.
     reserved_stock: Decimal = Decimal("0")
@@ -160,6 +173,8 @@ class CustomerCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
     address: Optional[str] = None
     notes: Optional[str] = None
+    payment_terms_days: int = Field(default=0, ge=0, le=365, description="Days of credit on each delivery.")
+    credit_limit: Optional[Decimal] = Field(default=None, ge=0, description="Most the customer may owe; empty for no limit.")
 
 
 class CustomerUpdate(BaseModel):
@@ -169,6 +184,8 @@ class CustomerUpdate(BaseModel):
     address: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    payment_terms_days: Optional[int] = Field(default=None, ge=0, le=365)
+    credit_limit: Optional[Decimal] = Field(default=None, ge=0)
 
 
 class CustomerOut(ORMModel):
@@ -181,6 +198,8 @@ class CustomerOut(ORMModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    payment_terms_days: int = 0
+    credit_limit: Optional[Decimal] = None
 
 
 class CustomerListRow(CustomerOut):
@@ -622,6 +641,8 @@ class SupplierCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
     address: Optional[str] = None
     notes: Optional[str] = None
+    payment_terms_days: int = Field(default=0, ge=0, le=365, description="Days of credit the supplier gives.")
+    lead_time_days: Optional[int] = Field(default=None, ge=0, le=365, description="Typical days to deliver.")
 
 
 class SupplierUpdate(BaseModel):
@@ -633,6 +654,8 @@ class SupplierUpdate(BaseModel):
     address: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    payment_terms_days: Optional[int] = Field(default=None, ge=0, le=365)
+    lead_time_days: Optional[int] = Field(default=None, ge=0, le=365)
 
 
 class SupplierOut(ORMModel):
@@ -647,6 +670,8 @@ class SupplierOut(ORMModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    payment_terms_days: int = 0
+    lead_time_days: Optional[int] = None
 
 
 class SupplierListRow(SupplierOut):

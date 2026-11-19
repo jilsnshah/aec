@@ -30,6 +30,7 @@ from ..config import get_settings
 from ..errors import ValidationError
 from ..models import (
     Customer,
+    CustomerEnquiryItem,
     CustomerDelivery,
     CustomerDeliveryItem,
     CustomerEnquiry,
@@ -63,6 +64,8 @@ DEAD_STOCK_DAYS = 90  # nothing sold for this long while stock sits in the wareh
 SLOW_COVER_DAYS = 90  # free stock lasts longer than this at the current sales rate
 LOW_COVER_DAYS = 14  # stock runs out within this at the current sales rate
 TARGET_COVER_DAYS = 30  # reorder up to this many days of sales
+DEFAULT_LEAD_TIME_DAYS = 7  # when neither the product nor its supplier says
+TREND_MIN_UNITS = 5  # below this many units in both months, a trend is noise
 STALE_ENQUIRY_DAYS = 7  # an open quote untouched this long needs a follow-up
 DORMANT_CUSTOMER_DAYS = 60
 WAITING_ORDER_DAYS = 14
@@ -238,7 +241,38 @@ def overview(session: Session, period: str = "month", start: Optional[date] = No
         if current["margin_percent"] is not None and previous["margin_percent"] is not None
         else None
     )
+    from . import finance
+    from ..models import SalesTarget
+
+    money_in = finance.collected(session, bounds["start"], bounds["end"])
+    money_prev = finance.collected(session, bounds["prev_start"], bounds["prev_end"])
+    current["cash_received"], current["cash_paid"] = money_in["received"], money_in["paid"]
+    previous["cash_received"], previous["cash_paid"] = money_prev["received"], money_prev["paid"]
+    changes["cash_received"] = _change(current["cash_received"], previous["cash_received"])
+    changes["cash_paid"] = _change(current["cash_paid"], previous["cash_paid"])
+    target = None
+    if period == "month" and not (start or end):
+        month = bounds["start"].strftime("%Y-%m")
+        rows = {t.metric: float(t.amount) for t in session.execute(select(SalesTarget).where(SalesTarget.month == month)).scalars()}
+        if rows:
+            import calendar
+
+            days_in_month = calendar.monthrange(bounds["start"].year, bounds["start"].month)[1]
+            elapsed = (bounds["end"] - bounds["start"]).days
+            target = {
+                metric: {
+                    "target": amount,
+                    "actual": current["booked_value" if metric == "booked" else "revenue"],
+                    "percent": _pct(current["booked_value" if metric == "booked" else "revenue"], amount),
+                    # Where the month ends at the current daily pace (an estimate).
+                    "projected": round(current["booked_value" if metric == "booked" else "revenue"] / max(elapsed, 1) * days_in_month, 2),
+                    "days_elapsed": elapsed,
+                    "days_in_month": days_in_month,
+                }
+                for metric, amount in rows.items()
+            }
     return {
+        "target": target,
         "period": period if not (start or end) else "custom",
         "start": bounds["start"].date(),
         "end": (bounds["end"] - timedelta(days=1)).date(),
@@ -349,6 +383,40 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
         .order_by(PurchaseOrder.created_at)
     ).all():
         po_price[product_id] = unit_cost
+    sold_prev_30 = {
+        pid: sold_90_minus - sold_30.get(pid, ZERO)
+        for pid, sold_90_minus in _sold_since(session, now - timedelta(days=60)).items()
+    }
+    cogs_90 = dict(
+        session.execute(
+            select(CustomerDeliveryItem.product_id, func.sum(StockAllocation.cost_amount))
+            .select_from(StockAllocation)
+            .join(CustomerDeliveryItem, StockAllocation.customer_delivery_item_id == CustomerDeliveryItem.id)
+            .join(CustomerDelivery, CustomerDeliveryItem.customer_delivery_id == CustomerDelivery.id)
+            .where(CustomerDelivery.created_at >= now - timedelta(days=90))
+            .group_by(CustomerDeliveryItem.product_id)
+        ).all()
+    )
+    enquiry_demand = dict(
+        session.execute(
+            select(CustomerEnquiryItem.product_id, func.sum(CustomerEnquiryItem.quantity))
+            .join(CustomerEnquiry, CustomerEnquiryItem.enquiry_id == CustomerEnquiry.id)
+            .where(CustomerEnquiry.status == EnquiryStatus.OPEN)
+            .group_by(CustomerEnquiryItem.product_id)
+        ).all()
+    )
+    # What the short quantities are worth at the prices customers agreed.
+    owed_price = dict(
+        session.execute(
+            select(SalesOrderItem.product_id,
+                   func.sum(SalesOrderItem.unit_price_net * (SalesOrderItem.quantity_ordered - SalesOrderItem.quantity_fulfilled - SalesOrderItem.quantity_cancelled))
+                   / func.nullif(func.sum(SalesOrderItem.quantity_ordered - SalesOrderItem.quantity_fulfilled - SalesOrderItem.quantity_cancelled), 0))
+            .join(SalesOrder, SalesOrderItem.order_id == SalesOrder.id)
+            .where(SalesOrder.status.in_([OrderStatus.PENDING, OrderStatus.PARTIALLY_FULFILLED]))
+            .group_by(SalesOrderItem.product_id)
+        ).all()
+    )
+    suppliers = {row.id: row for row in session.execute(select(Supplier)).scalars()}
     layers = defaultdict(list)
     for layer in session.execute(select(StockCostLayer).where(StockCostLayer.quantity_remaining > 0)).scalars():
         layers[layer.product_id].append(layer)
@@ -408,11 +476,39 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
             flags.append("slow")
         if rate > 0 and cover_days is not None and cover_days < LOW_COVER_DAYS:
             flags.append("low_cover")
+        supplier = suppliers.get(product.preferred_supplier_id) if product.preferred_supplier_id else None
+        if product.lead_time_days is not None:
+            lead, lead_source = product.lead_time_days, "product"
+        elif supplier is not None and supplier.lead_time_days is not None:
+            lead, lead_source = supplier.lead_time_days, "supplier"
+        else:
+            lead, lead_source = DEFAULT_LEAD_TIME_DAYS, "assumed"
+        minimum = float(product.reorder_level or 0)
+        # Reorder point: what sells while a new order is on its way, plus the minimum.
+        reorder_point = round(rate * lead + minimum, 3)
+        if float(position) < minimum and "short" not in flags:
+            flags.append("below_minimum")
         reorder = 0.0
-        if rate > 0 or position < 0:
-            need = rate * TARGET_COVER_DAYS - float(position)
+        if rate > 0 or position < 0 or float(position) < minimum:
+            need = rate * (lead + TARGET_COVER_DAYS) + minimum - float(position)
             reorder = max(0.0, need, -float(position))
             reorder = float(math.ceil(reorder)) if reorder else 0.0
+        # When to place the next order so it arrives before stock runs below the minimum.
+        if rate > 0:
+            days_until = (float(position) - reorder_point) / rate
+            order_by = (now.date() + timedelta(days=max(0, math.floor(days_until)))) if days_until < 120 else None
+        else:
+            order_by = now.date() if position < 0 or float(position) < minimum else None
+        recent, before = float(sold_30.get(product.id, ZERO)), float(sold_prev_30.get(product.id, ZERO))
+        if max(recent, before) < TREND_MIN_UNITS:
+            trend, trend_change = "insufficient_data", None
+        else:
+            trend_change = round((recent - before) / before * 100, 1) if before else None
+            trend = "rising" if before == 0 or recent >= before * 1.2 else "falling" if recent <= before * 0.8 else "steady"
+        cost_90 = float(cogs_90.get(product.id) or 0)
+        turnover = round(cost_90 * (365 / 90) / value, 2) if value > 0 and cost_90 > 0 else None
+        days_to_clear = round(float(physical) / rate) if rate > 0 and physical > 0 else None
+        price_owed = float(owed_price.get(product.id) or 0) or float(product.mrp or 0)
         unit_cost = (
             _f(product.last_purchase_price)
             or (round(value / float(physical), 2) if physical > 0 else 0.0)
@@ -420,6 +516,26 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
         )
         if reorder > 0:
             flags.append("reorder")
+        if trend == "rising" and "short" not in flags:
+            flags.append("rising_demand")
+        if trend == "falling":
+            flags.append("falling_demand")
+        liquidation = round(value * ((oldest_days or 0) / 30), 2) if ("dead" in flags or "slow" in flags) else 0.0
+        open_enquiry = _f(enquiry_demand.get(product.id))
+        if "short" in flags or "below_minimum" in flags or (order_by is not None and order_by <= now.date() + timedelta(days=3)):
+            action = {"code": "buy", "text": "Buy {} {}{}".format(_qty(reorder), product.unit_of_measure,
+                       " by {}".format(order_by.isoformat()) if order_by else " now")}
+        elif "dead" in flags and (oldest_days or 0) >= 90:
+            action = {"code": "liquidate", "text": "Clear it: {} idle for {} days".format(_money(value), oldest_days)}
+        elif "dead" in flags or "slow" in flags:
+            action = {"code": "do_not_reorder", "text": "Do not reorder; {} in hand".format(
+                "about {} days of sales".format(days_to_clear) if days_to_clear else "no recent sales")}
+        elif order_by is not None and reorder > 0:
+            action = {"code": "plan", "text": "Order {} {} by {}".format(_qty(reorder), product.unit_of_measure, order_by.isoformat())}
+        elif trend == "rising":
+            action = {"code": "watch", "text": "Demand rising; keep an eye on cover"}
+        else:
+            action = {"code": "ok", "text": "Healthy"}
 
         rows.append(
             {
@@ -448,6 +564,25 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
                 "reorder_quantity": reorder,
                 "reorder_value": round(reorder * unit_cost, 2),
                 "flags": flags,
+                "category": product.category,
+                "reorder_level": minimum,
+                "reorder_point": reorder_point,
+                "lead_time_days": lead,
+                "lead_time_source": lead_source,
+                "order_by": order_by,
+                "preferred_supplier_id": product.preferred_supplier_id,
+                "preferred_supplier_name": supplier.name if supplier else None,
+                "unit_cost": unit_cost,
+                "sold_prev_30_days": round(before, 3),
+                "demand_trend": trend,
+                "demand_change_percent": trend_change,
+                "turnover_per_year": turnover,
+                "holding_days": round(365 / turnover) if turnover else None,
+                "days_to_clear": days_to_clear,
+                "open_enquiry_quantity": open_enquiry,
+                "sales_at_risk_value": round(float(short) * price_owed, 2),
+                "liquidation_priority": liquidation,
+                "action": action,
             }
         )
         totals["products"] += 1
@@ -465,11 +600,19 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
         if reorder > 0:
             totals["reorder_products"] += 1
             totals["reorder_value"] += round(reorder * unit_cost, 2)
+        totals["sales_at_risk_value"] = round(totals.get("sales_at_risk_value", 0.0) + float(short) * price_owed, 2)
+        totals["cost_of_goods_90_days"] = round(totals.get("cost_of_goods_90_days", 0.0) + cost_90, 2)
 
     for key in ("stock_value", "dead_stock_value", "slow_stock_value", "reorder_value"):
         totals[key] = round(totals[key], 2)
     totals["age_value"] = {name: round(value, 2) for name, value in totals["age_value"].items()}
     totals["capital_at_risk"] = round(totals["dead_stock_value"] + totals["slow_stock_value"], 2)
+    totals.setdefault("sales_at_risk_value", 0.0)
+    totals.setdefault("cost_of_goods_90_days", 0.0)
+    totals["turnover_per_year"] = (
+        round(totals["cost_of_goods_90_days"] * (365 / 90) / totals["stock_value"], 2) if totals["stock_value"] > 0 else None
+    )
+    totals["categories"] = _category_rollup(rows)
     rows.sort(key=lambda row: (-len(row["flags"]), -row["stock_value"]))
     return {
         "as_of": now,
@@ -478,10 +621,31 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
             "slow_cover_days": SLOW_COVER_DAYS,
             "low_cover_days": LOW_COVER_DAYS,
             "target_cover_days": TARGET_COVER_DAYS,
+            "default_lead_time_days": DEFAULT_LEAD_TIME_DAYS,
         },
         "totals": totals,
         "products": rows,
     }
+
+
+def _category_rollup(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        name = row.get("category") or "(none)"
+        group = groups.setdefault(name, {"category": name, "products": 0, "stock_value": 0.0, "aged_90_value": 0.0,
+                                         "capital_at_risk": 0.0, "reorder_value": 0.0, "short_products": 0})
+        group["products"] += 1
+        group["stock_value"] += row["stock_value"]
+        group["aged_90_value"] += row["ages"]["90+"]["value"]
+        if "dead" in row["flags"] or "slow" in row["flags"]:
+            group["capital_at_risk"] += row["stock_value"]
+        group["reorder_value"] += row["reorder_value"]
+        if "short" in row["flags"]:
+            group["short_products"] += 1
+    out = []
+    for group in groups.values():
+        out.append({key: (round(value, 2) if isinstance(value, float) else value) for key, value in group.items()})
+    return sorted(out, key=lambda item: -item["stock_value"])
 
 
 # ---------------------------------------------------------------------------
@@ -944,6 +1108,40 @@ def alerts(session: Session) -> Dict[str, Any]:
             "detail": "Was due {}.".format(task.due_date.astimezone(_zone()).date().isoformat()),
             "link": "/tasks", "record": {"type": "task", "id": task.id},
         })
+    from . import finance
+
+    money = finance.receivables(session)
+    for row in money["parties"]:
+        if row["overdue"] > 0:
+            found.append({
+                "kind": "overdue_receivable", "severity": "critical" if row["oldest_overdue_days"] > 30 else "warning",
+                "title": "{} owes {} overdue".format(row["name"], _money(row["overdue"])),
+                "detail": "Oldest invoice {} days past due; {} open in all.".format(row["oldest_overdue_days"], _money(row["open"])),
+                "link": "/customers/{}?tab=account".format(row["party_id"]), "record": {"type": "customer", "id": row["party_id"]},
+            })
+        if row.get("over_credit_limit"):
+            found.append({
+                "kind": "over_credit_limit", "severity": "warning",
+                "title": "{} is over their credit limit".format(row["name"]),
+                "detail": "Owes {} against a limit of {}.".format(_money(row["open"]), _money(row["credit_limit"] or 0)),
+                "link": "/customers/{}?tab=account".format(row["party_id"]), "record": {"type": "customer", "id": row["party_id"]},
+            })
+    bills = finance.payables(session)
+    for doc in bills["overdue"][:10]:
+        found.append({
+            "kind": "overdue_payable", "severity": "warning",
+            "title": "Pay {} {} for {}".format(doc["party_name"], _money(doc["open"]), doc["number"]),
+            "detail": "{} days past due.".format(doc["days_overdue"]),
+            "link": "/suppliers/{}?tab=account".format(doc["party_id"]), "record": {"type": "supplier", "id": doc["party_id"]},
+        })
+    for row in stock["products"]:
+        if "below_minimum" in row["flags"]:
+            found.append({
+                "kind": "below_minimum", "severity": "warning",
+                "title": "{} is below its minimum stock".format(row["name"]),
+                "detail": "{} {} against a minimum of {}. {}.".format(_qty(row["stock_figure"]), row["unit"], _qty(row["reorder_level"]), row["action"]["text"]),
+                "link": "/products/{}".format(row["product_id"]), "record": {"type": "product", "id": row["product_id"]},
+            })
     found.sort(key=lambda alert: SEVERITY_ORDER[alert["severity"]])
     for index, alert in enumerate(found):
         alert["id"] = "{}-{}".format(alert["kind"], index)
@@ -962,6 +1160,9 @@ def briefing(session: Session) -> Dict[str, Any]:
     alert_data = alerts(session)
     stock = inventory_health(session)["totals"]
     funnel = enquiry_funnel(session)
+    from . import finance
+
+    finance_r, finance_p = finance.receivables(session), finance.payables(session)
     return {
         "date": _now().date(),
         "today": today["current"],
@@ -980,6 +1181,9 @@ def briefing(session: Session) -> Dict[str, Any]:
             "pipeline_value": funnel["open_pipeline_value"],
             "stale_without_follow_up": funnel["stale_without_follow_up"],
         },
+        "receivables": {key: finance_r["totals"][key] for key in ("open", "overdue")},
+        "payables": {key: finance_p["totals"][key] for key in ("open", "overdue")},
+        "target": month.get("target"),
         "alert_counts": alert_data["counts"],
         "top_alerts": alert_data["alerts"][:8],
     }
@@ -991,3 +1195,396 @@ def _qty(value: float) -> str:
 
 def _money(value: float) -> str:
     return "₹{:,.2f}".format(value)
+
+
+# ---------------------------------------------------------------------------
+# Line-level facts, the basis of the explorer and product intelligence
+# ---------------------------------------------------------------------------
+
+MEASURES = {
+    "booked_value": "Value of orders placed (net of discounts)",
+    "quantity_booked": "Quantity ordered (less cancelled)",
+    "orders": "Number of orders",
+    "discount": "Discount given (MRP less agreed price)",
+    "revenue": "Value of goods delivered",
+    "quantity_delivered": "Quantity delivered",
+    "cost_of_goods": "FIFO cost of goods delivered",
+    "gross_profit": "Revenue less cost of goods",
+}
+EXPLORE_GROUPS = ("product", "category", "customer", "month", "week", "weekday", "day", "none")
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _booked_lines(session: Session, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+    rows = session.execute(
+        select(SalesOrder.id, SalesOrder.created_at, SalesOrder.customer_id, Customer.name, Product.id, Product.name,
+               Product.category, SalesOrderItem.quantity_ordered - SalesOrderItem.quantity_cancelled,
+               SalesOrderItem.unit_price_net, SalesOrderItem.unit_price)
+        .join(SalesOrderItem, SalesOrderItem.order_id == SalesOrder.id)
+        .join(Customer, SalesOrder.customer_id == Customer.id)
+        .join(Product, SalesOrderItem.product_id == Product.id)
+        .where(SalesOrder.status != OrderStatus.CANCELLED, SalesOrder.created_at >= start, SalesOrder.created_at < end)
+    ).all()
+    out = []
+    for order_id, created, customer_id, customer, product_id, product, category, qty, net, price in rows:
+        qty = float(qty or 0)
+        out.append({"when": created, "order_id": order_id, "customer_id": customer_id, "customer": customer,
+                    "product_id": product_id, "product": product, "category": category or "(none)",
+                    "booked_value": qty * float(net or 0), "quantity_booked": qty,
+                    "discount": max(0.0, qty * (float(price or 0) - float(net or 0)))})
+    return out
+
+
+def _delivered_lines(session: Session, start: datetime, end: datetime) -> List[Dict[str, Any]]:
+    cost = dict(
+        session.execute(
+            select(StockAllocation.customer_delivery_item_id, func.sum(StockAllocation.cost_amount))
+            .where(StockAllocation.customer_delivery_item_id.is_not(None))
+            .group_by(StockAllocation.customer_delivery_item_id)
+        ).all()
+    )
+    rows = session.execute(
+        select(CustomerDeliveryItem.id, CustomerDelivery.created_at, CustomerDelivery.customer_id, Customer.name,
+               Product.id, Product.name, Product.category, CustomerDeliveryItem.quantity, SalesOrderItem.unit_price_net)
+        .join(CustomerDelivery, CustomerDeliveryItem.customer_delivery_id == CustomerDelivery.id)
+        .join(SalesOrderItem, CustomerDeliveryItem.order_item_id == SalesOrderItem.id)
+        .join(Customer, CustomerDelivery.customer_id == Customer.id)
+        .join(Product, CustomerDeliveryItem.product_id == Product.id)
+        .where(CustomerDelivery.created_at >= start, CustomerDelivery.created_at < end)
+    ).all()
+    out = []
+    for item_id, created, customer_id, customer, product_id, product, category, qty, net in rows:
+        qty = float(qty or 0)
+        revenue = qty * float(net or 0)
+        cogs = float(cost.get(item_id) or 0)
+        out.append({"when": created, "customer_id": customer_id, "customer": customer, "product_id": product_id,
+                    "product": product, "category": category or "(none)", "revenue": revenue, "quantity_delivered": qty,
+                    "cost_of_goods": cogs, "gross_profit": revenue - cogs})
+    return out
+
+
+def _key(row: Dict[str, Any], group_by: str) -> Tuple[str, str, Optional[str]]:
+    """(key, label, link) for a line under a grouping."""
+    local = row["when"].astimezone(_zone())
+    if group_by == "product":
+        return str(row["product_id"]), row["product"], "/products/{}".format(row["product_id"])
+    if group_by == "customer":
+        return str(row["customer_id"]), row["customer"], "/customers/{}".format(row["customer_id"])
+    if group_by == "category":
+        return row["category"], row["category"], None
+    if group_by == "month":
+        return local.strftime("%Y-%m"), local.strftime("%b %Y"), None
+    if group_by == "week":
+        monday = (local - timedelta(days=local.weekday())).date()
+        return monday.isoformat(), "Week of {}".format(monday.strftime("%d %b")), None
+    if group_by == "weekday":
+        return str(local.weekday()), WEEKDAYS[local.weekday()], None
+    if group_by == "day":
+        return local.date().isoformat(), local.date().isoformat(), None
+    return "all", "All", None
+
+
+def _aggregate(booked: List[Dict[str, Any]], delivered: List[Dict[str, Any]], group_by: str) -> Dict[str, Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+
+    def entry(row):
+        key, label, link = _key(row, group_by)
+        if key not in groups:
+            groups[key] = {"key": key, "label": label, "link": link, "_orders": set(),
+                           **{measure: 0.0 for measure in MEASURES if measure != "orders"}}
+        return groups[key]
+
+    for row in booked:
+        item = entry(row)
+        item["booked_value"] += row["booked_value"]
+        item["quantity_booked"] += row["quantity_booked"]
+        item["discount"] += row["discount"]
+        item["_orders"].add(row["order_id"])
+    for row in delivered:
+        item = entry(row)
+        for measure in ("revenue", "quantity_delivered", "cost_of_goods", "gross_profit"):
+            item[measure] += row[measure]
+    for item in groups.values():
+        item["orders"] = len(item.pop("_orders"))
+        for measure in MEASURES:
+            item[measure] = round(item[measure], 3 if measure.startswith("quantity") else 2)
+        item["margin_percent"] = _pct(item["gross_profit"], item["revenue"])
+    return groups
+
+
+def _apply_filters(lines: List[Dict[str, Any]], categories, product_ids, customer_ids) -> List[Dict[str, Any]]:
+    out = lines
+    if categories:
+        out = [row for row in out if row["category"] in categories]
+    if product_ids:
+        out = [row for row in out if str(row["product_id"]) in product_ids]
+    if customer_ids:
+        out = [row for row in out if str(row["customer_id"]) in customer_ids]
+    return out
+
+
+def explore(
+    session: Session,
+    measure: str = "booked_value",
+    group_by: str = "month",
+    period: str = "last_90",
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+    categories: Optional[List[str]] = None,
+    product_ids: Optional[List[str]] = None,
+    customer_ids: Optional[List[str]] = None,
+    sort: str = "value",
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """Any measure by any grouping over any window, with the previous window
+    of the same length alongside for comparison."""
+    if measure not in MEASURES:
+        raise ValidationError("measure must be one of: {}.".format(", ".join(MEASURES)))
+    if group_by not in EXPLORE_GROUPS:
+        raise ValidationError("group_by must be one of: {}.".format(", ".join(EXPLORE_GROUPS)))
+    bounds = period_bounds(period, start, end)
+    current = _aggregate(
+        _apply_filters(_booked_lines(session, bounds["start"], bounds["end"]), categories, product_ids, customer_ids),
+        _apply_filters(_delivered_lines(session, bounds["start"], bounds["end"]), categories, product_ids, customer_ids),
+        group_by,
+    )
+    previous = _aggregate(
+        _apply_filters(_booked_lines(session, bounds["prev_start"], bounds["prev_end"]), categories, product_ids, customer_ids),
+        _apply_filters(_delivered_lines(session, bounds["prev_start"], bounds["prev_end"]), categories, product_ids, customer_ids),
+        group_by,
+    )
+    time_based = group_by in ("month", "week", "day", "weekday")
+    rows = []
+    keys = set(current) | (set() if time_based else set(previous))
+    for key in keys:
+        item = current.get(key) or dict(previous[key], **{m: 0.0 for m in MEASURES}, margin_percent=None)
+        before = previous.get(key, {}).get(measure, 0.0) if not time_based else None
+        rows.append(dict(item, value=item[measure], previous=before, change_percent=_change(item[measure], before) if before else None))
+    if time_based:
+        rows.sort(key=lambda row: row["key"])
+    elif sort == "name":
+        rows.sort(key=lambda row: row["label"])
+    else:
+        rows.sort(key=lambda row: -row["value"])
+    total = round(sum(item[measure] for item in current.values()), 2)
+    total_previous = round(sum(item[measure] for item in previous.values()), 2)
+    running = 0.0
+    for row in rows:
+        row["share_percent"] = _pct(row["value"], total) if total else None
+        if not time_based:
+            running += row["value"]
+            row["cumulative_percent"] = _pct(running, total) if total else None
+    return {
+        "measure": measure,
+        "measure_label": MEASURES[measure],
+        "group_by": group_by,
+        "start": bounds["start"].date(),
+        "end": (bounds["end"] - timedelta(days=1)).date(),
+        "previous_start": bounds["prev_start"].date(),
+        "previous_end": (bounds["prev_end"] - timedelta(seconds=1)).date(),
+        "total": total,
+        "total_previous": total_previous,
+        "change_percent": _change(total, total_previous),
+        "rows": rows[:limit],
+        "row_count": len(rows),
+    }
+
+
+def heatmap(session: Session, measure: str = "booked_value", weeks: int = 12) -> Dict[str, Any]:
+    """The measure by weekday and week, to see the business's rhythm."""
+    if measure not in MEASURES:
+        raise ValidationError("measure must be one of: {}.".format(", ".join(MEASURES)))
+    weeks = max(4, min(weeks, 52))
+    today = _now().date()
+    first = today - timedelta(days=today.weekday()) - timedelta(weeks=weeks - 1)
+    start, end = _start_of_day(first), _start_of_day(today + timedelta(days=1))
+    booked_side = measure in ("booked_value", "quantity_booked", "orders", "discount")
+    lines = _booked_lines(session, start, end) if booked_side else _delivered_lines(session, start, end)
+    cells: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    for row in lines:
+        local = row["when"].astimezone(_zone())
+        week = (local.date() - timedelta(days=local.weekday())).isoformat()
+        cell = cells.setdefault((week, local.weekday()), {"value": 0.0, "_orders": set()})
+        if measure == "orders":
+            cell["_orders"].add(row["order_id"])
+        else:
+            cell["value"] += row[measure]
+    week_keys = [(first + timedelta(weeks=i)).isoformat() for i in range(weeks)]
+    matrix = []
+    for week in week_keys:
+        values = []
+        for day in range(7):
+            cell = cells.get((week, day))
+            values.append(round(len(cell["_orders"]) if measure == "orders" and cell else (cell["value"] if cell else 0.0), 2))
+        matrix.append({"week": week, "values": values})
+    by_weekday = [round(sum(week["values"][day] for week in matrix), 2) for day in range(7)]
+    return {"measure": measure, "weekdays": WEEKDAYS, "weeks": matrix, "by_weekday": by_weekday,
+            "busiest_weekday": WEEKDAYS[by_weekday.index(max(by_weekday))] if any(by_weekday) else None}
+
+
+# ---------------------------------------------------------------------------
+# Product intelligence
+# ---------------------------------------------------------------------------
+
+MIN_ORDERS_FOR_BASKETS = 20
+
+
+def product_intelligence(session: Session, period: str = "last_90", start: Optional[date] = None, end: Optional[date] = None) -> Dict[str, Any]:
+    """Which products drive the business and which hold it back: growth,
+    Pareto (ABC) class, margin quadrant, enquiry conversion, and products
+    bought together (only when there are enough orders to say)."""
+    product_view = explore(session, "booked_value", "product", period, start, end, limit=10_000)
+    bounds = period_bounds(period, start, end)
+    stock = {str(row["product_id"]): row for row in inventory_health(session)["products"]}
+    rows = product_view["rows"]
+    revenues = sorted(row["revenue"] for row in rows if row["revenue"] > 0)
+    margins = sorted(row["margin_percent"] for row in rows if row["margin_percent"] is not None)
+    median_revenue = revenues[len(revenues) // 2] if revenues else 0
+    median_margin = margins[len(margins) // 2] if margins else None
+
+    enquiry_rows = session.execute(
+        select(CustomerEnquiryItem.product_id, CustomerEnquiry.status, func.count(CustomerEnquiryItem.id))
+        .join(CustomerEnquiry, CustomerEnquiryItem.enquiry_id == CustomerEnquiry.id)
+        .where(CustomerEnquiry.created_at >= bounds["start"], CustomerEnquiry.created_at < bounds["end"])
+        .group_by(CustomerEnquiryItem.product_id, CustomerEnquiry.status)
+    ).all()
+    enquiries: Dict[str, Dict[str, int]] = defaultdict(lambda: {"OPEN": 0, "CONVERTED": 0, "LOST": 0})
+    for product_id, status, count in enquiry_rows:
+        enquiries[str(product_id)][status.value] += count
+
+    out = []
+    for row in rows:
+        key = row["key"]
+        if row["booked_value"] >= (row.get("previous") or 0) * 1.2 and row.get("previous"):
+            growth = "growing"
+        elif row.get("previous") and row["booked_value"] <= row["previous"] * 0.8:
+            growth = "declining"
+        elif not row.get("previous"):
+            growth = "new" if row["booked_value"] else "none"
+        else:
+            growth = "steady"
+        # ABC: what came before this product decides its class, so the products
+        # that make up the first 80% of value are A, the next 15% B, the rest C.
+        before_share = (row.get("cumulative_percent") or 0) - (row.get("share_percent") or 0)
+        abc = "A" if before_share < 80 else "B" if before_share < 95 else "C"
+        quadrant = None
+        if row["revenue"] > 0 and row["margin_percent"] is not None and median_margin is not None:
+            high_rev = row["revenue"] >= median_revenue
+            high_margin = row["margin_percent"] >= median_margin
+            quadrant = {(True, True): "star", (True, False): "volume_low_margin",
+                        (False, True): "niche_high_margin", (False, False): "weak"}[(high_rev, high_margin)]
+        enquiry = enquiries.get(key, {"OPEN": 0, "CONVERTED": 0, "LOST": 0})
+        decided = enquiry["CONVERTED"] + enquiry["LOST"]
+        health = stock.get(key, {})
+        out.append({
+            "product_id": key, "name": row["label"], "booked_value": row["booked_value"], "previous_booked_value": row.get("previous"),
+            "growth_percent": row.get("change_percent"), "growth": growth, "revenue": row["revenue"],
+            "gross_profit": row["gross_profit"], "margin_percent": row["margin_percent"], "discount": row["discount"],
+            "share_percent": row.get("share_percent"), "abc_class": abc, "quadrant": quadrant,
+            "enquiries": sum(enquiry.values()), "enquiries_won": enquiry["CONVERTED"], "enquiries_lost": enquiry["LOST"],
+            "enquiry_conversion_percent": _pct(enquiry["CONVERTED"], decided),
+            "stock_flags": health.get("flags", []), "short": health.get("short", 0.0), "category": health.get("category"),
+        })
+    # Products asked about a lot but rarely bought.
+    weak_conversion = [row for row in out if row["enquiries"] >= 2 and (row["enquiry_conversion_percent"] or 0) < 40]
+
+    orders = session.execute(
+        select(SalesOrderItem.order_id, SalesOrderItem.product_id, Product.name)
+        .join(SalesOrder, SalesOrderItem.order_id == SalesOrder.id)
+        .join(Product, SalesOrderItem.product_id == Product.id)
+        .where(SalesOrder.status != OrderStatus.CANCELLED)
+    ).all()
+    baskets: Dict[Any, set] = defaultdict(set)
+    names = {}
+    for order_id, product_id, name in orders:
+        baskets[order_id].add(product_id)
+        names[product_id] = name
+    multi = [basket for basket in baskets.values() if len(basket) > 1]
+    pairs: Dict[Tuple[Any, Any], int] = defaultdict(int)
+    for basket in multi:
+        items = sorted(basket, key=str)
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                pairs[(items[i], items[j])] += 1
+    together = None
+    if len(multi) >= MIN_ORDERS_FOR_BASKETS:
+        together = [{"a": names[a], "a_id": a, "b": names[b], "b_id": b, "orders": n}
+                    for (a, b), n in sorted(pairs.items(), key=lambda item: -item[1])[:15] if n >= 2]
+    return {
+        "start": product_view["start"], "end": product_view["end"],
+        "median_revenue": round(median_revenue, 2), "median_margin_percent": median_margin,
+        "products": out,
+        "weak_enquiry_conversion": weak_conversion,
+        "bought_together": together,
+        "bought_together_note": None if together is not None else
+            "Needs at least {} orders with more than one product; there are {}.".format(MIN_ORDERS_FOR_BASKETS, len(multi)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Customer segments
+# ---------------------------------------------------------------------------
+
+
+def customer_segments(session: Session) -> Dict[str, Any]:
+    """Customers grouped by how recently, how often and how much they buy, with
+    what they owe. Lifetime value is an estimate and labelled as one."""
+    from . import finance
+
+    base = customer_insights(session, limit=10_000)
+    owed = {str(row["party_id"]): row for row in finance.receivables(session)["parties"]}
+    dates = defaultdict(list)
+    for customer_id, created in session.execute(
+        select(SalesOrder.customer_id, SalesOrder.created_at).where(SalesOrder.status != OrderStatus.CANCELLED).order_by(SalesOrder.created_at)
+    ).all():
+        dates[customer_id].append(created)
+    values = sorted((row["booked_value"] for row in base["customers"]), reverse=True)
+    top_cut = values[max(0, len(values) // 5 - 1)] if values else 0
+    rows = []
+    counts: Dict[str, int] = defaultdict(int)
+    now = _now()
+    for row in base["customers"]:
+        history = dates.get(row["customer_id"], [])
+        gaps = [(b - a).days for a, b in zip(history, history[1:])]
+        frequency = round(sum(gaps) / len(gaps), 1) if gaps else None
+        span = (history[-1] - history[0]).days if len(history) > 1 else 0
+        first_age = (now - history[0]).days if history else None
+        recency = row["days_since_last_order"]
+        orders = row["orders"]
+        if first_age is not None and (first_age <= 30 or (orders == 1 and first_age <= 60)):
+            segment = "new"
+        elif orders >= 3 and recency <= 30 and row["booked_value"] >= top_cut:
+            segment = "champion"
+        elif orders >= 2 and recency <= 60:
+            segment = "loyal"
+        elif orders >= 2 and recency <= 120:
+            segment = "at_risk"
+        elif recency > DORMANT_CUSTOMER_DAYS:
+            segment = "dormant"
+        else:
+            segment = "occasional"
+        counts[segment] += 1
+        annual = None
+        if span >= 30:
+            annual = round(row["average_order_value"] * (365 / max(frequency or 365, 1)), 2)
+        money_owed = owed.get(str(row["customer_id"]), {})
+        rows.append(dict(row, segment=segment, average_days_between_orders=frequency,
+                         estimated_annual_value=annual, open_receivable=money_owed.get("open", 0.0),
+                         overdue_receivable=money_owed.get("overdue", 0.0), over_credit_limit=money_owed.get("over_credit_limit", False)))
+    month_rows: Dict[str, Dict[str, int]] = defaultdict(lambda: {"new": 0, "returning": 0})
+    for customer_id, history in dates.items():
+        seen_months = set()
+        for index, created in enumerate(history):
+            month = created.astimezone(_zone()).strftime("%Y-%m")
+            if month in seen_months:
+                continue
+            seen_months.add(month)
+            month_rows[month]["new" if index == 0 else "returning"] += 1
+    repeaters = sum(1 for history in dates.values() if len(history) > 1)
+    return {
+        "segments": dict(counts),
+        "customers": rows,
+        "new_vs_returning": [{"month": month, **values} for month, values in sorted(month_rows.items())],
+        "repeat_rate_percent": _pct(repeaters, len(dates)),
+        "note": "Estimated annual value = average order × orders a year at the customer's own buying frequency; shown only with at least 30 days of history.",
+    }
