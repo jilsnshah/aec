@@ -190,7 +190,7 @@ export function FigureStrip({ items }: { items: { label: string; value: ReactNod
           </div>
           <div
             className={cn(
-              'num mt-1 text-[22px] font-semibold tracking-[-0.025em] whitespace-nowrap',
+              'num mt-1 text-[24px] font-light tracking-[-0.03em] whitespace-nowrap',
               item.tone === 'sky' && 'text-sky',
               item.tone === 'bad' && 'text-bad',
               item.tone === 'ok' && 'text-ok',

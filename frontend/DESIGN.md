@@ -63,13 +63,15 @@ of names: `:root` is light, `[data-theme='dark']` swaps the values
 (`src/styles/app.css`). The choice is kept per computer; until one is made the
 system setting decides.
 
-* Light: a bright, airy light-blue canvas (`#eaf2ff`), frosted white cards with
-  22 px corners, near-black text. Bright blue (`#2268ff`, as a soft vertical
-  gradient) fills the active pill, segmented controls, primary buttons, the
-  Home banner and the profit card.
-* Dark: near-black canvas, charcoal glass cards, the same bright blue accents.
-* Data colours: light blue `#8cbcff` and bright blue `#2268ff`, used together
-  as in the bars, gauge and dots.
+* Palette taken from the user's second reference (a banking app): a cool light
+  grey canvas (`#e4e8ec`), white cards, sky-blue feature surfaces (`#8cd6f7`
+  fading to `#d3f1fd`) with black text, and black for primary buttons, the
+  active pill, segmented controls, tab underlines and icon discs.
+* Dark: near-black canvas and charcoal cards; the sky surfaces stay sky, and
+  black elements turn white.
+* Data colours: light sky `#a5e0fa` and vivid sky `#29aff0`. The busiest bar is
+  hatched and a dashed line marks the average, as in the reference.
+* Large figures use a light (300) weight with tight tracking.
 * Icons everywhere they help: every module pill, a bright module tile on each
   list and record header, an icon beside every headline figure (chosen from its
   label), an icon disc on every Home card, and icon chips in the Home banner. Status pills are light fills with coloured

@@ -82,7 +82,7 @@ function Hero({ data, name }: { data?: InventorySummaryOut; name: string }) {
       transition={{ duration: 0.5, ease }}
       className="pane-contrast relative mb-4 flex shrink-0 flex-wrap items-center gap-x-8 gap-y-3 overflow-hidden px-7 py-5 max-md:mb-2 max-md:px-5 [&>*:not(.deco)]:relative"
     >
-      <Contours className="deco absolute -top-[120%] right-[-6%] size-[520px] text-[rgb(255_255_255/0.16)]" rings={14} seed={9} />
+      <Contours className="deco absolute -top-[120%] right-[-6%] size-[520px] text-[rgb(255_255_255/0.55)]" rings={14} seed={9} />
       <div className="deco pointer-events-none absolute inset-0 max-xl:hidden" aria-hidden="true">
         {tiles.map((tile, index) => (
           <motion.span
@@ -99,13 +99,13 @@ function Hero({ data, name }: { data?: InventorySummaryOut; name: string }) {
         <p className="flex items-center gap-1.5 text-[12.5px] opacity-80">
           <Sparkles size={13} /> {fmtToday()}
         </p>
-        <h1 className="mt-0.5 text-[26px] font-semibold tracking-[-0.03em]">
+        <h1 className="mt-0.5 text-[30px] font-light tracking-[-0.035em]">
           {greeting()}, {name}
         </h1>
       </div>
       <div className="flex flex-wrap gap-2 xl:max-w-[52%]">
         {chips.map((chip) => (
-          <Link key={chip.to} to={chip.to} className="glass-tile flex! h-9 items-center gap-2 rounded-full! px-3.5 text-[12.5px] font-medium transition hover:bg-[rgb(255_255_255/0.3)]">
+          <Link key={chip.to} to={chip.to} className="glass-tile flex! h-9 items-center gap-2 rounded-full! px-3.5 text-[12.5px] font-medium transition hover:bg-[rgb(255_255_255/0.85)]">
             {chip.icon}
             {chip.text}
           </Link>
@@ -216,7 +216,7 @@ function Kpis({ data }: { data?: InventorySummaryOut }) {
               <ArrowUpRight size={15} className="ml-auto text-fg-4 opacity-0 transition group-hover:opacity-100" />
             </div>
             <div className="flex items-baseline gap-2">
-              <span className={cn('num text-[30px] leading-none font-semibold tracking-[-0.035em]', item.tone === 'bad' && 'text-bad')}>{item.value ?? <Skeleton className="h-7 w-24" />}</span>
+              <span className={cn('num text-[34px] leading-none font-light tracking-[-0.04em]', item.tone === 'bad' && 'text-bad')}>{item.value ?? <Skeleton className="h-7 w-24" />}</span>
               <span className="text-[11.5px] font-medium whitespace-nowrap">{item.note}</span>
             </div>
             <div className="mt-auto flex h-9 items-end">{item.extra}</div>
@@ -284,7 +284,7 @@ function ReadyGauge({ data }: { data?: InventorySummaryOut }) {
             />
           </svg>
           <div className="absolute inset-x-0 bottom-0 text-center">
-            <span className="num text-[28px] leading-none font-semibold tracking-[-0.035em]">{data ? <CountUp value={share} format={(v) => `${Math.round(v)}%`} /> : '—'}</span>
+            <span className="num text-[30px] leading-none font-light tracking-[-0.04em]">{data ? <CountUp value={share} format={(v) => `${Math.round(v)}%`} /> : '—'}</span>
           </div>
         </div>
         <div className="mt-3 flex shrink-0 gap-4 text-[11.5px] text-fg-2">
@@ -308,7 +308,7 @@ function ProfitCard({ data }: { data?: InventorySummaryOut }) {
   const costShare = revenue > 0 ? Math.min(100, (cost / revenue) * 100) : 0
   return (
     <Card dark className="col-span-4 justify-between gap-3 p-6 max-lg:min-h-[240px] [&>*:not(svg)]:relative" delay={0.14}>
-      <Contours className="absolute -top-[55%] -right-[18%] size-[120%] text-[rgb(255_255_255/0.09)]" rings={13} seed={7} />
+      <Contours className="absolute -top-[55%] -right-[18%] size-[120%] text-[rgb(255_255_255/0.5)]" rings={13} seed={7} />
       <div>
         <div className="flex items-center gap-3">
           <span className="glass-tile size-10 rounded-full!">
@@ -322,16 +322,16 @@ function ProfitCard({ data }: { data?: InventorySummaryOut }) {
       </div>
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className={cn('num text-[32px] leading-none font-semibold tracking-[-0.035em]', profit < 0 && 'text-bad')}>{data ? <CountUp value={profit} format={fmtMoneyRound} /> : '—'}</span>
+          <span className={cn('num text-[38px] leading-none font-light tracking-[-0.04em]', profit < 0 && 'text-bad')}>{data ? <CountUp value={profit} format={fmtMoneyRound} /> : '—'}</span>
           <span className="text-[12.5px] opacity-60">{data ? `${fmtPercent(data.margin_percent)} margin` : ''}</span>
         </div>
         <div className="mt-4 flex h-9 gap-1.5">
-          <motion.div className="h-full min-w-[8px] rounded-[10px] bg-peri" initial={{ width: 0 }} animate={{ width: `${costShare}%` }} transition={{ duration: 1, ease }} />
+          <motion.div className="h-full min-w-[8px] rounded-[10px] bg-[#0b0b0c]" initial={{ width: 0 }} animate={{ width: `${costShare}%` }} transition={{ duration: 1, ease }} />
           <motion.div className="h-full min-w-[8px] flex-1 rounded-[10px] bg-[#fff]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} />
         </div>
         <div className="mt-2.5 flex justify-between text-[11.5px]">
           <span className="flex items-center gap-1.5 opacity-70">
-            <span className="size-2 rounded-full bg-peri" /> Cost {fmtMoneyRound(cost)}
+            <span className="size-2 rounded-full bg-[#0b0b0c]" /> Cost {fmtMoneyRound(cost)}
           </span>
           <span className="flex items-center gap-1.5 opacity-70">
             Revenue {fmtMoneyRound(revenue)} <span className="size-2 rounded-full bg-[#fff]" />
@@ -367,6 +367,8 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
   const total = buckets.reduce((sum, bucket) => sum + bucket.booked, 0)
   const top = niceMax(Math.max(1, ...buckets.map((bucket) => Math.max(bucket.booked, bucket.delivered))))
   const ticks = [1, 0.75, 0.5, 0.25, 0].map((fraction) => top * fraction)
+  const peak = buckets.reduce((best, bucket, index) => (bucket.booked > (buckets[best]?.booked ?? 0) ? index : best), 0)
+  const average = buckets.length ? total / buckets.length : 0
 
   return (
     <Card className="col-span-5 col-start-8 row-span-2 row-start-1 max-lg:h-[420px] max-lg:shrink-0" delay={0.08}>
@@ -386,7 +388,7 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
         }
       />
       <div className="px-6">
-        <span className="num text-[30px] font-semibold tracking-[-0.035em]">{data ? <CountUp value={total} format={fmtMoneyRound} /> : <Skeleton className="h-7 w-40" />}</span>
+        <span className="num text-[36px] font-light tracking-[-0.04em]">{data ? <CountUp value={total} format={fmtMoneyRound} /> : <Skeleton className="h-7 w-40" />}</span>
       </div>
       <div className="relative min-h-0 flex-1 px-6 pt-4 pb-5">
         <div className="relative flex h-full">
@@ -403,6 +405,17 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
                 <span key={tick} className={cn('h-px w-full', tick === 0 ? 'bg-white/12' : 'border-t border-dashed border-white/8')} />
               ))}
             </div>
+            {average > 0 ? (
+              <motion.div
+                className="pointer-events-none absolute inset-x-0 z-[1] border-t border-dashed border-fg/45"
+                style={{ bottom: `calc(24px + (100% - 24px) * ${average / top})` }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+              >
+                <span className="num absolute -top-[22px] right-0 rounded-full bg-ink-850/90 px-2 py-0.5 text-[11px] font-medium text-fg-2 shadow-pane">avg {fmtCompactMoney(average)}</span>
+              </motion.div>
+            ) : null}
             <div className="relative flex min-h-0 flex-1 items-end justify-around gap-2">
               {buckets.map((bucket, index) => (
                 <div
@@ -417,7 +430,11 @@ function SalesBars({ data }: { data?: InventorySummaryOut }) {
                     initial={{ height: 0 }}
                     animate={{ height: `${(bucket.booked / top) * 100}%` }}
                     transition={{ duration: 0.9, delay: 0.15 + index * 0.06, ease }}
-                    style={{ minHeight: bucket.booked > 0 ? 6 : 0 }}
+                    style={{
+                      minHeight: bucket.booked > 0 ? 6 : 0,
+                      // The busiest span is hatched so it stands out.
+                      backgroundImage: index === peak && bucket.booked > 0 ? 'repeating-linear-gradient(135deg, var(--c-blue) 0 1.2px, transparent 1.2px 8px), linear-gradient(180deg, var(--c-peri-2), var(--c-peri-2))' : undefined,
+                    }}
                   >
                     <motion.div
                       className="absolute inset-x-0 bottom-0 rounded-[14px] bg-[linear-gradient(180deg,var(--c-blue-2),var(--c-blue))] shadow-[inset_0_1px_0_rgb(255_255_255/0.3)]"

@@ -38,34 +38,34 @@ export function SignIn() {
         className="grid w-full max-w-[880px] grid-cols-[1.05fr_1fr] gap-4 max-md:max-w-[400px] max-md:grid-cols-1"
       >
         <section className="pane-contrast relative flex min-h-[460px] [&>*:not(svg)]:relative flex-col justify-between overflow-hidden p-9 max-md:hidden">
-          <Contours className="absolute -right-[30%] -bottom-[45%] size-[130%] text-[rgb(255_255_255/0.1)]" rings={14} seed={4} />
+          <Contours className="absolute -right-[30%] -bottom-[45%] size-[130%] text-[rgb(255_255_255/0.5)]" rings={14} seed={4} />
           <div className="flex items-center gap-2.5">
-            <Logo size={30} tile="fill-[#fff]" />
+            <Logo size={30} />
             <span className="text-[19px] font-bold tracking-[-0.035em]">AEC Desk</span>
           </div>
           <div className="flex h-[150px] items-end gap-3" aria-hidden="true">
             {[52, 74, 60, 92, 70, 84].map((height, index) => (
               <motion.span
                 key={index}
-                className="relative flex-1 overflow-hidden rounded-[12px] bg-peri"
+                className="relative flex-1 overflow-hidden rounded-[12px] bg-[rgb(255_255_255/0.6)] shadow-[inset_0_1px_0_rgb(255_255_255/0.9)]"
                 initial={{ height: 0 }}
                 animate={{ height: `${height}%` }}
                 transition={{ duration: 0.9, delay: 0.2 + index * 0.07, ease: [0.22, 1, 0.36, 1] }}
               >
-                <motion.span className="absolute inset-x-0 bottom-0 rounded-[12px] bg-blue" initial={{ height: 0 }} animate={{ height: `${30 + ((index * 17) % 35)}%` }} transition={{ duration: 0.9, delay: 0.6 + index * 0.07, ease: [0.22, 1, 0.36, 1] }} />
+                <motion.span className="absolute inset-x-0 bottom-0 rounded-[12px] bg-[#0b0b0c]" initial={{ height: 0 }} animate={{ height: `${30 + ((index * 17) % 35)}%` }} transition={{ duration: 0.9, delay: 0.6 + index * 0.07, ease: [0.22, 1, 0.36, 1] }} />
               </motion.span>
             ))}
           </div>
           <div>
-            <h2 className="text-[26px] leading-tight font-semibold tracking-[-0.03em]">Sales, purchasing and stock in one place.</h2>
-            <p className="mt-2 text-[13px] opacity-55">Know what is owed, what is ready and what to buy, every day.</p>
+            <h2 className="text-[30px] leading-tight font-light tracking-[-0.03em]">Sales, purchasing and stock in one place.</h2>
+            <p className="mt-2 text-[13px] opacity-70">Know what is owed, what is ready and what to buy, every day.</p>
           </div>
         </section>
         <form onSubmit={submit} noValidate className="pane flex flex-col justify-center p-9 max-md:p-7">
           <div className="md:hidden">
             <Logo size={36} />
           </div>
-          <h1 className="text-[26px] font-semibold tracking-[-0.03em] max-md:mt-5">Welcome back</h1>
+          <h1 className="text-[30px] font-light tracking-[-0.035em] max-md:mt-5">Welcome back</h1>
           <p className="mt-1 text-[13px] text-fg-3">Sign in to continue to AEC Desk.</p>
           <div className="mt-7 space-y-4">
             {error ? <Notice tone="bad">{error}</Notice> : null}

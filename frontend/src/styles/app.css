@@ -9,29 +9,29 @@
    tint, so white/7 lines and hovers read on both themes.
    ========================================================================== */
 :root {
-  --c-canvas: #eaf2ff;
-  --c-canvas-2: #d9e8ff;
-  --c-ink-950: #eaf2ff;
-  --c-ink-900: #f2f7ff;
+  --c-canvas: #e4e8ec;
+  --c-canvas-2: #dbe0e5;
+  --c-ink-950: #e4e8ec;
+  --c-ink-900: #f3f5f7;
   --c-ink-850: #ffffff;
   --c-ink-800: #ffffff;
   --c-ink-750: #ffffff;
-  --c-ink-700: #eaf2ff;
-  --c-ink-600: #dbe8ff;
+  --c-ink-700: #eef1f4;
+  --c-ink-600: #e3e7eb;
 
-  --c-fg: #0b0d12;
-  --c-fg-2: #394050;
-  --c-fg-3: #6a7183;
-  --c-fg-4: #a1a8b8;
+  --c-fg: #0b0b0c;
+  --c-fg-2: #3c4148;
+  --c-fg-3: #7b818a;
+  --c-fg-4: #b0b5bc;
 
-  --c-sky: #1d63f5;
-  --c-sky-2: #4b8bff;
-  --c-blue: #2268ff;
-  --c-blue-2: #4f8dff;
-  --c-peri: #8cbcff;
-  --c-peri-2: #d3e6ff;
-  --c-brand: linear-gradient(180deg, #4b8dff, #1f5ef5);
-  --brand-shadow: 0 8px 20px -8px rgb(34 104 255 / 0.65);
+  --c-sky: #0a86c4;
+  --c-sky-2: #36a9e1;
+  --c-blue: #29aff0;
+  --c-blue-2: #5cc6f7;
+  --c-peri: #a5e0fa;
+  --c-peri-2: #d8f2fd;
+  --c-brand: linear-gradient(180deg, #2b2d31, #0b0b0c);
+  --brand-shadow: 0 8px 18px -8px rgb(0 0 0 / 0.45);
 
   --c-ok: #1f8a4f;
   --c-warn: #b4741c;
@@ -40,51 +40,54 @@
 
   --c-contrast: #0b0c10;
   --c-on-contrast: #ffffff;
-  --c-tint: #10183a;
-  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(140 200 255 / 0.55), transparent 55%), radial-gradient(70% 90% at 0% 100%, rgb(20 60 200 / 0.45), transparent 60%), linear-gradient(140deg, #3d86ff, #1a56ea);
+  --c-tint: #0f1419;
+  --c-strong: radial-gradient(80% 70% at 85% 0%, rgb(255 255 255 / 0.45), transparent 60%), linear-gradient(180deg, #8cd6f7 0%, #b4e5fb 65%, #d3f1fd 100%);
 
-  --pane-bg: rgb(255 255 255 / 0.72);
-  --card-bg: rgb(255 255 255 / 0.86);
+  --pane-bg: rgb(255 255 255 / 0.84);
+  --card-bg: rgb(255 255 255 / 0.9);
   --card-border: rgb(255 255 255 / 0.95);
-  --shadow-card: 0 1px 2px rgb(16 24 58 / 0.04), 0 6px 16px -10px rgb(31 52 130 / 0.2);
-  --pane-border: rgb(255 255 255 / 0.85);
-  --hair: rgb(16 24 58 / 0.07);
-  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(16 40 100 / 0.04), 0 12px 32px -14px rgb(30 90 220 / 0.22);
-  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(16 40 100 / 0.05), 0 22px 44px -16px rgb(30 90 220 / 0.38);
-  --blob-1: rgb(96 160 255 / 0.5);
-  --blob-2: rgb(180 215 255 / 0.95);
-  --blob-3: rgb(60 130 255 / 0.3);
-  --contour: rgb(255 255 255 / 0.55);
+  --shadow-card: 0 1px 2px rgb(15 20 25 / 0.04), 0 6px 16px -10px rgb(15 20 25 / 0.14);
+  --pane-border: rgb(255 255 255 / 0.95);
+  --hair: rgb(15 20 25 / 0.07);
+  --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(15 20 25 / 0.04), 0 14px 34px -16px rgb(15 20 25 / 0.16);
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 4px rgb(15 20 25 / 0.05), 0 24px 44px -18px rgb(15 20 25 / 0.26);
+  --blob-1: rgb(140 214 247 / 0.38);
+  --blob-2: rgb(255 255 255 / 0.75);
+  --blob-3: rgb(140 214 247 / 0.2);
+  --contour: rgb(255 255 255 / 0.65);
   --grain-opacity: 0.05;
   --shadow-float: 0 30px 80px -24px rgb(16 24 58 / 0.35), 0 0 0 1px rgb(16 24 58 / 0.06);
   --shadow-pop: 0 14px 40px -12px rgb(16 24 58 / 0.28), 0 0 0 1px rgb(16 24 58 / 0.07);
   --scrim: rgb(20 28 60 / 0.28);
   color-scheme: light;
+  --c-on-brand: #ffffff;
+  --c-solid: #0b0b0c;
+  --c-on-strong: #0b0b0c;
 }
 [data-theme='dark'] {
-  --c-canvas: #08090c;
-  --c-canvas-2: #0d0f15;
-  --c-ink-950: #08090c;
-  --c-ink-900: #0f1117;
-  --c-ink-850: #15171e;
-  --c-ink-800: #181b23;
-  --c-ink-750: #1d2029;
-  --c-ink-700: #22262f;
-  --c-ink-600: #2c313c;
+  --c-canvas: #0b0d0f;
+  --c-canvas-2: #101316;
+  --c-ink-950: #0b0d0f;
+  --c-ink-900: #121518;
+  --c-ink-850: #171a1e;
+  --c-ink-800: #1a1d21;
+  --c-ink-750: #1f2227;
+  --c-ink-700: #24282d;
+  --c-ink-600: #2e3238;
 
-  --c-fg: #f3f5f9;
-  --c-fg-2: #b4bac6;
-  --c-fg-3: #808797;
-  --c-fg-4: #565d6b;
+  --c-fg: #f2f4f6;
+  --c-fg-2: #b6bcc4;
+  --c-fg-3: #838a93;
+  --c-fg-4: #575d66;
 
-  --c-sky: #7fb2ff;
-  --c-sky-2: #a9cbff;
-  --c-blue: #3b7bff;
-  --c-blue-2: #64a0ff;
-  --c-peri: #7fb2ff;
-  --c-peri-2: #1d2f55;
-  --c-brand: linear-gradient(180deg, #4f8fff, #2563f0);
-  --brand-shadow: 0 8px 22px -8px rgb(59 123 255 / 0.7);
+  --c-sky: #7fd3f7;
+  --c-sky-2: #a8e2fa;
+  --c-blue: #38bdf8;
+  --c-blue-2: #6dd0fa;
+  --c-peri: #8cd6f7;
+  --c-peri-2: #16303d;
+  --c-brand: linear-gradient(180deg, #ffffff, #e4e8ec);
+  --brand-shadow: 0 8px 18px -8px rgb(0 0 0 / 0.6);
 
   --c-ok: #7fd3a6;
   --c-warn: #e8c07a;
@@ -94,9 +97,9 @@
   --c-contrast: #f3f5f9;
   --c-on-contrast: #0b0c10;
   --c-tint: #ffffff;
-  --c-strong: radial-gradient(90% 120% at 100% 0%, rgb(140 200 255 / 0.45), transparent 55%), linear-gradient(140deg, #3479ff, #1747c9);
+  --c-strong: radial-gradient(80% 70% at 85% 0%, rgb(255 255 255 / 0.35), transparent 60%), linear-gradient(180deg, #7fd0f5 0%, #a6def8 100%);
 
-  --pane-bg: rgb(20 22 29 / 0.74);
+  --pane-bg: rgb(23 26 30 / 0.82);
   --card-bg: rgb(255 255 255 / 0.035);
   --card-border: rgb(255 255 255 / 0.06);
   --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.04);
@@ -104,15 +107,18 @@
   --hair: rgb(255 255 255 / 0.08);
   --shadow-pane: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.6);
   --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 2px 4px rgb(0 0 0 / 0.3), 0 26px 50px -18px rgb(0 0 0 / 0.75);
-  --blob-1: rgb(40 110 255 / 0.3);
-  --blob-2: rgb(60 120 230 / 0.16);
-  --blob-3: rgb(110 180 255 / 0.12);
-  --contour: rgb(127 178 255 / 0.1);
+  --blob-1: rgb(56 189 248 / 0.12);
+  --blob-2: rgb(56 189 248 / 0.05);
+  --blob-3: rgb(140 214 247 / 0.06);
+  --contour: rgb(140 214 247 / 0.07);
   --grain-opacity: 0.07;
   --shadow-float: 0 40px 100px -20px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(255 255 255 / 0.09);
   --shadow-pop: 0 20px 50px -10px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.09);
   --scrim: rgb(0 0 0 / 0.55);
   color-scheme: dark;
+  --c-on-brand: #0b0b0c;
+  --c-solid: #f2f4f6;
+  --c-on-strong: #0b0b0c;
 }
 
 @theme {
@@ -146,6 +152,8 @@
   --color-steel: var(--c-steel);
 
   --color-contrast: var(--c-contrast);
+  --color-on-brand: var(--c-on-brand);
+  --color-solid: var(--c-solid);
   --color-on-contrast: var(--c-on-contrast);
 
   --shadow-float: var(--shadow-float);
@@ -204,7 +212,7 @@
     margin: 0;
     overflow: hidden;
     color: var(--color-fg);
-    background: radial-gradient(1200px 700px at 85% -10%, var(--c-peri-2), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
+    background: radial-gradient(1200px 700px at 85% -10%, rgb(255 255 255 / 0.7), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
     font-family: var(--font-sans);
     font-size: 13.5px;
     line-height: 1.45;
@@ -214,7 +222,7 @@
     transition: background-color 200ms ease;
   }
   [data-theme='dark'] body {
-    background: radial-gradient(1200px 700px at 85% -10%, rgb(63 108 242 / 0.08), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
+    background: radial-gradient(1200px 700px at 85% -10%, rgb(56 189 248 / 0.06), transparent 60%), linear-gradient(170deg, var(--c-canvas), var(--c-canvas-2));
   }
   input,
   textarea,
@@ -293,18 +301,18 @@
     display: grid;
     place-items: center;
     border-radius: 999px;
-    color: var(--color-sky);
-    background: linear-gradient(145deg, color-mix(in oklab, var(--c-peri) 50%, transparent), color-mix(in oklab, var(--c-peri) 18%, transparent));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), inset 0 0 0 1px color-mix(in oklab, var(--c-peri) 30%, transparent);
+    color: var(--c-on-brand);
+    background: var(--c-brand);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
   }
   /* A rounded icon tile in bright blue, for module marks */
   .icon-tile {
     display: grid;
     place-items: center;
     border-radius: 14px;
-    color: #fff;
+    color: var(--c-on-brand);
     background:
-      radial-gradient(120% 100% at 20% 0%, rgb(255 255 255 / 0.35), transparent 55%),
+      radial-gradient(120% 100% at 20% 0%, rgb(255 255 255 / 0.16), transparent 55%),
       var(--c-brand);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.35),
@@ -315,12 +323,12 @@
     display: grid;
     place-items: center;
     border-radius: 16px;
-    color: #fff;
-    background: rgb(255 255 255 / 0.18);
-    border: 1px solid rgb(255 255 255 / 0.35);
+    color: #0b0b0c;
+    background: rgb(255 255 255 / 0.55);
+    border: 1px solid rgb(255 255 255 / 0.8);
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.4),
-      0 12px 24px -12px rgb(10 40 140 / 0.5);
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 12px 24px -14px rgb(10 60 90 / 0.35);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
   }
@@ -333,7 +341,7 @@
   /* The black card: one strong surface per screen */
   .pane-contrast {
     background: var(--c-strong);
-    color: #fff;
+    color: var(--c-on-strong);
     border-radius: var(--radius-pane);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.12),
@@ -371,7 +379,7 @@
   }
   .btn-primary {
     background: var(--c-brand);
-    color: #fff;
+    color: var(--c-on-brand);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.28),
       var(--brand-shadow);
@@ -382,7 +390,7 @@
   /* The bright blue fill for the active pill, segmented thumb and primary actions */
   .brand-fill {
     background: var(--c-brand);
-    color: #fff;
+    color: var(--c-on-brand);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.28),
       var(--brand-shadow);

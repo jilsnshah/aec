@@ -114,7 +114,7 @@ function AccountMenu() {
       <Menu
         trigger={
           <button className="flex items-center gap-1.5 rounded-full p-0.5 pr-2 text-fg-3 transition hover:text-fg" aria-label="Account">
-            <Avatar name={user.username} size={38} className="bg-[linear-gradient(145deg,var(--c-peri),var(--c-blue))] text-[#fff] shadow-[0_6px_14px_-6px_var(--c-blue)]" />
+            <Avatar name={user.username} size={38} className="shadow-[0_6px_14px_-6px_rgb(0_0_0/0.45)]" />
             <ChevronDown size={14} />
           </button>
         }
@@ -157,10 +157,10 @@ function NavItem({ module, badge }: { module: Module; badge?: { count: number; a
       {({ isActive }) => (
         <>
           {isActive ? <motion.span layoutId="nav" className="brand-fill absolute inset-0 rounded-full" transition={{ type: 'spring', stiffness: 480, damping: 40 }} /> : null}
-          <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', isActive ? 'text-[#fff]' : 'text-sky/80 group-hover:text-sky')} />
-          <span className={cn('relative transition-colors', isActive ? 'text-[#fff]' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
+          <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', isActive ? 'text-on-brand' : 'text-fg-3 group-hover:text-fg')} />
+          <span className={cn('relative transition-colors', isActive ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
           {badge ? (
-            <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', isActive ? 'bg-[#fff] text-blue' : badge.alert ? 'bg-blue text-[#fff]' : 'bg-white/10 text-fg-2')}>
+            <span className={cn('num relative min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] leading-[18px] font-semibold', isActive ? 'bg-on-brand text-solid' : badge.alert ? 'bg-blue text-[#0b0b0c]' : 'bg-white/10 text-fg-2')}>
               {badge.count}
             </span>
           ) : null}
