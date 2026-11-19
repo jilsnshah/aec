@@ -26,6 +26,7 @@ from .api import (
     orders,
     products,
     purchasing,
+    records,
     tasks,
     workspace,
 )
@@ -132,6 +133,7 @@ for router in (
     ai.router,
     finance.router,
     workspace.router,
+    records.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

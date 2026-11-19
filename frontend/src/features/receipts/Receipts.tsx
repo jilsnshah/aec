@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PackageOpen, Plus } from 'lucide-react'
+import { PackageOpen, Plus, ScanLine, Users } from 'lucide-react'
+import { AskButton, PageGuide, ScanButton } from '@/ui/smart'
 import { api } from '@/api/endpoints'
 import { useList, useOne } from '@/api/queries'
 import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtQty, n, plural } from '@/lib/format'
@@ -29,11 +30,28 @@ export function Receipts() {
           title="Goods Receipts"
           count={list.data?.total}
           actions={
-            <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew}>
-              Receive
-            </Button>
+            <>
+              <PageGuide
+                title="Goods receipts"
+                points={[
+                  { icon: PackageOpen, text: 'Book in what the supplier delivered against its purchase order. Stock rises at once.' },
+                  { icon: Users, text: 'Choose which waiting customers get the goods; the rest becomes free stock.' },
+                  { icon: ScanLine, text: 'Scan bill: photograph the supplier\'s bill or delivery note and the assistant matches it to the purchase order and flags differences.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew}>
+                Receive
+              </Button>
+            </>
           }
-          filters={<SearchBox value={search} onChange={setSearch} placeholder="Receipt, PO, supplier or note" />}
+          filters={
+            <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <SearchBox value={search} onChange={setSearch} placeholder="Receipt, PO, supplier or note" />
+              </div>
+              <ScanButton small label="Scan bill" prompt="This is a supplier's bill or delivery note. Read it, find the supplier and the open purchase order it belongs to, and compare quantities and prices line by line with the order. List any differences (short, extra, price changed). Then propose recording the goods receipt for what arrived, for me to confirm." />
+            </div>
+          }
         >
           {list.isPending ? (
             <ListSkeleton />
@@ -92,6 +110,7 @@ function ReceiptInspector({ id }: { id: string }) {
             {data.delivery_note_reference ? ` · note ${data.delivery_note_reference}` : ''}
           </>
         }
+        actions={<AskButton question={`Check goods receipt ${data.receipt_number} against purchase order ${data.po_number}: was everything received at the ordered price, which customers got the goods, and what is still due from ${data.supplier_name}?`} />}
       />
       <FigureStrip
         items={[

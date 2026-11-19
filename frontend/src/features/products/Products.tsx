@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { insights, type ProductHealth } from '@/api/insights'
 import { useAssistant } from '@/features/assistant/store'
 import { motion } from 'motion/react'
-import { Archive, Boxes, Check, ClipboardList, Download, MoreHorizontal, PackagePlus, Pencil, Plus, Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react'
+import { AlertTriangle, Archive, BadgePercent, Boxes, Check, ClipboardList, Clock, Download, Hourglass, Layers, MoreHorizontal, PackageX, PackagePlus, Pencil, Plus, ShoppingCart, Snail, Sparkles, Tag, TrendingDown, TrendingUp, Trophy, Truck, X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { records } from '@/api/records'
+import { AiStrip, PageGuide, QuickChips, Stat, Timeline, type Chip } from '@/ui/smart'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import type { ProductInventoryOut } from '@/api/types'
@@ -99,6 +102,20 @@ export function Products() {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search && !flag && !ids) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const flagCount = (value: string) => (health.data ? health.data.products.filter((p) => p.flags.includes(value as never)).length : undefined)
+  const FLAG_ICON: Record<string, typeof Boxes> = { '': Layers, reorder: ShoppingCart, short: AlertTriangle, below_minimum: PackageX, low_cover: Hourglass, rising_demand: TrendingUp, falling_demand: TrendingDown, slow: Snail, dead: Clock }
+  const flagChips: Chip<string>[] = FLAGS.map((option) => ({
+    key: option.value,
+    label: option.value ? option.label : 'All',
+    icon: FLAG_ICON[option.value],
+    count: option.value ? flagCount(option.value) : undefined,
+    hot: ['reorder', 'short'].includes(option.value) && (flagCount(option.value) ?? 0) > 0,
+  })).filter((chip) => chip.key === '' || chip.count)
+  const totals = health.data?.totals
+  const reorderRows = (health.data?.products ?? []).filter((row) => row.action.code === 'buy')
+  const deadRows = (health.data?.products ?? []).filter((row) => row.flags.includes('dead'))
+  const risingRows = (health.data?.products ?? []).filter((row) => row.flags.includes('rising_demand'))
+
   const chosen = items.filter((product) => selected.has(product.id))
   const chosenHealth = chosen.map((product) => byId.get(product.id)).filter(Boolean) as ProductHealth[]
   const toggle = (id: string) => setSelected((current) => {
@@ -139,23 +156,25 @@ export function Products() {
                   <Download size={15} />
                 </Button>
               </Tip>
-              <Button kind="ghost" small iconOnly onClick={route.openNew} aria-label="New product">
-                <Plus size={16} />
+              <PageGuide
+                title="Products and stock"
+                points={[
+                  { icon: Layers, text: 'Stock = bought − sold. Free stock is what is not set aside for customers.' },
+                  { icon: ShoppingCart, text: '"To reorder" uses recent sales over the supplier lead time plus your minimum. Tick products and press Buy for a pre-filled purchase order.' },
+                  { icon: Clock, text: 'Slow and dead stock tie up cash: check the Overview tab for days to clear and what to do.' },
+                  { icon: Tag, text: 'The Prices tab shows what each customer paid, your margin and which supplier is cheapest.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew} aria-label="New product">
+                New
               </Button>
             </>
           }
           filters={
             <>
               <SearchBox value={search} onChange={(value) => set('q', value)} placeholder="Name or code" />
-              <div className="grid grid-cols-3 gap-1.5">
-                <select className="field field-sm" value={flag} onChange={(e) => set('flag', e.target.value)} aria-label="Health">
-                  {FLAGS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                      {option.value && health.data ? ` (${health.data.products.filter((p) => p.flags.includes(option.value as never)).length})` : ''}
-                    </option>
-                  ))}
-                </select>
+              <QuickChips chips={flagChips} value={flag} onChange={(value) => set('flag', value)} />
+              <div className="grid grid-cols-2 gap-1.5">
                 <select className="field field-sm" value={category} onChange={(e) => set('category', e.target.value)} aria-label="Category">
                   <option value="">All categories</option>
                   {(categories.data ?? []).map((c) => (
@@ -209,6 +228,22 @@ export function Products() {
             </button>
           }
         >
+          {!search && !flag && !ids && !category && health.data ? (
+            <AiStrip
+              className="mx-1.5 mb-2"
+              insights={
+                [
+                  reorderRows.length ? { icon: ShoppingCart, text: <><b>{reorderRows.length} products</b> to buy now, about <b>{fmtMoney(reorderRows.reduce((sum, row) => sum + row.reorder_value, 0))}</b>.</>, onClick: () => set('flag', 'reorder') } : null,
+                  deadRows.length && totals ? { icon: Clock, text: <><b>{fmtMoney(totals.dead_stock_value)}</b> stuck in {deadRows.length} products not sold for months.</>, onClick: () => set('flag', 'dead') } : null,
+                  risingRows.length ? { icon: TrendingUp, text: <><b>{risingRows.length} products</b> selling faster than last month.</>, onClick: () => set('flag', 'rising_demand') } : null,
+                ].filter(Boolean) as { icon: typeof Clock; text: ReactNode; onClick: () => void }[]
+              }
+              prompts={[
+                { label: 'What should I buy?', question: 'What should I buy this week, from which supplier and how much? Use purchase_suggestions and inventory_health and give a short table with the reason for each.' },
+                { label: 'Clear dead stock', question: 'Which stock is not moving, how much cash is tied up, and how should I clear it (which customers bought it before, what discount is safe above cost)?' },
+              ]}
+            />
+          ) : null}
           {list.isPending ? (
             <ListSkeleton />
           ) : items.length === 0 ? (
@@ -276,7 +311,7 @@ function ProductInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const product = useOne('product-inventory', api.products.inventory, id)
   const waiting = useOne('pending-orders', (pid: string) => api.products.pendingOrders(pid), id)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') ?? 'overview')
   const [sheet, setSheet] = useState<null | 'edit' | 'buy'>(null)
   const health = useQuery({ queryKey: ['insights', 'inventory'], queryFn: insights.inventory })
   const intel = health.data?.products.find((row) => row.product_id === id)
@@ -344,9 +379,11 @@ function ProductInspector({ id }: { id: string }) {
         className="min-h-0 flex-1"
         tabs={[
           { value: 'overview', label: 'Overview' },
+          { value: 'prices', label: 'Prices' },
           { value: 'waiting', label: 'Waiting customers', count: waitingRows.length },
           { value: 'ledger', label: 'Movements', count: data.movements.length },
           { value: 'layers', label: 'Cost layers', count: data.cost_layers.length },
+          { value: 'activity', label: 'Activity' },
         ]}
       >
         <TabPanel value="overview">
@@ -456,6 +493,12 @@ function ProductInspector({ id }: { id: string }) {
             </tbody>
           </table>
           <p className="px-[18px] py-3 text-[12px] text-fg-3">Deliveries use the oldest layer first, so cost of goods follows what was actually bought.</p>
+        </TabPanel>
+        <TabPanel value="prices">
+          <PricesTab id={id} />
+        </TabPanel>
+        <TabPanel value="activity">
+          <Timeline target={{ product_id: id }} />
         </TabPanel>
       </Tabs>
       <ProductSheet open={sheet === 'edit'} onClose={() => setSheet(null)} editing={data} />
@@ -574,5 +617,109 @@ function Intelligence({ row, onBuy, onAsk }: { row: ProductHealth; onBuy: () => 
         </div>
       </div>
     </Section>
+  )
+}
+
+/** What customers paid, what it cost from each supplier, and who buys it. */
+function PricesTab({ id }: { id: string }) {
+  const navigate = useNavigate()
+  const prices = useQuery({ queryKey: ['records', 'prices', id], queryFn: () => records.productPrices(id) })
+  if (prices.isPending) return <Spinner />
+  if (!prices.data) return <Empty title="No price history" />
+  const d = prices.data
+  const best = d.suppliers[0]
+  return (
+    <div className="space-y-4 p-6 pb-20 max-md:p-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
+        <Stat strong icon={BadgePercent} label="Average margin" value={d.average_margin_percent !== null ? `${d.average_margin_percent}%` : '—'} hint={d.average_net_price ? `sold at ${fmtMoney(d.average_net_price)} on average` : 'no sales yet'} />
+        <Stat icon={Tag} label="MRP" value={fmtMoney(d.mrp)} hint={d.lowest_net_price !== null ? `lowest sold ${fmtMoney(d.lowest_net_price)}` : undefined} />
+        <Stat icon={Layers} label="Average cost" value={fmtMoney(d.average_cost)} hint={d.last_purchase_price ? `last bought ${fmtMoney(d.last_purchase_price)}` : 'from stock layers'} />
+        <Stat icon={Truck} label="Cheapest supplier" value={best ? fmtMoney(best.last) : '—'} hint={best ? best.name : 'no purchase orders yet'} />
+      </div>
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 text-[13px] font-semibold">
+          <Truck size={14} /> Cost by supplier
+        </div>
+        {d.suppliers.length ? (
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th className="r">Last</th>
+                <th className="r">Lowest</th>
+                <th className="r">Highest</th>
+                <th className="r">Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.suppliers.map((row, index) => (
+                <tr key={row.supplier_id} className="cursor-pointer" onClick={() => navigate(`/suppliers/${row.supplier_id}`)}>
+                  <td className="text-[13px] font-medium">
+                    {row.name} {index === 0 && d.suppliers.length > 1 ? <Badge tone="sky">Cheapest</Badge> : null} {row.preferred ? <Badge>Preferred</Badge> : null}
+                  </td>
+                  <td className="r num font-semibold">{fmtMoney(row.last)}</td>
+                  <td className="r num">{fmtMoney(row.lowest)}</td>
+                  <td className="r num">{fmtMoney(row.highest)}</td>
+                  <td className="r num">{row.orders}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-4 pb-4 text-[12.5px] text-fg-3">No purchase orders with a cost yet.</p>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 2xl:grid-cols-[1.3fr_1fr]">
+        <div className="card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 text-[13px] font-semibold">
+            <Tag size={14} /> Recent selling prices
+          </div>
+          {d.sales.length ? (
+            <table className="grid-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th className="r">Qty</th>
+                  <th className="r">Disc.</th>
+                  <th className="r">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.sales.slice(0, 12).map((row) => (
+                  <tr key={row.order_id + row.net_price} className="cursor-pointer" onClick={() => navigate(`/orders/${row.order_id}`)}>
+                    <td>
+                      <div className="text-[13px] font-medium">{row.customer}</div>
+                      <div className="text-[11.5px] text-fg-3">
+                        {row.order_number} · {fmtDate(row.date)}
+                      </div>
+                    </td>
+                    <td className="r num">{fmtQty(row.quantity)}</td>
+                    <td className="r num">{row.discount_percent ? `${row.discount_percent}%` : '—'}</td>
+                    <td className={cn('r num font-semibold', d.average_cost && row.net_price < d.average_cost && 'underline decoration-2')}>{fmtMoney(row.net_price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="px-4 pb-4 text-[12.5px] text-fg-3">Not sold yet.</p>
+          )}
+        </div>
+        <div className="card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 text-[13px] font-semibold">
+            <Trophy size={14} /> Top buyers
+          </div>
+          <div className="divide-y divide-white/6">
+            {d.top_customers.map((row, index) => (
+              <button key={row.customer_id} onClick={() => navigate(`/customers/${row.customer_id}`)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/[0.04]">
+                <span className={cn('grid size-6 place-items-center rounded-full text-[11px] font-bold', index === 0 ? 'icon-disc' : 'bg-white/8')}>{index + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px]">{row.name}</span>
+                <span className="num text-[12.5px] font-semibold">{fmtMoney(row.value)}</span>
+              </button>
+            ))}
+            {!d.top_customers.length ? <p className="px-4 pb-4 text-[12.5px] text-fg-3">No buyers yet.</p> : null}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { insights } from '@/api/insights'
+import { finance } from '@/api/finance'
+import { records } from '@/api/records'
+import { AiStrip, AskButton, Gauge, PageGuide, QuickChips, Stat, Timeline, type Chip } from '@/ui/smart'
 import { Account } from '@/features/finance/Account'
 import { RecordTasks } from '@/features/tasks/RecordTasks'
-import { Archive, Building2, Mail, MapPin, MoreHorizontal, Pencil, Phone, Plus, UserRound } from 'lucide-react'
+import { AlarmClock, Archive, Award, BadgeCheck, Building2, Clock, IndianRupee, Mail, MapPin, MoreHorizontal, PackageCheck, Pencil, Phone, Plus, Timer, Truck, UserRound, Wallet } from 'lucide-react'
+import { cn } from '@/lib/cn'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import { fmtDate, fmtMoney, fmtQty, n } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
 import { PurchaseBadge } from '@/lib/status'
 import { Avatar, Badge, Button, Empty, Meter, SearchBox, Spinner } from '@/ui/core'
-import { Menu, Segmented, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
+import { Menu, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, SplitView } from '@/ui/split'
 import { Contact } from '@/features/customers/Customers'
 import { PartySheet } from '@/features/customers/PartySheet'
@@ -18,10 +25,29 @@ import { PurchaseSheet } from '@/features/purchasing/PurchaseSheet'
 export function Suppliers() {
   const route = useRecordRoute('/suppliers')
   const [search, setSearch] = useState('')
-  const [scope, setScope] = useState<'active' | 'all'>('active')
+  const [chip, setChip] = useState<'all' | 'due' | 'late' | 'owed' | 'archived'>('all')
   const query = useDebounced(search)
-  const list = useList('suppliers', api.suppliers.list, { search: query, include_inactive: scope === 'all', limit: 500 })
-  const items = list.data?.items ?? []
+  const list = useList('suppliers', api.suppliers.list, { search: query, include_inactive: chip === 'archived', limit: 500 })
+  const perf = useQuery({ queryKey: ['insights', 'suppliers'], queryFn: insights.suppliers, staleTime: 60_000 })
+  const payables = useQuery({ queryKey: ['finance', 'payables'], queryFn: finance.payables, staleTime: 60_000 })
+  const perfById = new Map((perf.data?.suppliers ?? []).map((row) => [row.supplier_id, row]))
+  const owedById = new Map((payables.data?.parties ?? []).map((row) => [row.party_id, row]))
+  const lateIds = new Set((perf.data?.late_purchase_orders ?? []).map((row) => row.supplier_id))
+  const all = list.data?.items ?? []
+  const test = (key: typeof chip, supplier: (typeof all)[number]) =>
+    key === 'all' ? supplier.is_active : key === 'archived' ? !supplier.is_active : key === 'due' ? n(supplier.on_order_quantity) > 0 : key === 'late' ? lateIds.has(supplier.id) : (owedById.get(supplier.id)?.open ?? 0) > 0
+  const items = all.filter((supplier) => test(chip, supplier))
+  const count = (key: typeof chip) => all.filter((supplier) => test(key, supplier)).length
+  const chips: Chip<typeof chip>[] = [
+    { key: 'all', label: 'All', icon: Building2, count: count('all') },
+    { key: 'due', label: 'Goods due', icon: Truck, count: count('due') },
+    { key: 'late', label: 'Late', icon: AlarmClock, count: count('late'), hot: count('late') > 0 },
+    { key: 'owed', label: 'You owe', icon: Wallet, count: count('owed') },
+    { key: 'archived', label: 'Archived', icon: Archive },
+  ]
+  const late = perf.data?.late_purchase_orders ?? []
+  const owedTotal = payables.data?.totals.open ?? 0
+  const owedOverdue = payables.data?.totals.overdue ?? 0
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -35,24 +61,49 @@ export function Suppliers() {
           title="Suppliers"
           count={list.data?.total}
           actions={
-            <Button kind="ghost" small iconOnly onClick={route.openNew} aria-label="New supplier">
-              <Plus size={16} />
-            </Button>
+            <>
+              <PageGuide
+                title="Suppliers"
+                points={[
+                  { icon: Award, text: 'Each supplier gets a score from fill rate (how much of what you order arrives) and on-time rate.' },
+                  { icon: IndianRupee, text: 'The Scorecard tab compares their last price on each product with the cheapest supplier.' },
+                  { icon: Wallet, text: '"You owe" counts goods received and not yet paid, aged by their payment terms.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew} aria-label="New supplier">
+                New
+              </Button>
+            </>
           }
           filters={
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="Name, code or contact" />
-              <Segmented value={scope} onChange={setScope} options={[{ value: 'active', label: 'Active' }, { value: 'all', label: 'Including archived' }]} />
+              <QuickChips chips={chips} value={chip} onChange={setChip} />
             </>
           }
         >
+          {!search && chip === 'all' && all.length ? (
+            <AiStrip
+              className="mx-1.5 mb-2"
+              insights={
+                [
+                  late.length ? { icon: AlarmClock, text: <><b>{late.length} late purchase orders</b> — worst is {late[0].po_number}, {late[0].days_late} days.</>, onClick: () => setChip('late') } : null,
+                  owedTotal > 0 ? { icon: Wallet, text: <>You owe suppliers <b>{fmtMoney(owedTotal)}</b>{owedOverdue > 0 ? <>, <b>{fmtMoney(owedOverdue)}</b> past terms</> : null}.</>, onClick: () => setChip('owed') } : null,
+                ].filter(Boolean) as { icon: typeof Clock; text: ReactNode; onClick: () => void }[]
+              }
+              prompts={[
+                { label: 'Best supplier per product', question: 'For each product we buy, which supplier is cheapest and most reliable? Use product_prices and supplier_performance and flag where we pay more than we need to.' },
+                { label: 'Who to pay first?', question: 'Which supplier bills should I pay first this week and why? Use payables with their terms, and keep the reliable suppliers happy.' },
+              ]}
+            />
+          ) : null}
           {list.isPending ? (
             <ListSkeleton />
           ) : items.length === 0 ? (
             <Empty icon={<Building2 size={20} />} title={search ? 'No suppliers match' : 'No suppliers yet'} action={<Button kind="primary" small onClick={route.openNew}>New supplier</Button>} />
           ) : (
             items.map((supplier) => (
-              <ListRow key={supplier.id} group="suppliers" selected={supplier.id === route.id} onSelect={() => route.select(supplier.id)}>
+              <ListRow key={supplier.id} group="suppliers" selected={supplier.id === route.id} onSelect={() => route.select(supplier.id)} alert={lateIds.has(supplier.id)}>
                 <div className="flex items-center gap-3">
                   <Avatar name={supplier.name} size={32} />
                   <div className="min-w-0 flex-1">
@@ -60,9 +111,12 @@ export function Suppliers() {
                       <span className="truncate text-[13px] font-semibold">{supplier.name}</span>
                       {!supplier.is_active ? <Badge>Archived</Badge> : null}
                     </div>
-                    <div className="truncate text-[12px] text-fg-3">
-                      {supplier.code}
-                      {supplier.contact_person ? ` · ${supplier.contact_person}` : ''}
+                    <div className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-fg-3">
+                      <ScoreBadge fill={perfById.get(supplier.id)?.fill_rate_percent} onTime={perfById.get(supplier.id)?.on_time_percent} />
+                      <span className="truncate">
+                        {supplier.code}
+                        {supplier.contact_person ? ` · ${supplier.contact_person}` : ''}
+                      </span>
                     </div>
                   </div>
                   {n(supplier.on_order_quantity) > 0 ? (
@@ -88,7 +142,7 @@ function SupplierInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const supplier = useOne('suppliers', api.suppliers.get, id)
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') ?? 'orders'
+  const tab = params.get('tab') ?? 'scorecard'
   const setTab = (value: string) => setParams({ tab: value }, { replace: true })
   const [sheet, setSheet] = useState<null | 'edit' | 'po'>(null)
   const confirm = useConfirm()
@@ -113,6 +167,7 @@ function SupplierInspector({ id }: { id: string }) {
         meta={data.contact_person ? `Contact: ${data.contact_person}` : `Supplier since ${fmtDate(data.created_at)}`}
         actions={
           <>
+            <AskButton question={`How good a supplier is ${data.name} (id ${id})? Use supplier_scorecard: reliability, lead time, prices against other suppliers, late orders and what we owe them. Should I buy more or less from them?`} />
             <Button kind="primary" icon={<Plus size={14} />} onClick={() => setSheet('po')} disabled={!data.is_active}>
               Purchase order
             </Button>
@@ -154,12 +209,20 @@ function SupplierInspector({ id }: { id: string }) {
           onChange={setTab}
           className="min-w-0 flex-1"
           tabs={[
+            { value: 'scorecard', label: 'Scorecard' },
             { value: 'orders', label: 'Purchase orders', count: data.purchase_orders.length },
             { value: 'receipts', label: 'Deliveries', count: data.goods_receipts.length },
             { value: 'account', label: 'Account' },
+            { value: 'activity', label: 'Activity' },
             { value: 'followups', label: 'Follow-ups' },
           ]}
         >
+          <TabPanel value="scorecard">
+            <Scorecard id={id} />
+          </TabPanel>
+          <TabPanel value="activity">
+            <Timeline target={{ supplier_id: id }} />
+          </TabPanel>
           <TabPanel value="orders">
             {data.purchase_orders.length === 0 ? (
               <Empty title="No purchase orders yet" action={<Button kind="primary" small onClick={() => setSheet('po')}>New purchase order</Button>} />
@@ -253,5 +316,102 @@ function SupplierInspector({ id }: { id: string }) {
       <PurchaseSheet open={sheet === 'po'} onClose={() => setSheet(null)} initial={{ supplier_id: id }} onSaved={(po) => navigate(`/purchase-orders/${po.id}`)} />
       {confirm.element}
     </>
+  )
+}
+
+function ScoreBadge({ fill, onTime }: { fill?: number | null; onTime?: number | null }) {
+  if (!fill && (onTime === null || onTime === undefined)) return null
+  const parts = [fill, onTime].filter((value): value is number => value !== null && value !== undefined)
+  if (!parts.length) return null
+  const score = Math.round(parts.reduce((a, b) => a + b, 0) / parts.length)
+  return (
+    <Badge tone={score >= 85 ? 'sky' : score >= 60 ? 'muted' : 'bad'} title="Average of fill rate and on-time rate">
+      <Award size={11} /> {score}
+    </Badge>
+  )
+}
+
+/** Reliability, lateness and price against other suppliers. */
+function Scorecard({ id }: { id: string }) {
+  const navigate = useNavigate()
+  const card = useQuery({ queryKey: ['records', 'scorecard', id], queryFn: () => records.supplierScorecard(id) })
+  if (card.isPending) return <Spinner />
+  if (!card.data) return <Empty title="No scorecard yet" />
+  const c = card.data
+  const p = c.performance
+  return (
+    <div className="space-y-4 p-6 pb-20 max-md:p-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
+        <Stat strong icon={Award} label="Supplier score" value={c.score !== null ? `${c.score} / 100` : '—'} hint={c.score_note} />
+        <Stat icon={PackageCheck} label="Fill rate" value={p?.fill_rate_percent !== null && p?.fill_rate_percent !== undefined ? `${p.fill_rate_percent}%` : '—'} hint="of ordered quantity received" />
+        <Stat icon={BadgeCheck} label="On time" value={p?.on_time_percent !== null && p?.on_time_percent !== undefined ? `${p.on_time_percent}%` : '—'} hint="received by the expected date" />
+        <Stat icon={Timer} label="Lead time" value={p?.average_lead_days !== null && p?.average_lead_days !== undefined ? `${p.average_lead_days} days` : '—'} hint="order placed to first delivery" />
+      </div>
+      {p ? (
+        <div className="card grid grid-cols-2 gap-4 p-4">
+          <Gauge percent={p.fill_rate_percent ?? 0} label="Fill rate" />
+          <Gauge percent={p.on_time_percent ?? 0} label="On time" />
+        </div>
+      ) : null}
+      {c.late_orders.length ? (
+        <div className="space-y-1.5">
+          {c.late_orders.map((late) => (
+            <button key={late.purchase_order_id} onClick={() => navigate(`/purchase-orders/${late.purchase_order_id}`)} className="flex w-full items-center gap-3 rounded-xl bg-[#0b0b0c] px-3.5 py-2.5 text-left text-[12.5px] text-[#fff]">
+              <AlarmClock size={14} />
+              <span className="flex-1">
+                {late.po_number} is {late.days_late} days late (expected {fmtDate(late.expected)})
+              </span>
+              <span className="num font-semibold">{fmtMoney(late.still_due_value)} due</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 text-[13px] font-semibold">
+          <IndianRupee size={14} /> Products and prices
+        </div>
+        {c.products.length ? (
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th className="r">Bought</th>
+                <th className="r">Their last price</th>
+                <th>Cheapest</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.products.map((row) => (
+                <tr key={row.product_id} className="cursor-pointer" onClick={() => navigate(`/products/${row.product_id}?tab=prices`)}>
+                  <td>
+                    <div className="text-[13px] font-medium">{row.name}</div>
+                    <div className="text-[11.5px] text-fg-3">last ordered {fmtDate(row.last_ordered)}</div>
+                  </td>
+                  <td className="r num">
+                    {fmtQty(row.quantity)} <span className="text-fg-3">{row.unit}</span>
+                  </td>
+                  <td className="r num font-semibold">{row.last_cost !== null ? fmtMoney(row.last_cost) : '—'}</td>
+                  <td>
+                    {row.is_cheapest ? (
+                      <Badge tone="sky">
+                        <Award size={11} /> Cheapest
+                      </Badge>
+                    ) : row.cheapest_supplier ? (
+                      <span className={cn('text-[12px]')}>
+                        {row.cheapest_supplier} · <span className="num font-semibold">{fmtMoney(row.cheapest_cost)}</span>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-4 pb-4 text-[12.5px] text-fg-3">Nothing bought from this supplier yet.</p>
+        )}
+      </div>
+    </div>
   )
 }

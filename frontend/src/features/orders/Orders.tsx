@@ -1,14 +1,39 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Ban, ClipboardList, FileText, MoreHorizontal, Plus, ReceiptText, Scissors, Truck, UserRound } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  CheckCircle2,
+  CircleDollarSign,
+  ClipboardList,
+  Clock,
+  FileText,
+  Layers,
+  MessageCircle,
+  MoreHorizontal,
+  PackageCheck,
+  Plus,
+  ReceiptText,
+  Repeat2,
+  Scissors,
+  ShoppingCart,
+  Truck,
+  UserRound,
+  XCircle,
+} from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import type { OrderDetailOut, OrderOut } from '@/api/types'
 import { fmtAgo, fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtPercent, fmtQty, n, plural } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
-import { ORDER_FILTERS, OrderBadge, STATE } from '@/lib/status'
+import { OrderBadge, STATE } from '@/lib/status'
+import { cn } from '@/lib/cn'
+import { AiStrip, AskButton, PageGuide, PayBadge, QuickChips, Timeline, useOrderPayments, type Chip } from '@/ui/smart'
+import type { OrderPayment } from '@/api/records'
 import { Badge, Button, Empty, Facts, Meter, SearchBox, Spinner } from '@/ui/core'
-import { Menu, Segmented, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
+import { Menu, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { TallyPanel } from '@/features/integrations/TallyPanel'
 import { PurchaseSheet } from '@/features/purchasing/PurchaseSheet'
@@ -38,14 +63,60 @@ function orderTotals(order: OrderOut) {
   }
 }
 
+type OrderChip = 'all' | 'open' | 'ready' | 'short' | 'overdue' | 'unpaid' | 'done' | 'cancelled'
+
+function matches(chip: OrderChip, order: OrderOut, payment?: OrderPayment) {
+  const totals = orderTotals(order)
+  const open = order.status === 'PENDING' || order.status === 'PARTIALLY_FULFILLED'
+  switch (chip) {
+    case 'open':
+      return open
+    case 'ready':
+      return open && totals.ready > 0
+    case 'short':
+      return open && totals.short > 0
+    case 'overdue':
+      return payment?.status === 'overdue'
+    case 'unpaid':
+      return Boolean(payment && payment.open > 0.005)
+    case 'done':
+      return order.status === 'FULFILLED'
+    case 'cancelled':
+      return order.status === 'CANCELLED'
+    default:
+      return true
+  }
+}
+
 export function Orders() {
   const route = useRecordRoute('/orders')
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<string>('all')
+  const [chip, setChip] = useState<OrderChip>((route.param('show') as OrderChip) || 'open')
   const query = useDebounced(search)
-  const list = useList('orders', api.orders.list, { search: query, status: status === 'all' ? undefined : status, limit: 200 })
-  const items = list.data?.items ?? []
+  const list = useList('orders', api.orders.list, { search: query, limit: 500 })
+  const payments = useOrderPayments().data ?? {}
+  const all = list.data?.items ?? []
+  const items = all.filter((order) => matches(chip, order, payments[order.id]))
+  const count = (key: OrderChip) => all.filter((order) => matches(key, order, payments[order.id])).length
+  const chips: Chip<OrderChip>[] = [
+    { key: 'open', label: 'Open', icon: Layers, count: count('open') },
+    { key: 'ready', label: 'Ready to send', icon: Truck, count: count('ready'), hot: count('ready') > 0 },
+    { key: 'short', label: 'Short', icon: AlertTriangle, count: count('short'), hot: count('short') > 0 },
+    { key: 'overdue', label: 'Payment overdue', icon: Clock, count: count('overdue'), hot: count('overdue') > 0 },
+    { key: 'unpaid', label: 'Unpaid', icon: CircleDollarSign, count: count('unpaid') },
+    { key: 'done', label: 'Delivered', icon: CheckCircle2, count: count('done') },
+    { key: 'cancelled', label: 'Cancelled', icon: XCircle, count: count('cancelled') },
+    { key: 'all', label: 'All', count: all.length },
+  ]
+  const readyValue = all.filter((order) => matches('ready', order)).length
+  const overdue = Object.values(payments).filter((payment) => payment.status === 'overdue')
+  const overdueValue = overdue.reduce((sum, payment) => sum + payment.open, 0)
+  const shortOrders = count('short')
 
+  useEffect(() => {
+    if (list.data && chip === 'open' && count('open') === 0) setChip('all')
+  }, [list.data]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,36 +130,68 @@ export function Orders() {
           title="Sales Orders"
           count={list.data?.total}
           actions={
-            <Button kind="ghost" small iconOnly onClick={route.openNew} aria-label="New sales order">
-              <Plus size={16} />
-            </Button>
+            <>
+              <PageGuide
+                title="Sales orders"
+                points={[
+                  { icon: ShoppingCart, text: 'An order takes free stock the moment it is placed. What is not in stock waits as short.' },
+                  { icon: Truck, text: '"Ready to send" orders have stock set aside: open one and press Deliver.' },
+                  { icon: AlertTriangle, text: '"Short" orders need buying: open one and press "Buy what is short" for a pre-filled purchase order.' },
+                  { icon: CircleDollarSign, text: 'Each row shows whether delivered goods are paid. Overdue counts days past the customer\'s credit terms.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew} aria-label="New sales order">
+                New
+              </Button>
+            </>
           }
           filters={
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="Order, customer or product" />
-              <Segmented value={status} onChange={setStatus} options={ORDER_FILTERS.map((filter) => ({ value: filter.value, label: filter.label }))} />
+              <QuickChips chips={chips} value={chip} onChange={setChip} />
             </>
           }
         >
+          {!search && chip === 'open' && all.length > 0 ? (
+            <AiStrip
+              className="mx-1.5 mb-2"
+              insights={[
+                readyValue ? { icon: Truck, text: <><b>{plural(readyValue, 'order')}</b> can be delivered now.</>, onClick: () => setChip('ready') } : null,
+                shortOrders ? { icon: AlertTriangle, text: <><b>{plural(shortOrders, 'order')}</b> wait for stock — buy to release them.</>, onClick: () => setChip('short') } : null,
+                overdue.length ? { icon: Clock, text: <><b>{fmtMoney(overdueValue)}</b> overdue on {plural(overdue.length, 'order')}.</>, onClick: () => setChip('overdue') } : null,
+              ].filter(Boolean) as { icon: typeof Truck; text: ReactNode; onClick: () => void }[]}
+              prompts={[
+                { label: 'What to deliver first?', question: 'Which open orders should I deliver first today and why? Consider stock that is ready, how long each customer has waited and what they owe.' },
+                { label: 'Who to chase?', question: 'Which customers should I chase for payment today? List overdue orders with amounts and days late, and draft a polite WhatsApp reminder for the biggest.' },
+              ]}
+            />
+          ) : null}
           {list.isPending ? (
             <ListSkeleton />
           ) : items.length === 0 ? (
-            <Empty icon={<ReceiptText size={20} />} title={search ? 'No orders match' : 'No orders yet'} action={!search ? <Button kind="primary" small onClick={route.openNew}>New order</Button> : undefined} />
+            <Empty icon={<ReceiptText size={20} />} title={search ? 'No orders match' : chip === 'all' ? 'No orders yet' : 'Nothing here'} body={chip !== 'all' && !search ? 'Try another filter above.' : undefined} action={!search && chip === 'all' ? <Button kind="primary" small onClick={route.openNew}>New order</Button> : undefined} />
           ) : (
             items.map((order) => {
               const totals = orderTotals(order)
+              const open = order.status === 'PENDING' || order.status === 'PARTIALLY_FULFILLED'
               return (
-                <ListRow key={order.id} group="orders" selected={order.id === route.id} onSelect={() => route.select(order.id)} alert={totals.short > 0 && order.status !== 'CANCELLED'}>
+                <ListRow key={order.id} group="orders" selected={order.id === route.id} onSelect={() => route.select(order.id)} alert={totals.short > 0 && open}>
                   <div className="flex items-baseline gap-2">
                     <span className="num text-[13px] font-semibold">{order.order_number}</span>
+                    {open && totals.ready > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue/20 px-1.5 text-[10.5px] font-semibold text-fg" title="Stock is set aside and can be delivered">
+                        <Truck size={10} /> ready
+                      </span>
+                    ) : null}
                     <span className="ml-auto num text-[13px] font-medium">{fmtMoney(order.total_amount)}</span>
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[12px] text-fg-3">
                     <span className="truncate">{order.customer.name}</span>
-                    <span className="ml-auto shrink-0">{fmtDate(order.created_at)}</span>
+                    <span className="ml-auto shrink-0">{fmtAgo(order.created_at)}</span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2.5">
+                  <div className="mt-2 flex items-center gap-2">
                     <Meter parts={lineParts({ quantity_fulfilled: String(totals.delivered), quantity_reserved: String(totals.ready), quantity_incoming: String(totals.onOrder), quantity_unallocated: String(totals.short) })} />
+                    <PayBadge payment={payments[order.id]} />
                     <OrderBadge status={order.status} />
                   </div>
                 </ListRow>
@@ -98,14 +201,53 @@ export function Orders() {
         </ListPane>
       }
     >
-      {route.id ? <OrderInspector id={route.id} /> : <Empty className="h-full" icon={<ReceiptText size={22} />} title="Choose an order" body="Its lines, deliveries, profit and Tally status show here." />}
-      <OrderSheet open={route.isNew} onClose={route.closeNew} onCreated={(order) => route.select(order.id)} />
+      {route.id ? (
+        <OrderInspector id={route.id} payment={payments[route.id]} onRepeat={(id) => navigate(`/orders?new=1&repeat=${id}`)} />
+      ) : (
+        <Empty className="h-full" icon={<ReceiptText size={22} />} title="Choose an order" body="Its lines, deliveries, payment, profit and history show here." />
+      )}
+      <OrderSheet open={route.isNew} onClose={route.closeNew} onCreated={(order) => route.select(order.id)} repeatFrom={route.param('repeat') ?? undefined} customerId={route.param('customer') ?? undefined} />
     </SplitView>
   )
 }
 
-function OrderInspector({ id }: { id: string }) {
+/** Where an order stands, as four steps. */
+function Stepper({ order, payment }: { order: OrderDetailOut; payment?: OrderPayment }) {
+  const totals = orderTotals(order)
+  const live = totals.ordered - totals.cancelled
+  const cancelled = order.status === 'CANCELLED'
+  const steps = [
+    { label: 'Placed', icon: ShoppingCart, done: true, hint: fmtDate(order.created_at) },
+    { label: 'Stock ready', icon: PackageCheck, done: live > 0 && totals.short + totals.onOrder === 0, hint: totals.short > 0 ? `${fmtQty(totals.short)} short` : totals.onOrder > 0 ? `${fmtQty(totals.onOrder)} on order` : 'all in stock' },
+    { label: 'Delivered', icon: Truck, done: order.status === 'FULFILLED', hint: totals.delivered > 0 ? `${fmtQty(totals.delivered)} of ${fmtQty(live)}` : 'not yet' },
+    { label: 'Paid', icon: CircleDollarSign, done: payment?.status === 'paid' && order.status === 'FULFILLED', hint: payment ? `${fmtMoney(payment.paid)} of ${fmtMoney(payment.invoiced)}` : 'nothing billed' },
+  ]
+  const current = steps.findIndex((step) => !step.done)
+  return (
+    <div className="flex shrink-0 items-start gap-0 border-b border-white/7 px-7 py-4 max-md:px-4">
+      {steps.map((step, index) => {
+        const Icon = step.done ? Check : step.icon
+        const active = index === current && !cancelled
+        return (
+          <div key={step.label} className="flex min-w-0 flex-1 items-start">
+            <div className="flex min-w-0 flex-col items-center text-center">
+              <span className={cn('grid size-8 place-items-center rounded-full', step.done ? 'icon-disc' : active ? 'bg-blue text-[#0b0b0c] ring-4 ring-blue/25' : 'bg-white/7 text-fg-3')}>
+                <Icon size={14} strokeWidth={step.done ? 3 : 2} />
+              </span>
+              <span className={cn('mt-1.5 text-[12px] font-semibold', !step.done && !active && 'text-fg-3')}>{step.label}</span>
+              <span className="text-[11px] text-fg-3">{cancelled && !step.done ? 'cancelled' : step.hint}</span>
+            </div>
+            {index < steps.length - 1 ? <span className={cn('mx-2 mt-4 h-[2px] flex-1 rounded-full', steps[index + 1].done ? 'bg-fg' : 'bg-white/10')} /> : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: OrderPayment; onRepeat: (id: string) => void }) {
   const order = useOne('orders', api.orders.get, id)
+  const customer = useQuery({ queryKey: ['customers', 'one', order.data?.customer_id], enabled: Boolean(order.data), queryFn: () => api.customers.get(order.data!.customer_id) })
   const [tab, setTab] = useState('lines')
   const [delivering, setDelivering] = useState(false)
   const [buying, setBuying] = useState(false)
@@ -118,6 +260,8 @@ function OrderInspector({ id }: { id: string }) {
   const data = order.data
   const totals = orderTotals(data)
   const open = data.status === 'PENDING' || data.status === 'PARTIALLY_FULFILLED'
+  const phone = customer.data?.phone?.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')
+  const update = `Hello ${data.customer.name}, an update on your order ${data.order_number}: ${fmtQty(totals.delivered)} delivered${totals.ready > 0 ? `, ${fmtQty(totals.ready)} ready to dispatch` : ''}${totals.short + totals.onOrder > 0 ? `, ${fmtQty(totals.short + totals.onOrder)} arriving soon` : ''}.${payment && payment.open > 0 ? ` Amount due: ${fmtMoney(payment.open)}.` : ''} Thank you.`
 
   async function askCancel(rest: boolean) {
     const answer = await confirm.ask({
@@ -156,6 +300,7 @@ function OrderInspector({ id }: { id: string }) {
                 Deliver {fmtQty(totals.ready)}
               </Button>
             ) : null}
+            <AskButton question={`Explain where order ${data.order_number} for ${data.customer.name} stands: what is delivered, ready, short and paid, its profit, and what I should do next.`} />
             <Menu
               trigger={
                 <Button iconOnly aria-label="More actions">
@@ -165,6 +310,8 @@ function OrderInspector({ id }: { id: string }) {
               items={[
                 { label: 'Open invoice PDF', icon: <FileText size={14} />, onSelect: () => window.open(api.integrations.invoiceUrl(id), '_blank') },
                 { label: 'Open customer', icon: <UserRound size={14} />, onSelect: () => (window.location.href = `/customers/${data.customer_id}`) },
+                { label: 'Repeat this order', icon: <Repeat2 size={14} />, onSelect: () => onRepeat(id) },
+                { label: 'Send update on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(update)}`, '_blank'), disabled: !phone },
                 { label: 'Cancel what is left', icon: <Scissors size={14} />, onSelect: () => askCancel(true), disabled: !open || totals.delivered === 0, danger: true, separator: true },
                 { label: 'Cancel order', icon: <Ban size={14} />, onSelect: () => askCancel(false), disabled: !open || totals.delivered > 0, danger: true },
               ]}
@@ -180,8 +327,10 @@ function OrderInspector({ id }: { id: string }) {
           { label: 'On order', value: fmtQty(totals.onOrder), tone: totals.onOrder > 0 ? 'steel' : undefined, hint: 'bought, coming' },
           { label: 'Short', value: fmtQty(totals.short), tone: totals.short > 0 ? 'bad' : undefined, hint: 'not bought yet' },
           { label: 'Value', value: fmtMoney(data.total_amount), hint: n(data.discount_amount) > 0 ? `−${fmtAmount(data.discount_amount)} discount` : 'before tax' },
+          { label: 'Paid', value: payment ? fmtMoney(payment.paid) : '—', tone: payment?.status === 'overdue' ? 'bad' : payment?.status === 'paid' ? 'ok' : undefined, hint: payment ? (payment.open > 0 ? `${fmtMoney(payment.open)} due${payment.days_overdue ? ` · ${payment.days_overdue}d late` : ''}` : 'settled') : 'nothing delivered yet' },
         ]}
       />
+      <Stepper order={data} payment={payment} />
       <Tabs
         value={tab}
         onChange={setTab}
@@ -190,6 +339,7 @@ function OrderInspector({ id }: { id: string }) {
           { value: 'lines', label: 'Lines', count: data.items.length },
           { value: 'deliveries', label: 'Deliveries' },
           { value: 'profit', label: 'Bill & profit' },
+          { value: 'activity', label: 'Activity' },
           { value: 'tally', label: 'Tally' },
         ]}
       >
@@ -201,6 +351,9 @@ function OrderInspector({ id }: { id: string }) {
         </TabPanel>
         <TabPanel value="profit">
           <ProfitTab order={data} />
+        </TabPanel>
+        <TabPanel value="activity">
+          <Timeline target={{ order_id: id }} />
         </TabPanel>
         <TabPanel value="tally">
           <TallyPanel entityId={id} />

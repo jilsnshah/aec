@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
-import { AlertTriangle, ClipboardList, PackageCheck, PackageOpen, Truck, X } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Clock, PackageCheck, PackageOpen, Truck, Users, X } from 'lucide-react'
+import { AiStrip, PageGuide } from '@/ui/smart'
 import { useCommitments } from '@/api/queries'
 import type { CommitmentRow } from '@/api/types'
 import { cn } from '@/lib/cn'
@@ -38,13 +39,25 @@ export function Fulfilment() {
   const [action, setAction] = useState<Action | null>(null)
   const customerName = customer ? report.data?.customers.find((row) => row.customer_id === customer)?.customer_name : undefined
   const totals = report.data?.totals
+  const oldest = [...rows].sort((a, b) => new Date(a.order_created_at).getTime() - new Date(b.order_created_at).getTime())[0]
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 px-6 pt-1 pb-5 max-lg:overflow-y-auto max-md:gap-2 max-md:p-2">
       <header className="pane relative flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 overflow-hidden px-5 py-4">
         <HeaderArt seed={5} />
         <div className="relative">
-          <h1 className="text-[18px] font-semibold tracking-[-0.02em]">Fulfilment</h1>
+          <h1 className="flex items-center gap-1.5 text-[18px] font-semibold tracking-[-0.02em]">
+            Fulfilment
+            <PageGuide
+              title="Fulfilment board"
+              points={[
+                { icon: PackageCheck, text: 'Ready: stock is set aside for the customer. Press Deliver on the card when the truck leaves.' },
+                { icon: PackageOpen, text: 'On order: bought from a supplier. Receive it when it arrives and it moves to Ready.' },
+                { icon: AlertTriangle, text: 'Short: sold but not bought yet. Press Buy for a pre-filled purchase order.' },
+                { icon: Users, text: '"By customer" shows who is owed most and who has waited longest.' },
+              ]}
+            />
+          </h1>
           <p className="text-[12.5px] text-fg-3">Everything customers are still owed, oldest order first</p>
         </div>
         <div className="relative flex flex-wrap gap-6">
@@ -85,6 +98,24 @@ export function Fulfilment() {
         </div>
       </header>
 
+      {!customer && !search && rows.length ? (
+        <AiStrip
+          wide
+          className="shrink-0"
+          title="Today on the board"
+          insights={
+            [
+              n(totals?.quantity_deliverable) > 0 ? { icon: Truck, text: <><b>{fmtQty(totals!.quantity_deliverable)} units</b> ready for {plural(new Set(rows.filter((row) => n(row.quantity_deliverable) > 0).map((row) => row.customer_id)).size, 'customer')} — deliver today.</> } : null,
+              oldest ? { icon: Clock, text: <><b>{oldest.customer_name}</b> has waited <b>{daysSince(oldest.order_created_at)} days</b> on {oldest.order_number}.</> } : null,
+              n(totals?.quantity_unallocated) > 0 ? { icon: AlertTriangle, text: <><b>{fmtQty(totals!.quantity_unallocated)} units</b> short — nothing bought for them yet.</> } : null,
+            ].filter(Boolean) as { icon: typeof Truck; text: ReactNode }[]
+          }
+          prompts={[
+            { label: 'Plan today\'s deliveries', question: 'Plan today\'s deliveries from the fulfilment board: what is ready, grouped by customer, oldest orders first, and what each customer still owes. Give me a route-friendly list.' },
+            { label: 'Release short orders', question: 'What must I buy to release the short orders on the fulfilment board? Group by supplier with quantities and estimated cost.' },
+          ]}
+        />
+      ) : null}
       {view === 'customers' ? (
         <CustomersView
           rows={report.data?.customers ?? []}

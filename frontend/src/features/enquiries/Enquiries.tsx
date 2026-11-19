@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ThumbsDown } from 'lucide-react'
+import { CheckCircle2, Flame, Hourglass, Layers, Mail, MessageCircle, MessageSquareQuote, MoreHorizontal, Pencil, Phone, Plus, ShieldCheck, Sparkles, Target, ThumbsDown, Trophy, XCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { records } from '@/api/records'
+import { useAssistant } from '@/features/assistant/store'
+import { AiStrip, PageGuide, QuickChips, WarningList, type Chip } from '@/ui/smart'
 import { useQuery } from '@tanstack/react-query'
 import { insights } from '@/api/insights'
 import { api } from '@/api/endpoints'
@@ -8,17 +12,12 @@ import { useAction, useList, useOne } from '@/api/queries'
 import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtPercent, fmtQty, n, plural } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
 import { EnquiryBadge } from '@/lib/status'
-import { Badge, Button, Empty, Notice, SearchBox, Spinner, Toggle } from '@/ui/core'
-import { Menu, Segmented, useConfirm } from '@/ui/overlays'
+import { Badge, Button, Empty, Notice, SearchBox, Spinner } from '@/ui/core'
+import { Menu, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { EnquirySheet } from './EnquirySheet'
 
-const FILTERS = [
-  { value: 'OPEN', label: 'Open' },
-  { value: 'CONVERTED', label: 'Won' },
-  { value: 'LOST', label: 'Lost' },
-  { value: 'all', label: 'All' },
-]
+type EnquiryChip = 'OPEN' | 'hot' | 'ageing' | 'whatsapp' | 'CONVERTED' | 'LOST' | 'all'
 
 function SourceBadge({ source, detail }: { source: string; detail: string | null }) {
   if (source === 'whatsapp') return <Badge tone="sky" title={detail ?? undefined}><MessageCircle size={11} /> WhatsApp</Badge>
@@ -29,13 +28,35 @@ function SourceBadge({ source, detail }: { source: string; detail: string | null
 export function Enquiries() {
   const route = useRecordRoute('/enquiries')
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
-  const [byPriority, setByPriority] = useState(false)
+  const [chip, setChip] = useState<EnquiryChip>('OPEN')
   const query = useDebounced(search)
-  const list = useList('enquiries', api.enquiries.list, { search: query, status: status === 'all' ? undefined : status, limit: 200 })
+  const list = useList('enquiries', api.enquiries.list, { search: query, limit: 500 })
   const funnel = useQuery({ queryKey: ['insights', 'enquiries'], queryFn: insights.enquiries })
   const priority = new Map((funnel.data?.priorities ?? []).map((row) => [row.enquiry_id, row]))
-  const items = [...(list.data?.items ?? [])].sort((a, b) => (byPriority ? (priority.get(b.id)?.score ?? -1) - (priority.get(a.id)?.score ?? -1) : 0))
+  const all = list.data?.items ?? []
+  const test = (key: EnquiryChip, enquiry: (typeof all)[number]) => {
+    const p = priority.get(enquiry.id)
+    if (key === 'all') return true
+    if (key === 'hot') return enquiry.status === 'OPEN' && (p?.score ?? 0) >= 60
+    if (key === 'ageing') return enquiry.status === 'OPEN' && (p?.days_idle ?? 0) >= (funnel.data?.stale_days ?? 7)
+    if (key === 'whatsapp') return enquiry.status === 'OPEN' && enquiry.source !== 'manual'
+    return enquiry.status === key
+  }
+  const count = (key: EnquiryChip) => all.filter((enquiry) => test(key, enquiry)).length
+  const items = all.filter((enquiry) => test(chip, enquiry)).sort((a, b) => (chip !== 'CONVERTED' && chip !== 'LOST' ? (priority.get(b.id)?.score ?? -1) - (priority.get(a.id)?.score ?? -1) : 0))
+  const chips: Chip<EnquiryChip>[] = [
+    { key: 'OPEN', label: 'Open', icon: Layers, count: count('OPEN') },
+    { key: 'hot', label: 'Hot', icon: Flame, count: count('hot'), hot: count('hot') > 0 },
+    { key: 'ageing', label: 'Going cold', icon: Hourglass, count: count('ageing'), hot: count('ageing') > 0 },
+    { key: 'whatsapp', label: 'From messages', icon: MessageCircle, count: count('whatsapp') },
+    { key: 'CONVERTED', label: 'Won', icon: Trophy, count: count('CONVERTED') },
+    { key: 'LOST', label: 'Lost', icon: XCircle, count: count('LOST') },
+    { key: 'all', label: 'All', count: all.length },
+  ]
+  const f = funnel.data
+  useEffect(() => {
+    if (list.data && chip === 'OPEN' && count('OPEN') === 0) setChip('all')
+  }, [list.data]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -49,28 +70,53 @@ export function Enquiries() {
           title="Enquiries"
           count={list.data?.total}
           actions={
-            <Button kind="ghost" small iconOnly onClick={route.openNew} aria-label="New enquiry">
-              <Plus size={16} />
-            </Button>
+            <>
+              <PageGuide
+                title="Enquiries (quotes)"
+                points={[
+                  { icon: Target, text: 'Open enquiries are sorted by priority: value, stock on hand, how long they wait and whether the customer buys often. Hover P-score for reasons.' },
+                  { icon: Hourglass, text: '"Going cold" means nobody has touched it for a week. Call or WhatsApp from the enquiry.' },
+                  { icon: Sparkles, text: 'Use "Draft quote reply" to get a ready-to-send WhatsApp message with prices.' },
+                  { icon: CheckCircle2, text: 'Convert to order places a sales order at the quoted prices and takes stock at once.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew} aria-label="New enquiry">
+                New
+              </Button>
+            </>
           }
           filters={
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="Enquiry, customer or product" />
-              <Segmented value={status} onChange={setStatus} options={FILTERS} />
-              <label className="flex items-center gap-2 text-[12px] text-fg-2">
-                <Toggle checked={byPriority} onChange={setByPriority} label="Sort by priority" />
-                Open enquiries by priority
-              </label>
+              <QuickChips chips={chips} value={chip} onChange={setChip} />
             </>
           }
         >
+          {!search && (chip === 'OPEN' || chip === 'all') && f ? (
+            <AiStrip
+              className="mx-1.5 mb-2"
+              title="Pipeline"
+              insights={
+                [
+                  { icon: Target, text: <><b>{fmtMoney(f.open_pipeline_value)}</b> in open quotes · win rate <b>{f.conversion_rate !== null ? `${f.conversion_rate}%` : '—'}</b>{f.average_days_to_convert !== null ? `, ${f.average_days_to_convert} days to win` : ''}.</> },
+                  count('hot') ? { icon: Flame, text: <><b>{count('hot')} hot enquiries</b> worth chasing today.</>, onClick: () => setChip('hot') } : null,
+                  count('ageing') ? { icon: Hourglass, text: <><b>{count('ageing')} going cold</b> — no follow-up in {f.stale_days}+ days.</>, onClick: () => setChip('ageing') } : null,
+                  f.lost_reasons[0] ? { icon: XCircle, text: <>Most lost because: <b>{f.lost_reasons[0].reason}</b> ({f.lost_reasons[0].count}).</>, onClick: () => setChip('LOST') } : null,
+                ].filter(Boolean) as { icon: typeof Layers; text: ReactNode; onClick?: () => void }[]
+              }
+              prompts={[
+                { label: 'Which to chase?', question: 'Which open enquiries should I chase today, in order? Use enquiry_funnel priorities, check stock for each, and draft a short WhatsApp follow-up for the top three.' },
+                { label: 'Why do we lose?', question: 'Why do we lose enquiries? Look at lost reasons, discounts and products, and suggest what to change.' },
+              ]}
+            />
+          ) : null}
           {list.isPending ? (
             <ListSkeleton />
           ) : items.length === 0 ? (
             <Empty icon={<MessageSquareQuote size={20} />} title={search ? 'No enquiries match' : 'No enquiries here'} body="Enquiries also arrive from WhatsApp and email when AI is on." action={<Button kind="primary" small onClick={route.openNew}>New enquiry</Button>} />
           ) : (
             items.map((enquiry) => (
-              <ListRow key={enquiry.id} group="enquiries" selected={enquiry.id === route.id} onSelect={() => route.select(enquiry.id)}>
+              <ListRow key={enquiry.id} group="enquiries" selected={enquiry.id === route.id} onSelect={() => route.select(enquiry.id)} alert={test('ageing', enquiry)}>
                 <div className="flex items-baseline gap-2">
                   <span className="num text-[13px] font-semibold">{enquiry.enquiry_number}</span>
                   <span className="num ml-auto text-[13px] font-medium">{fmtMoney(enquiry.total_amount)}</span>
@@ -84,7 +130,9 @@ export function Enquiries() {
                   <SourceBadge source={enquiry.source} detail={enquiry.source_detail} />
                   {priority.get(enquiry.id) ? (
                     <span title={priority.get(enquiry.id)!.reasons.join('; ')}>
-                      <Badge tone={priority.get(enquiry.id)!.score >= 60 ? 'bad' : priority.get(enquiry.id)!.score >= 35 ? 'sky' : 'muted'}>P{priority.get(enquiry.id)!.score}</Badge>
+                      <Badge tone={priority.get(enquiry.id)!.score >= 60 ? 'bad' : priority.get(enquiry.id)!.score >= 35 ? 'sky' : 'muted'}>
+                        {priority.get(enquiry.id)!.score >= 60 ? <Flame size={11} /> : <Target size={11} />} P{priority.get(enquiry.id)!.score}
+                      </Badge>
                     </span>
                   ) : null}
                   <span className="ml-auto text-[11.5px] text-fg-3">{plural(enquiry.item_count, 'product')}</span>
@@ -105,6 +153,17 @@ function EnquiryInspector({ id }: { id: string }) {
   const navigate = useNavigate()
   const enquiry = useOne('enquiries', api.enquiries.get, id)
   const contact = useOne('customers', api.customers.get, enquiry.data?.customer.id)
+  const { ask } = useAssistant()
+  const funnel = useQuery({ queryKey: ['insights', 'enquiries'], queryFn: insights.enquiries })
+  const check = useQuery({
+    queryKey: ['records', 'enquiry-check', id, enquiry.data?.updated_at],
+    enabled: enquiry.data?.status === 'OPEN',
+    queryFn: () =>
+      records.checkOrder({
+        customer_id: enquiry.data!.customer.id,
+        items: enquiry.data!.items.map((item) => ({ product_id: item.product_id, quantity_ordered: n(item.quantity), unit_price: n(item.mrp_snapshot), discount_percent: n(item.discount_percent) })),
+      }),
+  })
   const phone = contact.data?.phone ?? null
   const [editing, setEditing] = useState(false)
   const confirm = useConfirm()
@@ -159,6 +218,9 @@ function EnquiryInspector({ id }: { id: string }) {
                   </a>
                 </>
               ) : null}
+              <Button kind="quiet" icon={<Sparkles size={14} />} onClick={() => ask(`Draft a WhatsApp quote reply to ${data.customer.name} for enquiry ${data.enquiry_number} (id ${id}): list each product with quantity and quoted price, the total, availability from current stock, and a polite close. Keep it short and ready to send.`)}>
+                Draft quote reply
+              </Button>
               <Button icon={<Pencil size={14} />} onClick={() => setEditing(true)} disabled={!data.is_editable}>
                 Edit
               </Button>
@@ -199,6 +261,7 @@ function EnquiryInspector({ id }: { id: string }) {
         ]}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {open ? <WinPanel priority={funnel.data?.priorities.find((row) => row.enquiry_id === id)} warnings={check.data?.warnings ?? []} checked={Boolean(check.data)} onAsk={() => ask(`What discount can I offer on enquiry ${data.enquiry_number} (id ${id}) and still keep a healthy margin? Use product_prices for cost and what ${data.customer.name} paid before.`)} /> : null}
         <table className="grid-table">
           <thead>
             <tr>
@@ -241,5 +304,40 @@ function EnquiryInspector({ id }: { id: string }) {
       <EnquirySheet open={editing} onClose={() => setEditing(false)} editing={data} />
       {confirm.element}
     </>
+  )
+}
+
+/** Why this enquiry matters and what to watch before quoting. */
+function WinPanel({ priority, warnings, checked, onAsk }: { priority?: { score: number; reasons: string[]; in_stock: boolean; days_idle: number }; warnings: { level: 'critical' | 'warning' | 'info'; kind: string; text: string }[]; checked: boolean; onAsk: () => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 px-6 pt-4 pb-2 max-lg:grid-cols-1">
+      <div className="pane-contrast rounded-2xl! p-4">
+        <div className="flex items-center gap-2">
+          <span className="glass-tile size-8 rounded-[10px]!">{priority && priority.score >= 60 ? <Flame size={15} /> : <Target size={15} />}</span>
+          <div>
+            <div className="text-[12px] opacity-70">Priority</div>
+            <div className="num text-[20px] leading-none font-semibold">{priority ? `${priority.score} / 100` : '—'}</div>
+          </div>
+        </div>
+        <ul className="mt-3 space-y-1 text-[12.5px]">
+          {(priority?.reasons ?? ['No priority yet']).map((reason) => (
+            <li key={reason} className="flex gap-1.5">
+              <CheckCircle2 size={13} className="mt-0.5 shrink-0 opacity-70" /> {reason}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="card p-4">
+        <div className="flex items-center gap-2 text-[13px] font-semibold">
+          <ShieldCheck size={14} /> Before you quote
+        </div>
+        <div className="mt-2.5">
+          {warnings.length ? <WarningList warnings={warnings} /> : checked ? <p className="text-[12.5px] text-fg-3">Margins, stock and credit look fine for these prices.</p> : <Spinner />}
+        </div>
+        <Button small kind="quiet" className="mt-3" icon={<Sparkles size={13} />} onClick={onAsk}>
+          What discount can I give?
+        </Button>
+      </div>
+    </div>
   )
 }

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { Ban, ClipboardList, MoreHorizontal, PackageOpen, Pencil, Plus, Send, Users } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { AlarmClock, Ban, CheckCircle2, ClipboardList, FilePen, Layers, MessageCircle, MoreHorizontal, PackageOpen, Pencil, Plus, Send, ShoppingCart, Truck, Users, XCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { records } from '@/api/records'
+import { AiStrip, AskButton, PageGuide, QuickChips, type Chip } from '@/ui/smart'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
 import { useAction, useCommitments, useList, useOne } from '@/api/queries'
@@ -9,18 +13,32 @@ import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtQty, n } from '@/lib/form
 import { useDebounced, useRecordRoute } from '@/lib/route'
 import { PurchaseBadge } from '@/lib/status'
 import { Button, Empty, Facts, Meter, Notice, SearchBox, Spinner } from '@/ui/core'
-import { Menu, Segmented, Sheet, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
+import { Menu, Sheet, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { TallyPanel } from '@/features/integrations/TallyPanel'
 import { ReceiveSheet } from '@/features/receipts/ReceiveSheet'
 import { claimantsFrom, PurchaseSheet, SettleBlock, type SettlementState } from './PurchaseSheet'
 
-const FILTERS = [
-  { value: 'open', label: 'Open', status: 'DRAFT,ORDERED,PARTIALLY_RECEIVED' },
-  { value: 'RECEIVED', label: 'Received', status: 'RECEIVED' },
-  { value: 'CANCELLED', label: 'Cancelled', status: 'CANCELLED' },
-  { value: 'all', label: 'All', status: undefined },
-]
+type PoChip = 'open' | 'draft' | 'arriving' | 'late' | 'received' | 'cancelled' | 'all'
+const isLate = (po: PurchaseOrderOut) => Boolean(po.expected_delivery_date && new Date(po.expected_delivery_date).getTime() < Date.now() - 86_400_000 && (po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED'))
+function poMatches(chip: PoChip, po: PurchaseOrderOut) {
+  switch (chip) {
+    case 'open':
+      return po.status === 'DRAFT' || po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED'
+    case 'draft':
+      return po.status === 'DRAFT'
+    case 'arriving':
+      return po.status === 'ORDERED' || po.status === 'PARTIALLY_RECEIVED'
+    case 'late':
+      return isLate(po)
+    case 'received':
+      return po.status === 'RECEIVED'
+    case 'cancelled':
+      return po.status === 'CANCELLED'
+    default:
+      return true
+  }
+}
 
 export function PurchaseOrders() {
   const route = useRecordRoute('/purchase-orders')
@@ -43,10 +61,28 @@ export function PurchaseOrders() {
       return current
     }, { replace: true })
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('open')
+  const navigate = useNavigate()
+  const [chip, setChip] = useState<PoChip>('open')
   const query = useDebounced(search)
-  const list = useList('purchase-orders', api.purchaseOrders.list, { search: query, status: FILTERS.find((item) => item.value === filter)?.status, limit: 200 })
-  const items = list.data?.items ?? []
+  const list = useList('purchase-orders', api.purchaseOrders.list, { search: query, limit: 500 })
+  const all = list.data?.items ?? []
+  const items = all.filter((po) => poMatches(chip, po))
+  const count = (key: PoChip) => all.filter((po) => poMatches(key, po)).length
+  const chips: Chip<PoChip>[] = [
+    { key: 'open', label: 'Open', icon: Layers, count: count('open') },
+    { key: 'draft', label: 'Drafts to place', icon: FilePen, count: count('draft'), hot: count('draft') > 0 },
+    { key: 'arriving', label: 'Arriving', icon: Truck, count: count('arriving') },
+    { key: 'late', label: 'Late', icon: AlarmClock, count: count('late'), hot: count('late') > 0 },
+    { key: 'received', label: 'Received', icon: CheckCircle2, count: count('received') },
+    { key: 'cancelled', label: 'Cancelled', icon: XCircle, count: count('cancelled') },
+    { key: 'all', label: 'All', count: all.length },
+  ]
+  const suggestions = useQuery({ queryKey: ['records', 'purchase-suggestions'], queryFn: records.purchaseSuggestions, staleTime: 60_000 })
+  const top = suggestions.data?.groups[0]
+  const topLink = top ? `/purchase-orders?new=1${top.supplier_id ? `&supplier=${top.supplier_id}` : ''}&lines=${top.lines.map((line) => `${line.product_id}:${line.quantity}:${line.unit_cost}`).join(',')}` : ''
+  useEffect(() => {
+    if (list.data && chip === 'open' && count('open') === 0) setChip('all')
+  }, [list.data]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!route.id && items.length > 0 && window.innerWidth >= 1024 && !search) route.select(items[0].id)
   }, [route.id, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -60,26 +96,59 @@ export function PurchaseOrders() {
           title="Purchase Orders"
           count={list.data?.total}
           actions={
-            <Button kind="ghost" small iconOnly onClick={route.openNew} aria-label="New purchase order">
-              <Plus size={16} />
-            </Button>
+            <>
+              <PageGuide
+                title="Purchase orders"
+                points={[
+                  { icon: FilePen, text: 'A draft is only a plan. Place it to tell the supplier; its goods then count as "on order".' },
+                  { icon: Users, text: 'When you place or receive, you choose which short customers the goods are for.' },
+                  { icon: AlarmClock, text: 'Late means the expected date has passed and goods are still due. Chase the supplier.' },
+                  { icon: ShoppingCart, text: 'The blue panel suggests what to buy next, grouped by supplier; one tap pre-fills the order.' },
+                ]}
+              />
+              <Button kind="primary" small icon={<Plus size={14} />} onClick={route.openNew} aria-label="New purchase order">
+                New
+              </Button>
+            </>
           }
           filters={
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="PO number, supplier or product" />
-              <Segmented value={filter} onChange={setFilter} options={FILTERS.map(({ value, label }) => ({ value, label }))} />
+              <QuickChips chips={chips} value={chip} onChange={setChip} />
             </>
           }
         >
+          {!search && chip === 'open' ? (
+            <AiStrip
+              className="mx-1.5 mb-2"
+              title="Buying suggestions"
+              insights={
+                [
+                  top ? { icon: ShoppingCart, text: <>Order <b>{top.lines.length} products</b> from <b>{top.supplier_name ?? 'a supplier'}</b>, about <b>{fmtMoney(top.value)}</b>{top.urgent ? ` (${top.urgent} urgent)` : ''}.</>, onClick: () => navigate(topLink) } : null,
+                  suggestions.data && suggestions.data.groups.length > 1 ? { icon: Layers, text: <><b>{fmtMoney(suggestions.data.total_value)}</b> to buy in all, across {suggestions.data.groups.length} suppliers.</>, onClick: () => navigate('/products?flag=reorder') } : null,
+                  count('late') ? { icon: AlarmClock, text: <><b>{count('late')} purchase orders</b> are late.</>, onClick: () => setChip('late') } : null,
+                ].filter(Boolean) as { icon: typeof Layers; text: ReactNode; onClick: () => void }[]
+              }
+              prompts={[
+                { label: 'Plan this week\'s buying', question: 'Plan this week\'s purchases: use purchase_suggestions and supplier_performance. Group by supplier, check the cheapest supplier for each product with product_prices, and propose draft purchase orders for me to confirm.' },
+                { label: 'Chase late suppliers', question: 'Which purchase orders are late, how many days, what customers are waiting on them, and draft a WhatsApp to each supplier.' },
+              ]}
+            />
+          ) : null}
           {list.isPending ? (
             <ListSkeleton />
           ) : items.length === 0 ? (
             <Empty icon={<ClipboardList size={20} />} title={search ? 'No purchase orders match' : 'No purchase orders here'} action={<Button kind="primary" small onClick={route.openNew}>New purchase order</Button>} />
           ) : (
             items.map((po) => (
-              <ListRow key={po.id} group="po" selected={po.id === route.id} onSelect={() => route.select(po.id)}>
+              <ListRow key={po.id} group="po" selected={po.id === route.id} onSelect={() => route.select(po.id)} alert={isLate(po)}>
                 <div className="flex items-baseline gap-2">
                   <span className="num text-[13px] font-semibold">{po.po_number}</span>
+                  {isLate(po) ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#0b0b0c] px-1.5 text-[10.5px] font-semibold text-[#fff]">
+                      <AlarmClock size={10} /> late
+                    </span>
+                  ) : null}
                   <span className="num ml-auto text-[13px] font-medium">{fmtMoney(po.total_cost)}</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-[12px] text-fg-3">
@@ -160,6 +229,7 @@ function PurchaseInspector({ id }: { id: string }) {
                 Receive goods
               </Button>
             ) : null}
+            <AskButton question={`Review purchase order ${data.po_number} from ${data.supplier.name}: are these prices the cheapest we have paid (use product_prices), which customers are waiting on it, is it late, and what should I do next?`} />
             <Menu
               trigger={
                 <Button iconOnly aria-label="More actions">
@@ -167,6 +237,8 @@ function PurchaseInspector({ id }: { id: string }) {
                 </Button>
               }
               items={[
+                { label: 'Open supplier', icon: <Truck size={14} />, onSelect: () => (window.location.href = `/suppliers/${data.supplier_id}`) },
+                { label: 'Chase on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/?text=${encodeURIComponent(`Hello ${data.supplier.name}, checking on our order ${data.po_number}${data.expected_delivery_date ? ` expected on ${fmtDate(data.expected_delivery_date)}` : ''}. When can we expect delivery?`)}`, '_blank'), disabled: draft },
                 { label: 'Settle short customers', icon: <Users size={14} />, onSelect: () => setSettling('settle'), disabled: !needsSettling },
                 { label: 'Cancel purchase order', icon: <Ban size={14} />, onSelect: askCancel, danger: true, separator: true, disabled: data.status === 'CANCELLED' || data.status === 'RECEIVED' },
               ]}

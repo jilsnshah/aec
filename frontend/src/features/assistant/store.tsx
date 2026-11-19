@@ -258,16 +258,20 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (!location.pathname.startsWith('/assistant')) setOpen(true)
       queued.current = text
       select(null)
+      setAskTick((tick) => tick + 1)
     },
     [location.pathname, select],
   )
+  // askTick re-runs this even when no conversation was open (select(null)
+  // then changes nothing).
+  const [askTick, setAskTick] = useState(0)
   useEffect(() => {
     if (queued.current && !conversationId && !busy) {
       const text = queued.current
       queued.current = null
       void send(text, [])
     }
-  }, [conversationId, busy, send])
+  }, [conversationId, busy, send, askTick])
 
   const value = useMemo<AssistantState>(
     () => ({ open, setOpen, conversationId, select, newChat, messages, loading: detail.isFetching && !messages.length, draft, busy, send, ask, confirm, cancel, stop, context, model, setModel }),

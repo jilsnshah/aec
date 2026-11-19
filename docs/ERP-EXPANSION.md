@@ -97,3 +97,32 @@ suites, unchanged.
 Next candidates: invoices with tax from Tally numbers, partial payment
 allocation to a chosen invoice, category-level targets, scheduled briefings
 by WhatsApp/email, demand forecasting once 6+ months of history exist.
+
+## 6. Second pass: every existing screen upgraded (19 November 2026)
+
+What leading ERPs put on every record, researched before building:
+Microsoft Dynamics 365 Business Central (Copilot sales-line suggestions, the
+Sales Order Agent drafting orders from customer emails, credit checks at order
+entry), Odoo 19 (next-action suggestions, AI reorder timing and draft purchase
+orders), Oracle NetSuite (excessive-discount flags on draft orders, per-line
+pricing explanations, vendor scoring on price, quality and delivery) and Indian
+distribution software (Marg, BUSY, Zoho, Vyapar: low-stock alerts, approvals,
+audit trail).
+
+| Screen | Added |
+| --- | --- |
+| Every list | Quick-filter chips with live counts and icons (a dot marks chips that need action); a sky "what needs attention" panel computed from the data, each line opening the filtered list; one-tap questions for the assistant; a "?" guide explaining the page |
+| Sales orders | Paid / part paid / overdue badge per order (open-item matching against deliveries); "ready" marker; status stepper (placed → stock ready → delivered → paid); Paid figure; activity timeline; repeat order; WhatsApp status update; Ask AI |
+| New order | Live order check while typing (credit limit with undelivered orders, overdue money, price below cost, thin margin, discount far above the usual, price lower than this customer paid last time, stock shortfall); per-line margin, last price paid and free stock; "draft from a message" hands a pasted WhatsApp order to the assistant |
+| Customers | Segment badges and chips (champion, loyal, at risk, dormant, new), owes / overdue per row; 360 overview: lifetime value and rank, average order, buying rhythm with "later than usual" warning, average discount, quote win rate, credit-used gauge, spend by month, what they buy; timeline; "next best action" |
+| Products | Health chips (to reorder, short, running out, demand rising or falling, slow, dead); Prices tab: margin, cost from each supplier with the cheapest first, recent selling prices with discounts, top buyers; timeline |
+| Purchase orders | Chips (drafts to place, arriving, late); late badge; buying suggestions grouped by supplier opening a pre-filled order; supplier WhatsApp chase; Ask AI price review |
+| Suppliers | Score (fill rate and on-time) on every row; scorecard tab: lead time, gauges, late orders, each product's last price against the cheapest supplier; timeline |
+| Enquiries | Chips (hot, going cold, from messages, won, lost), sorted by priority; pipeline panel (open value, win rate, days to win, top lost reason); priority panel with reasons; the order check on the quoted prices; "draft quote reply" and "what discount can I give" |
+| Goods receipts | "Scan bill": a photo or PDF of the supplier bill goes to the assistant, which matches it to the purchase order and lists differences before proposing the receipt |
+| Fulfilment | Today panel: units ready by customer, longest wait, what is short; plan-deliveries question |
+
+New endpoints (all read-only, all assistant tools): `GET /api/records/timeline`,
+`GET /api/records/customers/{id}/profile`, `GET /api/records/products/{id}/prices`,
+`POST /api/records/order-check`, `GET /api/records/order-payments`,
+`GET /api/records/suppliers/{id}/scorecard`, `GET /api/records/purchase-suggestions`.
