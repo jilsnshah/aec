@@ -246,7 +246,7 @@ function EnquiryInspector({ id }: { id: string }) {
                 Draft quote reply
               </Button>
               {data.customer ? (
-                <Button icon={<BadgePercent size={14} />} busy={applyPrices.isPending} onClick={() => applyPrices.mutate(undefined)} title="Use the best of the customer's own prices, discount, price list and groups">
+                <Button icon={<BadgePercent size={14} />} busy={applyPrices.isPending} onClick={() => applyPrices.mutate(undefined)} title="Use the best of the customer's own prices, discount and group prices on every line">
                   Apply best prices
                 </Button>
               ) : null}

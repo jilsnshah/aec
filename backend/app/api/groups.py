@@ -22,12 +22,21 @@ class Rule(BaseModel):
     value: Any
 
 
+class GroupPriceItem(BaseModel):
+    product_id: uuid.UUID
+    min_quantity: Optional[str] = "0"
+    price: Optional[str] = None
+    discount_percent: Optional[str] = None
+
+
 class GroupIn(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    rules: Optional[List[Rule]] = None
+    rules: Optional[List[Rule]] = Field(default=None, description="Empty for a group picked by hand only.")
     match: Optional[str] = Field(default=None, description="all or any")
-    price_list_id: Optional[uuid.UUID] = None
+    discount_percent: Optional[str] = Field(default=None, description="Members' discount off MRP on everything; empty for none.")
+    items: Optional[List[GroupPriceItem]] = Field(default=None, description="Members' product prices: fixed price or discount_percent, from min_quantity (replaces them all).")
+    price_list_id: Optional[uuid.UUID] = Field(default=None, description="Legacy; prefer discount_percent and items.")
     is_active: Optional[bool] = None
 
 
@@ -61,13 +70,13 @@ def rule_fields():
 
 @router.get("/customer-groups")
 def list_groups(db: Session = Depends(get_db)):
-    """Customer groups with their rules, price list and member count."""
+    """Customer groups with their rules, prices and member count."""
     return {"items": groups.list_groups(db)}
 
 
 @router.post("/customer-groups", status_code=201)
 def create_group(payload: GroupIn, db: Session = Depends(get_db)):
-    """Create a smart group: rules (all or any must match) and an optional price list. Members are calculated at once."""
+    """Create a group: members by hand and/or rules, and the prices members get (discount_percent and product items)."""
     return groups.save(db, payload.model_dump(exclude_unset=True, mode="json"))
 
 
@@ -91,6 +100,7 @@ def get_group(group_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.put("/customer-groups/{group_id}")
 def update_group(group_id: uuid.UUID, payload: GroupIn, db: Session = Depends(get_db)):
+    """Change a group's name, rules, members' discount or product prices."""
     return groups.save(db, payload.model_dump(exclude_unset=True, mode="json"), group_id)
 
 
@@ -107,7 +117,7 @@ def set_member(group_id: uuid.UUID, customer_id: uuid.UUID, payload: MemberIn, d
 
 @router.get("/customers/{customer_id}/pricing")
 def customer_pricing(customer_id: uuid.UUID, db: Session = Depends(get_db)):
-    """A customer's flat discount, own product prices, price list and groups."""
+    """A customer's flat discount, own product prices and groups (with how they joined)."""
     return pricelists.customer_pricing(db, customer_id)
 
 
@@ -124,7 +134,7 @@ def set_customer_pricing(customer_id: uuid.UUID, payload: CustomerPricingIn, db:
 @router.post("/enquiries/{enquiry_id}/apply-prices")
 def apply_prices(enquiry_id: uuid.UUID, db: Session = Depends(get_db)):
     """Set every line of an open enquiry to the customer's best price (own
-    prices, discount, price list, groups); says what changed."""
+    prices, discount, groups); says what changed."""
     return enquiry_service.apply_best_prices(db, enquiry_id)
 
 

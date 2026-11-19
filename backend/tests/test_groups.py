@@ -78,3 +78,29 @@ def test_overdue_rule(client, db, make_product, make_customer, order_for):
     db.commit()
     hits = client.post("/api/customer-groups/preview", json={"rules": [{"field": "oldest_overdue_days", "op": ">", "value": 30}]}).json()
     assert [c["name"] for c in hits["customers"]] == ["Late Payer"]
+
+
+def test_group_carries_its_own_prices(client, db, make_product, make_customer):
+    cement = make_product("Cement", opening_stock=500, mrp="400")
+    steel = make_product("Steel", opening_stock=500, mrp="100")
+    buyer = make_customer("Builder Co")
+    group = client.post("/api/customer-groups", json={
+        "name": "Contractors", "rules": [], "discount_percent": "2",
+        "items": [{"product_id": str(cement.id), "min_quantity": "0", "price": "360"}],
+    })
+    assert group.status_code == 201, group.text
+    gid = group.json()["id"]
+    detail = client.get("/api/customer-groups/{}".format(gid)).json()
+    assert detail["discount_percent"] == 2 and detail["price_count"] == 1 and detail["items"][0]["price"] == 360
+    client.put("/api/customer-groups/{}/members/{}".format(gid, buyer.id), json={"source": "manual"})
+    lines = client.post("/api/price-lists/resolve", json={"customer_id": str(buyer.id), "lines": [
+        {"product_id": str(cement.id), "quantity": "10"}, {"product_id": str(steel.id), "quantity": "10"}]}).json()["lines"]
+    assert lines[0]["net_price"] == 360 and lines[1]["discount_percent"] == 2
+    # Changing only the discount keeps the product prices.
+    client.put("/api/customer-groups/{}".format(gid), json={"discount_percent": "5"})
+    detail = client.get("/api/customer-groups/{}".format(gid)).json()
+    assert detail["discount_percent"] == 5 and detail["price_count"] == 1
+    # Deleting the group removes its prices too.
+    list_id = detail["price_list_id"]
+    assert client.delete("/api/customer-groups/{}".format(gid)).status_code == 204
+    assert client.get("/api/price-lists/{}".format(list_id)).status_code == 404

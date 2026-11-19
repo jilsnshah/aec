@@ -178,6 +178,8 @@ def view(session: Session, group: CustomerGroup, with_members: bool = False) -> 
         "id": group.id, "name": group.name, "description": group.description, "rules": group.rules or [], "match": group.match,
         "price_list_id": group.price_list_id, "price_list_name": group.price_list.name if group.price_list else None,
         "price_list_discount": float(group.price_list.discount_percent) if group.price_list else None,
+        "discount_percent": float(group.price_list.discount_percent) if group.price_list and group.price_list.discount_percent else None,
+        "price_count": len(group.price_list.items) if group.price_list else 0,
         "is_active": group.is_active, "member_count": group.member_count, "last_computed_at": group.last_computed_at,
     }
     if with_members:
@@ -185,6 +187,9 @@ def view(session: Session, group: CustomerGroup, with_members: bool = False) -> 
             select(CustomerGroupMember, Customer.name).join(Customer, CustomerGroupMember.customer_id == Customer.id)
             .where(CustomerGroupMember.group_id == group.id).order_by(Customer.name)
         ).all()
+        from . import pricelists
+
+        out["items"] = pricelists.view(group.price_list)["items"] if group.price_list else []
         out["members"] = [{"customer_id": m.customer_id, "name": name, "source": m.source, "added_at": m.added_at} for m, name in rows]
     return out
 
@@ -236,10 +241,26 @@ def save(session: Session, data: Dict[str, Any], group_id: Optional[uuid.UUID] =
         session.add(group)
         session.flush()
         _recompute(session, group)
+        prices = "discount_percent" in data or data.get("items") is not None
+        if prices and group.price_list_id is None:
+            own = PriceList(name="Group prices · {} · {}".format(group.name[:40], str(group.id)[:8]), discount_percent=0)
+            session.add(own)
+            session.flush()
+            group.price_list_id = own.id
         session.commit()
     except Exception:
         session.rollback()
         raise
+    if prices:
+        from . import pricelists
+
+        current = pricelists.get(session, group.price_list_id)
+        pricelists.save(session, {
+            "name": current["name"],
+            "discount_percent": data["discount_percent"] if "discount_percent" in data else current["discount_percent"],
+            "is_active": True,
+            "items": data.get("items"),
+        }, group.price_list_id)
     return get(session, group.id)
 
 
@@ -305,7 +326,14 @@ def delete_group(session: Session, group_id: uuid.UUID) -> None:
     begin_write(session)
     group = _get(session, group_id)
     session.execute(delete(CustomerGroupMember).where(CustomerGroupMember.group_id == group_id))
+    own = group.price_list
     session.delete(group)
+    session.flush()
+    if own is not None and own.customer_id is None:
+        shared = session.execute(select(func.count(CustomerGroup.id)).where(CustomerGroup.price_list_id == own.id)).scalar_one()
+        used = session.execute(select(func.count(Customer.id)).where(Customer.price_list_id == own.id)).scalar_one()
+        if not shared and not used:
+            session.delete(own)
     session.commit()
 
 

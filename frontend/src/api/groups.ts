@@ -24,6 +24,9 @@ export interface Group {
   price_list_id: string | null
   price_list_name: string | null
   price_list_discount: number | null
+  discount_percent: number | null
+  price_count: number
+  items?: PriceListItemRow[]
   is_active: boolean
   member_count: number
   last_computed_at: string | null
@@ -34,7 +37,8 @@ export interface GroupIn {
   description?: string | null
   rules?: Rule[]
   match?: 'all' | 'any'
-  price_list_id?: string | null
+  discount_percent?: string | null
+  items?: { product_id: string; min_quantity: string; price: string | null; discount_percent: string | null }[]
   is_active?: boolean
 }
 export interface PreviewRow {

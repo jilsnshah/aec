@@ -52,7 +52,7 @@ export function EnquirySheet({ open, onClose, onSaved, editing, customerId }: { 
       onClose={onClose}
       width={1000}
       title={editing ? `Edit ${editing.enquiry_number}` : 'New enquiry'}
-      subtitle={pricing?.price_list_active ? `Prices start from ${pricing.price_list} (the customer's price list). Negotiate per line, then close the deal into an order.` : "MRP comes from the product. Negotiate a discount per line, then close the deal into an order."}
+      subtitle={pricing?.price_list_active ? `Prices start from the customer's best prices (${pricing.price_list}). Negotiate per line, then close the deal into an order.` : "MRP comes from the product. Negotiate a discount per line, then close the deal into an order."}
       aside={
         <div className="space-y-5">
           <div>

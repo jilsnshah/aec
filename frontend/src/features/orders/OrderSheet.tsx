@@ -160,7 +160,7 @@ export function OrderSheet({ open, onClose, onCreated, customerId, repeatFrom }:
                       <span className="num">{fmtQty(line.free_stock)} free</span>
                     </div>
                     <div className="mt-0.5 text-[11px] text-fg-3">
-                      {pricing.data?.price_list_active ? pricing.data.lines.find((r) => r.product_id === line.product_id)?.rule : 'MRP (no price list)'}
+                      {pricing.data?.price_list_active ? pricing.data.lines.find((r) => r.product_id === line.product_id)?.rule : 'MRP'}
                     </div>
                   </div>
                 ))}

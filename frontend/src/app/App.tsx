@@ -19,7 +19,6 @@ const Products = lazy(() => import('@/features/products/Products').then((module)
 const PurchaseOrders = lazy(() => import('@/features/purchasing/PurchaseOrders').then((module) => ({ default: module.PurchaseOrders })))
 const Receipts = lazy(() => import('@/features/receipts/Receipts').then((module) => ({ default: module.Receipts })))
 const CustomerGroups = lazy(() => import('@/features/pricing/CustomerGroups').then((module) => ({ default: module.CustomerGroups })))
-const PriceLists = lazy(() => import('@/features/pricing/PriceLists').then((module) => ({ default: module.PriceLists })))
 const StockCount = lazy(() => import('@/features/stock/StockCount').then((module) => ({ default: module.StockCount })))
 const StockIn = lazy(() => import('@/features/stockin/StockIn').then((module) => ({ default: module.StockIn })))
 const Suppliers = lazy(() => import('@/features/suppliers/Suppliers').then((module) => ({ default: module.Suppliers })))
@@ -47,7 +46,7 @@ export function App() {
           <Route path="products/:id?" element={<Products />} />
           <Route path="stock-in" element={<StockIn />} />
           <Route path="stock-count" element={<StockCount />} />
-          <Route path="price-lists" element={<PriceLists />} />
+          <Route path="price-lists" element={<Navigate to="/customer-groups" replace />} />
           <Route path="customer-groups" element={<CustomerGroups />} />
           <Route path="integrations/:section?" element={<Integrations />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,7 +5,6 @@ import { Ban, Crown, Eye, Plus, RefreshCw, Sparkles, Tags, Trash2, UserMinus, Us
 import { errorText } from '@/api/client'
 import { useAction } from '@/api/queries'
 import { groups, type Group, type Rule } from '@/api/groups'
-import { priceLists } from '@/api/records'
 import { cn } from '@/lib/cn'
 import { fmtAgo, fmtMoney } from '@/lib/format'
 import { Badge, Button, Empty, Notice, Spinner } from '@/ui/core'
@@ -13,6 +12,7 @@ import { Picker } from '@/ui/pickers'
 import { useCustomers } from '@/ui/lines'
 import { ListPane, ListRow, SplitView } from '@/ui/split'
 import { PageGuide, Stat } from '@/ui/smart'
+import { DiscountCard, PriceLines, fromLines, toLines, type PriceLine } from './PriceLines'
 
 const OP_LABEL: Record<string, string> = { '>=': 'at least', '<=': 'at most', '>': 'more than', '<': 'less than', '=': 'is', '!=': 'is not' }
 const EXAMPLES: { name: string; rules: Rule[] }[] = [
@@ -21,7 +21,7 @@ const EXAMPLES: { name: string; rules: Rule[] }[] = [
   { name: 'Win back', rules: [{ field: 'days_since_last_order', op: '>=', value: 90 }, { field: 'orders_total', op: '>=', value: 3 }] },
 ]
 
-/** Customer groups: picked by hand, by rules, or both; each can carry a price list. */
+/** Customer groups: picked by hand, by rules, or both, with the prices their members get. */
 export function CustomerGroups() {
   const list = useQuery({ queryKey: ['customer-groups'], queryFn: groups.list })
   const [selected, setSelected] = useState<string | 'new' | null>(null)
@@ -46,7 +46,7 @@ export function CustomerGroups() {
                 points={[
                   { icon: UserPlus, text: 'Pick customers by hand, let rules pick them, or both.' },
                   { icon: Wand2, text: 'Rules can use: orders and spend in the last year, years with you, days since last order, money overdue, segment, city.' },
-                  { icon: Tags, text: 'Link a price list to give the group its prices. A customer in several groups gets the best price for each product.' },
+                  { icon: Tags, text: 'Give the group a discount and product prices. A customer in several groups gets the best price for each product.' },
                   { icon: Ban, text: 'Add anyone by hand, or remove anyone the rules picked; rules never undo that.' },
                   { icon: RefreshCw, text: 'Members are recalculated once a day, or now with Recalculate.' },
                 ]}
@@ -82,7 +82,7 @@ export function CustomerGroups() {
                   <Users size={12} className="text-fg-3" />
                 </div>
                 <div className="mt-0.5 truncate text-[12px] text-fg-3">
-                  {group.price_list_name ? `${group.price_list_name}` : 'No price list'} · {group.rules.length ? `${group.rules.length} rule${group.rules.length === 1 ? '' : 's'} + by hand` : 'by hand'}
+                  {group.discount_percent ? `${group.discount_percent}% off` : group.price_count ? `${group.price_count} prices` : 'MRP'} · {group.rules.length ? `${group.rules.length} rule${group.rules.length === 1 ? '' : 's'} + by hand` : 'by hand'}
                 </div>
               </ListRow>
             ))
@@ -110,7 +110,6 @@ function GroupView({ id, onDeleted }: { id: string; onDeleted: () => void }) {
 
 function Editor({ group, template, onSaved, onDeleted }: { group?: Group; template?: { name: string; rules: Rule[] } | null; onSaved: (g: Group) => void; onDeleted?: () => void }) {
   const fields = useQuery({ queryKey: ['customer-groups', 'fields'], queryFn: groups.fields })
-  const lists = useQuery({ queryKey: ['price-lists'], queryFn: () => priceLists.list(true) })
   const customers = useCustomers()
   const [name, setName] = useState(group?.name ?? template?.name ?? '')
   const [description, setDescription] = useState(group?.description ?? '')
@@ -119,10 +118,12 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
   const [byRules, setByRules] = useState(Boolean((group?.rules ?? template?.rules ?? []).length))
   const [kept, setKept] = useState<Rule[]>([{ field: 'orders_12m', op: '>=', value: 3 }])
   const [pending, setPending] = useState<string[]>([])
-  const [listId, setListId] = useState(group?.price_list_id ?? '')
+  const [discount, setDiscount] = useState(group?.discount_percent ? String(group.discount_percent) : '')
+  const [lines, setLines] = useState<PriceLine[]>(() => toLines(group?.items ?? []))
   const [active, setActive] = useState(group?.is_active ?? true)
   const [addId, setAddId] = useState('')
-  const body = { name, description: description || null, match, rules: byRules ? rules : [], price_list_id: listId || null, is_active: active }
+  const hasPrices = Boolean(discount || lines.length || group?.price_list_id)
+  const body = { name, description: description || null, match, rules: byRules ? rules : [], is_active: active, ...(hasPrices ? { discount_percent: discount || null, items: fromLines(lines) } : {}) }
   const save = useAction(
     async () => {
       if (group) return groups.update({ id: group.id, ...body })
@@ -184,7 +185,7 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
         {group ? (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-3">
             <Stat strong icon={Users} label="Members" value={group.member_count} hint={group.last_computed_at ? `updated ${fmtAgo(group.last_computed_at)}` : 'not calculated'} />
-            <Stat icon={Tags} label="Price list" value={group.price_list_name ?? 'None'} hint={group.price_list_discount ? `${group.price_list_discount}% off everything` : 'linked prices'} />
+            <Stat icon={Tags} label="Members pay" value={group.discount_percent ? `${group.discount_percent}% off` : group.price_count ? 'Special prices' : 'MRP'} hint={group.price_count ? `${group.price_count} product price${group.price_count === 1 ? '' : 's'}${group.discount_percent ? ', rest at the discount' : ''}` : group.discount_percent ? 'on everything' : 'no group prices yet'} />
             <Stat icon={Wand2} label="Chosen" value={group.rules.length ? `${group.rules.length} rule${group.rules.length === 1 ? '' : 's'}` : 'By hand'} hint={group.rules.length ? (group.match === 'all' ? 'all must match, plus by hand' : 'any can match, plus by hand') : 'you add each customer'} />
           </div>
         ) : null}
@@ -194,18 +195,6 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
             <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Gold builders" />
           </label>
           <label className="block">
-            <span className="label">Price list for members</span>
-            <select className="field" value={listId} onChange={(e) => setListId(e.target.value)}>
-              <option value="">None (group only)</option>
-              {(lists.data?.items ?? []).map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                  {l.discount_percent ? ` (${l.discount_percent}% off)` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="col-span-2 block max-md:col-span-1">
             <span className="label">Description</span>
             <input className="field" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Who this is for" />
           </label>
@@ -396,6 +385,12 @@ function Editor({ group, template, onSaved, onDeleted }: { group?: Group; templa
           ) : null}
           {!group && pending.length ? <p className="mt-2 text-[11.5px] text-fg-3">They join when you save the group.</p> : null}
         </section>
+        <div className="flex items-center gap-2 pt-2 text-[14px] font-semibold">
+          <Tags size={15} /> What members pay
+        </div>
+        <p className="-mt-2 text-[12px] text-fg-3">On each line a member gets the best of these, their own prices and any other group they are in.</p>
+        <DiscountCard title="Discount for members" hint="Off MRP on everything without a product price below. Leave empty for none." value={discount} onChange={setDiscount} />
+        <PriceLines title="Product prices for members" empty="No product prices. Add one for a fixed rate or a bigger discount on a product, from a quantity." lines={lines} setLines={setLines} />
       </div>
     </div>
   )

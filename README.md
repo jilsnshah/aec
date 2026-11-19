@@ -940,9 +940,9 @@ need at least 5 units a month) the screens say so rather than guess.
    every number and email on file. No match: the enquiry waits as a
    **new sender**, keeping their name, number and email.
 2. **Prices.** Each line starts at the customer's **best price** from their own
-   discount, their own product prices, their price list, and the price list of
-   every **smart group** they are in (rules over orders, spend, years with us,
-   payment behaviour, city...). "Apply best prices" re-prices an enquiry.
+   discount, their own product prices, and the prices of every **customer
+   group** they are in (groups are picked by hand, by rules over orders, spend,
+   years with us, payment behaviour, city..., or both). "Apply best prices" re-prices an enquiry.
 3. **Order.** Converting needs a customer: for a new sender, choose an
    existing customer or create one; their number and email are linked so the
    next message is recognised. Credit, discount and margin holds apply.
@@ -977,7 +977,7 @@ Products get **other names** (what customers call them), **barcodes**,
 **supplier item codes** and **units** (1 tonne = 20 bags). Search, the
 WhatsApp/email reader, phone calls and the assistant match on all of them.
 
-## Controls, returns, counts, price lists and reminders
+## Controls, returns, counts, customer groups and reminders
 
 Benchmarked against Business Central, NetSuite, SAP Business One, Odoo,
 ERPNext, Zoho and TallyPrime (see `docs/ERP-RESEARCH.md` for the matrix,
@@ -993,9 +993,10 @@ gap analysis, roadmap and sources).
 - **Stock count** (Stock → Stock count): enter counted quantities, see the
   difference at FIFO cost, post in one go. Single adjustments (damage, loss,
   samples, found) from a product's menu.
-- **Price lists** (Sales → Price lists): default discount plus per-product
-  fixed prices or discounts with quantity breaks; put a customer on a list and
-  their orders and quotes start at those prices.
+- **Customer groups** (Sales → Customer Groups): members by hand and/or by
+  rules, and what members pay: a discount on everything plus per-product fixed
+  prices or discounts with quantity breaks. There is no separate price list
+  screen; old price lists were turned into groups (migration 5b7e2c1d9a40).
 - **Payment reminders** (Finance → Reminders): friendly, firm and final levels
   by days late, message ready for WhatsApp, each reminder logged with a
   follow-up to check payment.

@@ -4,7 +4,7 @@ import { priceLists } from '@/api/records'
 import { useDebounced } from '@/lib/route'
 import type { Line } from '@/ui/lines'
 
-/** Apply the customer's price list to each line's discount, unless the user
+/** Apply the customer's best prices (own, discount, groups) to each line's discount, unless the user
  *  typed a discount by hand. Returns the resolved prices and rules. */
 export function usePriceList(open: boolean, customer: string, lines: Line[], setLines: (update: (current: Line[]) => Line[]) => void) {
   const chosen = lines.filter((line) => line.product_id)

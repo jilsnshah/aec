@@ -2,7 +2,7 @@
 
 A deliberately small, safe set: look up products (stock and the caller's own
 price), the caller's orders and what they owe, and take an enquiry. It cannot
-place orders, give discounts beyond the price list, or reveal another
+place orders, give discounts beyond their prices, or reveal another
 customer's information. A caller is identified only by the number they call
 from; an unknown number gets general product information only.
 """
@@ -172,7 +172,7 @@ class CallTools:
         if not items:
             return {"error": "No items."}
         customer_id = self.customer_id
-        # Start from the caller's price list, like a quote typed in the app.
+        # Start from the caller's best prices, like a quote typed in the app.
         resolved = {line["product_id"]: line for line in pricelists.resolve(session, customer_id, [{"product_id": i["product_id"], "quantity": i["quantity"]} for i in items])["lines"]}
         for item in items:
             hit = resolved.get(item["product_id"])
