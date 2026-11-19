@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Bot, Check, Copy, FileText, Inbox, Mail, MessageCircle, RefreshCw, Wand2 } from 'lucide-react'
+import { Check, Copy, FileText, History, Inbox, Mail, MessageCircle, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
 import { useAction, useList } from '@/api/queries'
 import type { IntegrationOut, IntegrationsOut } from '@/api/types'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ai as aiApi } from '@/api/ai'
 import { cn } from '@/lib/cn'
 import { fmtAgo, fmtDateTime } from '@/lib/format'
 import { Badge, Button, Empty, Field, Notice, Spinner, Toggle } from '@/ui/core'
@@ -114,14 +115,15 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
   ],
 }
 
-type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'messages' | 'syncs'
+type SectionKey = 'ai' | 'whatsapp' | 'email' | 'tally' | 'messages' | 'syncs' | 'assistant_log'
 const SECTIONS: { key: SectionKey; label: string; hint: string; icon: ReactNode; group: string }[] = [
-  { key: 'ai', label: 'AI', hint: 'Reads messages, opens enquiries', icon: <Bot size={16} />, group: 'Connections' },
+  { key: 'ai', label: 'AI · Gemini', hint: 'Assistant and message reading', icon: <Sparkles size={16} />, group: 'Connections' },
   { key: 'whatsapp', label: 'WhatsApp', hint: 'Messages in, invoices out', icon: <MessageCircle size={16} />, group: 'Connections' },
   { key: 'email', label: 'Email', hint: 'Read a sales mailbox', icon: <Mail size={16} />, group: 'Connections' },
   { key: 'tally', label: 'Tally', hint: 'Vouchers and invoices', icon: <FileText size={16} />, group: 'Connections' },
   { key: 'messages', label: 'Received messages', hint: 'What came in, what AI did', icon: <Inbox size={16} />, group: 'Activity' },
   { key: 'syncs', label: 'Tally sync log', hint: 'What went to Tally', icon: <RefreshCw size={16} />, group: 'Activity' },
+  { key: 'assistant_log', label: 'Assistant activity', hint: 'Every tool the assistant ran', icon: <History size={16} />, group: 'Activity' },
 ]
 
 export function Integrations() {
@@ -169,6 +171,8 @@ export function Integrations() {
           <MessagesPane />
         ) : current === 'syncs' ? (
           <SyncsPane />
+        ) : current === 'assistant_log' ? (
+          <ActivityPane />
         ) : (
           <ConnectionPane data={data.data} name={current} />
         )}
@@ -204,43 +208,208 @@ function PaneHeader({ icon, title, body, integration, onToggle, busy, extra }: {
 
 function AiPane({ data }: { data: IntegrationsOut }) {
   const ai = data.ai
+  const keySet = Boolean(ai.credentials.api_key?.set)
+  const models = useQuery({ queryKey: ['ai', 'models', keySet], queryFn: aiApi.models })
+  const status = useQuery({ queryKey: ['ai', 'status'], queryFn: aiApi.status })
+  const [key, setKey] = useState('')
   const [model, setModel] = useState(String(ai.config.model ?? ''))
-  useEffect(() => setModel(String(ai.config.model ?? '')), [ai.config.model])
-  const save = useAction((enabled?: boolean) => api.integrations.update('ai', { enabled, config: { model }, credentials: {} }), { success: 'AI settings saved' })
+  const [custom, setCustom] = useState(false)
+  const [assistant, setAssistant] = useState(Boolean(ai.config.assistant ?? true))
+  const [policy, setPolicy] = useState<'confirm_all' | 'confirm_significant'>((ai.config.change_policy as 'confirm_all') ?? 'confirm_all')
+  const [temperature, setTemperature] = useState(Number(ai.config.temperature ?? 0.2))
+  useEffect(() => {
+    setModel(String(ai.config.model ?? ''))
+    setAssistant(Boolean(ai.config.assistant ?? true))
+    setPolicy((ai.config.change_policy as 'confirm_all') ?? 'confirm_all')
+    setTemperature(Number(ai.config.temperature ?? 0.2))
+  }, [ai.config])
+  const list = models.data ?? data.models
+  useEffect(() => {
+    if (list.length && model && !list.some((item) => item.id === model)) setCustom(true)
+  }, [list, model])
+  const dirty =
+    key.trim() !== '' ||
+    model !== String(ai.config.model ?? '') ||
+    assistant !== Boolean(ai.config.assistant ?? true) ||
+    policy !== (ai.config.change_policy ?? 'confirm_all') ||
+    temperature !== Number(ai.config.temperature ?? 0.2)
+  const client = useQueryClient()
+  const save = useAction(
+    (args: { enabled?: boolean; removeKey?: boolean } = {}) =>
+      api.integrations.update('ai', {
+        enabled: args.enabled,
+        config: { model, assistant, change_policy: policy, temperature },
+        credentials: args.removeKey ? { api_key: '' } : key.trim() ? { api_key: key.trim() } : {},
+      }),
+    { success: 'AI settings saved' },
+  )
   const test = useAction(api.integrations.testAi, { quiet: true })
-  const chosen = data.models.find((item) => item.id === model)
+  const chosen = list.find((item) => item.id === model)
+  const source = data.ai_credential_source
+  const saveAndRefresh = (args: { enabled?: boolean; removeKey?: boolean } = {}) =>
+    save.mutate(args, {
+      onSuccess: () => {
+        setKey('')
+        client.invalidateQueries({ queryKey: ['ai'] })
+      },
+    })
   return (
     <>
-      <PaneHeader icon={<Bot size={20} />} title="AI" body="Reads each WhatsApp message and email and records the enquiries in it. It never replies to customers." integration={ai} busy={save.isPending} onToggle={(value) => save.mutate(value)} />
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
-        {data.models.length === 0 ? <Notice tone="warn">No AI provider is configured on the server. Ask the administrator to add credentials.</Notice> : null}
-        <div className="grid max-w-[720px] grid-cols-2 gap-4 max-md:grid-cols-1">
-          <Field label="Model" hint={chosen?.hint}>
+      <PaneHeader
+        icon={<Sparkles size={20} />}
+        title="AI · Gemini"
+        body="Powers the assistant, and can read WhatsApp and email messages into enquiries. Your key stays on the server."
+        integration={ai}
+        busy={save.isPending}
+        onToggle={(value) => saveAndRefresh({ enabled: value })}
+        extra={<span className="text-[11.5px] text-fg-3">Switch: read messages into enquiries</span>}
+      />
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
+        <section className="max-w-[760px] space-y-3">
+          <h3 className="text-[14px] font-semibold">Connection</h3>
+          <div className="flex items-center gap-2 text-[12.5px]">
+            <span className={cn('size-2 rounded-full', status.data?.mode === 'live' ? 'bg-blue' : 'bg-fg-4')} />
+            {status.data?.mode === 'live'
+              ? source === 'settings'
+                ? 'Connected with the key saved here.'
+                : "Connected with the server's own Vertex AI credentials. A key saved here takes over."
+              : status.data?.mode === 'development'
+                ? 'Not connected — development mode is on, so the assistant runs a labelled script.'
+                : 'Not connected. Add a Gemini API key to switch the assistant on.'}
+          </div>
+          <Field
+            label="Gemini API key"
+            hint={
+              <>
+                Create one at <a className="underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>. It is encrypted on the server and never shown again — not even to you.
+              </>
+            }
+          >
             {(props) => (
-              <select {...props} className="field" value={model} onChange={(event) => setModel(event.target.value)}>
-                {data.models.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <input
+                  {...props}
+                  className="field font-mono"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={keySet ? `Saved key ${ai.credentials.api_key?.hint ?? ''} — paste a new one to replace it` : 'Paste your Gemini API key'}
+                  value={key}
+                  onChange={(event) => setKey(event.target.value)}
+                />
+                {keySet ? (
+                  <Button kind="danger" onClick={() => saveAndRefresh({ removeKey: true, enabled: false })} busy={save.isPending}>
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
             )}
           </Field>
-          <Field label="Provider" hint="Credentials are managed by the administrator on the server.">
-            {(props) => <input {...props} className="field" readOnly value={chosen?.provider === 'anthropic' ? 'Anthropic Claude' : chosen ? 'Google Gemini (Vertex AI)' : '—'} />}
+          <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+            <Field label="Model" hint={custom ? 'Any Gemini model id your key can use.' : chosen?.hint || (keySet ? 'Listed from your key.' : undefined)}>
+              {(props) =>
+                custom ? (
+                  <div className="flex gap-2">
+                    <input {...props} className="field font-mono" value={model} placeholder="gemini-…" onChange={(event) => setModel(event.target.value.trim())} />
+                    <Button onClick={() => { setCustom(false); setModel(list[0]?.id ?? '') }}>List</Button>
+                  </div>
+                ) : (
+                  <select {...props} className="field" value={model} onChange={(event) => (event.target.value === '__custom' ? setCustom(true) : setModel(event.target.value))}>
+                    {list.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                    <option value="__custom">Other model…</option>
+                  </select>
+                )
+              }
+            </Field>
+            <Field label={`Creativity (temperature ${temperature.toFixed(1)})`} hint="Lower is more precise; 0.2 suits business data.">
+              {(props) => <input {...props} type="range" min={0} max={1} step={0.1} value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} className="mt-2 w-full accent-[var(--c-blue)]" />}
+            </Field>
+          </div>
+        </section>
+        <section className="max-w-[760px] space-y-3">
+          <h3 className="text-[14px] font-semibold">Assistant</h3>
+          <label className="card flex items-center gap-3 p-3.5">
+            <Toggle checked={assistant} onChange={setAssistant} label="Assistant on" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium">Assistant available to everyone</span>
+              <span className="block text-[12px] text-fg-3">The floating button and the Assistant page. Each person sees only their own chats.</span>
+            </span>
+          </label>
+          <Field label="Before changing data">
+            {() => (
+              <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+                {(
+                  [
+                    ['confirm_all', 'Ask before every change', 'You confirm each change on a card. Recommended.'],
+                    ['confirm_significant', 'Ask only for money, stock and cancellations', 'Contact details, notes and follow-ups are saved straight away; orders, purchases, receipts, deliveries and cancellations still wait for you.'],
+                  ] as const
+                ).map(([value, title, body]) => (
+                  <button key={value} onClick={() => setPolicy(value)} className={cn('card p-3 text-left transition', policy === value && 'ring-2 ring-blue')}>
+                    <div className="text-[13px] font-semibold">{title}</div>
+                    <div className="mt-0.5 text-[12px] text-fg-3">{body}</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </Field>
-        </div>
-        {test.data ? <Notice tone={test.data.ok ? 'ok' : 'bad'}>{test.data.ok ? `${test.data.model} answered: “${test.data.reply}”` : test.data.reply}</Notice> : test.error ? <Notice tone="bad">{errorText(test.error)}</Notice> : null}
+        </section>
+        {test.data ? <Notice tone="ok">{`${test.data.model} answered: “${test.data.reply}”`}</Notice> : test.error ? <Notice tone="bad">{errorText(test.error)}</Notice> : null}
       </div>
-      <footer className="flex shrink-0 items-center gap-2 border-t border-white/7 px-6 py-3.5">
-        <Button icon={<Wand2 size={14} />} busy={test.isPending} onClick={() => test.mutate(undefined)} disabled={data.models.length === 0}>
+      <footer className="flex shrink-0 items-center gap-2 border-t border-white/7 py-3.5 pr-24 pl-6 max-md:pr-20">
+        <Button icon={<Wand2 size={14} />} busy={test.isPending} onClick={() => test.mutate(undefined)} disabled={dirty || status.data?.mode !== 'live'}>
           Test connection
         </Button>
+        {dirty ? <span className="text-[12px] text-fg-3">Save before testing.</span> : null}
         <span className="flex-1" />
-        <Button kind="primary" busy={save.isPending} disabled={model === String(ai.config.model ?? '')} onClick={() => save.mutate(undefined)}>
+        <Button kind="primary" busy={save.isPending} disabled={!dirty || !model} onClick={() => saveAndRefresh()}>
           Save
         </Button>
       </footer>
+    </>
+  )
+}
+
+function ActivityPane() {
+  const data = useQuery({ queryKey: ['ai', 'activity'], queryFn: aiApi.activity, refetchInterval: 15_000 })
+  return (
+    <>
+      <PaneHeader icon={<History size={20} />} title="Assistant activity" body="Every tool the assistant ran: who asked, which part of the app it used, and how it ended." />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {data.isPending ? (
+          <Spinner />
+        ) : !data.data?.length ? (
+          <Empty title="Nothing yet" body="When the assistant reads or changes anything, it is recorded here." />
+        ) : (
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>User</th>
+                <th>Tool</th>
+                <th>Route</th>
+                <th>Result</th>
+                <th className="r">Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.data.map((row) => (
+                <tr key={row.id}>
+                  <td className="text-[12px] text-fg-3">{fmtAgo(row.created_at)}</td>
+                  <td className="text-[12.5px]">{row.user ?? '—'}</td>
+                  <td className="text-[12.5px] font-medium">{row.tool.replace(/_/g, ' ')}</td>
+                  <td className="font-mono text-[11.5px] text-fg-3">{row.route}</td>
+                  <td className="max-w-[320px] truncate text-[12.5px]">{row.ok ? <Badge tone="sky" dot>OK</Badge> : <span title={row.error ?? ''}><Badge tone="bad" dot>{row.status_code ?? 'Error'}</Badge> <span className="text-fg-3">{row.error}</span></span>}</td>
+                  <td className="r num text-[12px] text-fg-3">{row.duration_ms} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </>
   )
 }

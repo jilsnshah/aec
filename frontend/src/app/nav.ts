@@ -1,40 +1,58 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  BarChart3,
   Boxes,
   Building2,
   ClipboardList,
   Home,
+  ListChecks,
   MessageSquareQuote,
   PackageCheck,
   PackageOpen,
   PackagePlus,
-  Settings2,
   ReceiptText,
+  Settings2,
+  ShoppingBag,
+  Sparkles,
+  Truck,
   Users,
+  Warehouse,
 } from 'lucide-react'
+
+export type Group = 'main' | 'sales' | 'buying' | 'stock' | 'settings'
 
 export interface Module {
   to: string
   label: string
   short: string
   icon: LucideIcon
-  group: 'main' | 'sales' | 'buying' | 'stock' | 'settings'
+  group: Group
   keywords?: string
+  hint?: string
 }
 
 /** The modules, in the order the business works: sell, buy, keep stock. */
 export const MODULES: Module[] = [
   { to: '/', label: 'Home', short: 'Home', icon: Home, group: 'main', keywords: 'dashboard overview' },
+  { to: '/assistant', label: 'Assistant', short: 'Assistant', icon: Sparkles, group: 'main', keywords: 'ai chat ask gemini' },
+  { to: '/insights', label: 'Insights', short: 'Insights', icon: BarChart3, group: 'main', keywords: 'analytics reports ageing reorder conversion' },
   { to: '/fulfilment', label: 'Fulfilment', short: 'Fulfilment', icon: PackageCheck, group: 'main', keywords: 'deliver ready short on order' },
-  { to: '/enquiries', label: 'Enquiries', short: 'Enquiries', icon: MessageSquareQuote, group: 'sales', keywords: 'quote deal' },
-  { to: '/orders', label: 'Sales Orders', short: 'Orders', icon: ReceiptText, group: 'sales', keywords: 'so sell' },
-  { to: '/customers', label: 'Customers', short: 'Customers', icon: Users, group: 'sales', keywords: 'client buyer' },
-  { to: '/purchase-orders', label: 'Purchase Orders', short: 'Purchases', icon: ClipboardList, group: 'buying', keywords: 'po buy' },
-  { to: '/receipts', label: 'Goods Receipts', short: 'Receipts', icon: PackageOpen, group: 'buying', keywords: 'grn arrival receive' },
-  { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor' },
-  { to: '/products', label: 'Products', short: 'Products', icon: Boxes, group: 'stock', keywords: 'sku item stock' },
-  { to: '/stock-in', label: 'Stock In', short: 'Stock in', icon: PackagePlus, group: 'stock', keywords: 'receipt without po adhoc' },
-  { to: '/integrations', label: 'Integrations', short: 'Settings', icon: Settings2, group: 'settings', keywords: 'ai whatsapp email tally settings' },
+  { to: '/tasks', label: 'Follow-ups', short: 'Follow-ups', icon: ListChecks, group: 'main', keywords: 'tasks reminders to do' },
+  { to: '/enquiries', label: 'Enquiries', short: 'Enquiries', icon: MessageSquareQuote, group: 'sales', keywords: 'quote deal lead', hint: 'Quotes and leads' },
+  { to: '/orders', label: 'Sales Orders', short: 'Orders', icon: ReceiptText, group: 'sales', keywords: 'so sell', hint: 'What customers bought' },
+  { to: '/customers', label: 'Customers', short: 'Customers', icon: Users, group: 'sales', keywords: 'client buyer', hint: 'Who buys from you' },
+  { to: '/purchase-orders', label: 'Purchase Orders', short: 'Purchases', icon: ClipboardList, group: 'buying', keywords: 'po buy', hint: 'What you ordered' },
+  { to: '/receipts', label: 'Goods Receipts', short: 'Receipts', icon: PackageOpen, group: 'buying', keywords: 'grn arrival receive', hint: 'Goods that arrived' },
+  { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor', hint: 'Who you buy from' },
+  { to: '/products', label: 'Products', short: 'Products', icon: Boxes, group: 'stock', keywords: 'sku item stock', hint: 'Catalogue and stock' },
+  { to: '/stock-in', label: 'Stock In', short: 'Stock in', icon: PackagePlus, group: 'stock', keywords: 'receipt without po adhoc', hint: 'Stock without a purchase order' },
+  { to: '/integrations', label: 'Settings', short: 'Settings', icon: Settings2, group: 'settings', keywords: 'ai gemini whatsapp email tally integrations' },
+]
+
+export const GROUPS: { key: Group; label: string; icon: LucideIcon }[] = [
+  { key: 'sales', label: 'Sales', icon: ShoppingBag },
+  { key: 'buying', label: 'Buying', icon: Truck },
+  { key: 'stock', label: 'Stock', icon: Warehouse },
 ]
 
 export const moduleFor = (pathname: string) =>

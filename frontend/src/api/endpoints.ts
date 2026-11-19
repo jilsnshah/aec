@@ -90,6 +90,15 @@ export const api = {
     create: (body: T.StockReceiptCreate) => http.post<T.StockReceiptResult>('/api/stock-receipts', body),
   },
 
+  tasks: {
+    list: (query: { status?: string; due?: string; search?: string; customer_id?: string; enquiry_id?: string; sales_order_id?: string; supplier_id?: string; purchase_order_id?: string; assignee_id?: string; limit?: number } = {}) =>
+      http.get<T.Page<T.TaskOut>>('/api/tasks', query),
+    counts: () => http.get<T.TaskCounts>('/api/tasks/counts'),
+    assignees: () => http.get<T.UserRef[]>('/api/tasks/assignees'),
+    create: (body: T.TaskCreate) => http.post<T.TaskOut>('/api/tasks', body),
+    update: (id: string, body: T.TaskUpdate) => http.patch<T.TaskOut>(`/api/tasks/${id}`, body),
+  },
+
   integrations: {
     get: () => http.get<T.IntegrationsOut>('/api/integrations'),
     update: (name: string, body: T.IntegrationUpdate) => http.put<T.IntegrationOut>(`/api/integrations/${name}`, body),

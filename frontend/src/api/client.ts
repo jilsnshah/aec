@@ -51,7 +51,9 @@ export async function request<T>(method: string, path: string, options: { query?
   if (!response.ok) {
     let detail: unknown
     try {
-      detail = (await response.json()).detail
+      const body = await response.json()
+      // Validation errors arrive as {detail}; business-rule errors as {code, message, details}.
+      detail = body?.detail ?? body
     } catch {
       detail = undefined
     }

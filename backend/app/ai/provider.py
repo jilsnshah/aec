@@ -164,6 +164,10 @@ class ScriptedModel(BaseChatModel):
         last = messages[-1]
         if isinstance(last, HumanMessage):
             text = _text(last).lower()
+            if "[event, from the system" in text:
+                ok = "succeeded" in text
+                return AIMessage(content="**Development mode** — the change you confirmed {}. (Scripted reply; the result "
+                                         "above comes from the application.)".format("was made" if ok else "failed; nothing was changed"))
             if re.search(r"(create|add|make|schedule).{0,20}follow", text):
                 return _call("create_follow_up", {
                     "title": "Call back about the latest quote",

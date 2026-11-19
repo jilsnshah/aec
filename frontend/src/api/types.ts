@@ -125,3 +125,9 @@ export type TallySyncOut = Full<S['TallySyncOut']>
 export type TallyTestOut = Full<S['TallyTestOut']>
 export type TemplateStatusOut = Full<S['TemplateStatusOut']>
 export type Page<T> = { items: T[]; total: number; limit: number; offset: number }
+
+export type TaskOut = Full<S['TaskOut']>
+export type TaskCreate = S['TaskCreate']
+export type TaskUpdate = S['TaskUpdate']
+export type TaskCounts = Full<S['TaskCounts']>
+export type UserRef = Full<S['UserRef']>

@@ -119,3 +119,23 @@ close them.
    context.
 5. Insights page and alerts in the app; follow-ups on Home and records.
 6. Settings → AI; docs; full regression (pytest + browser end-to-end).
+
+## 6. Status (19 November 2026)
+
+Delivered on branch `frontend-v2`:
+
+- Milestones 1–6 above: insights service and page, alerts bell, follow-ups
+  (model, API, page), the assistant backend (60 operation tools + analysis and
+  output tools, confirmations, audit, reports, attachments, streaming) and its
+  interface (floating panel, full page with history), Settings → AI · Gemini,
+  and grouped navigation (Sales, Buying, Stock menus).
+- Tests: backend suite (including `tests/test_ai.py` with a scripted model
+  driving the real tools, and `tests/test_insights.py`) and the browser
+  end-to-end suite pass.
+
+Waiting on the Gemini API key to evaluate live answer quality; the
+architecture does not change when it is added.
+
+Next candidates: payments and receivables (not in the data model yet),
+scheduled briefings by email/WhatsApp, bulk actions from tables, and richer
+seed history so trends and forecasts have more to work with.

@@ -553,6 +553,56 @@
     padding-right: 18px;
   }
 
+  /* Assistant replies */
+  .prose-chat {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--color-fg);
+    user-select: text;
+  }
+  .prose-chat > * + * {
+    margin-top: 0.6em;
+  }
+  .prose-chat h1,
+  .prose-chat h2,
+  .prose-chat h3 {
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin-top: 0.9em;
+  }
+  .prose-chat h1 { font-size: 17px; }
+  .prose-chat h2 { font-size: 15.5px; }
+  .prose-chat h3 { font-size: 14px; }
+  .prose-chat ul,
+  .prose-chat ol {
+    padding-left: 1.25em;
+  }
+  .prose-chat ul { list-style: disc; }
+  .prose-chat ol { list-style: decimal; }
+  .prose-chat li + li { margin-top: 0.2em; }
+  .prose-chat li::marker { color: var(--color-fg-3); }
+  .prose-chat strong { font-weight: 650; }
+  .prose-chat code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--c-tint) 7%, transparent);
+  }
+  .prose-chat blockquote {
+    border-left: 3px solid var(--color-peri);
+    padding-left: 0.8em;
+    color: var(--color-fg-2);
+  }
+  .prose-chat th,
+  .prose-chat td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--hair);
+  }
+  .prose-chat th { font-weight: 500; color: var(--color-fg-3); }
+  .prose-chat hr { border-color: var(--hair); }
+
   .skeleton {
     border-radius: 6px;
     background: linear-gradient(90deg, color-mix(in oklab, var(--c-tint) 5%, transparent) 0%, color-mix(in oklab, var(--c-tint) 10%, transparent) 40%, color-mix(in oklab, var(--c-tint) 5%, transparent) 80%);

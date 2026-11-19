@@ -10,9 +10,12 @@ import { cn } from '@/lib/cn'
 import { Avatar, Button, Tip } from '@/ui/core'
 import { Menu } from '@/ui/overlays'
 import { Backdrop } from '@/ui/art'
+import { AssistantDock } from '@/features/assistant/Assistant'
+import { AssistantProvider, useAssistant } from '@/features/assistant/store'
+import { AlertsBell } from '@/features/insights/AlertsBell'
 import { useAuth } from './auth'
 import { Wordmark } from './Logo'
-import { MODULES, moduleFor, type Module } from './nav'
+import { GROUPS, MODULES, moduleFor, type Module } from './nav'
 import { PasswordSheet } from './PasswordSheet'
 import { useTheme } from './theme'
 
@@ -41,16 +44,20 @@ export function Shell() {
   }, [])
 
   return (
-    <div className="relative isolate flex h-full flex-col">
-      <Backdrop />
-      <TopBar onSearch={() => setPalette(true)} />
-      <main className="min-h-0 min-w-0 flex-1">
-        <Suspense fallback={null}>
-          <Page />
-        </Suspense>
-      </main>
-      <Palette open={palette} onClose={() => setPalette(false)} />
-    </div>
+    <AssistantProvider>
+      <div className="relative isolate flex h-full flex-col">
+        <Backdrop />
+        <TopBar onSearch={() => setPalette(true)} />
+        <main className="min-h-0 min-w-0 flex-1">
+          <Suspense fallback={null}>
+            <Page />
+          </Suspense>
+        </main>
+        <Palette open={palette} onClose={() => setPalette(false)} />
+        <AssistantDock />
+        <AssistantShortcut />
+      </div>
+    </AssistantProvider>
   )
 }
 
@@ -65,6 +72,22 @@ function Page() {
   )
 }
 
+/** ⌘J / Ctrl J opens or closes the assistant from anywhere. */
+function AssistantShortcut() {
+  const { open, setOpen } = useAssistant()
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault()
+        setOpen(!open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, setOpen])
+  return null
+}
+
 const round = 'pane grid size-10 shrink-0 place-items-center rounded-full! text-fg-2 transition hover:text-fg active:scale-95'
 
 function TopBar({ onSearch }: { onSearch: () => void }) {
@@ -73,7 +96,7 @@ function TopBar({ onSearch }: { onSearch: () => void }) {
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
   return (
     <header className="relative z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 px-6 pt-4 pb-4 max-md:px-3 max-md:pt-3 max-md:pb-2">
-      <div className="w-[190px] shrink-0 max-2xl:w-auto max-2xl:pr-1 max-[1600px]:[&_span]:hidden max-[1439px]:[&_span]:inline">
+      <div className="w-[190px] shrink-0 max-2xl:w-auto max-2xl:pr-1 max-[1600px]:[&_span]:hidden max-[1279px]:[&_span]:inline">
         <Wordmark />
       </div>
       <Nav />
@@ -83,8 +106,9 @@ function TopBar({ onSearch }: { onSearch: () => void }) {
             <Search size={17} />
           </button>
         </Tip>
+        <AlertsBell className={round} />
         <Tip label={theme === 'dark' ? 'Light mode' : 'Dark mode'} side="bottom">
-          <button onClick={toggle} className={cn(round, 'max-[1600px]:hidden max-[1439px]:grid')} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <button onClick={toggle} className={cn(round, 'max-[1600px]:hidden max-[1279px]:grid')} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <motion.span key={theme} initial={{ rotate: -60, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
               {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </motion.span>
@@ -129,34 +153,47 @@ function AccountMenu() {
   )
 }
 
-/** The modules as pills; the black pill glides to the open one. */
+/** The modules as pills. Sales, buying and stock pages sit in menus so the
+ *  bar stays one row; the active pill glides to whatever is open. */
 function Nav() {
   const summary = useSummary()
+  const location = useLocation()
   const open = summary.data?.open_orders ?? 0
   const short = Number(summary.data?.total_unallocated_quantity ?? 0) > 0
+  const current = moduleFor(location.pathname)
+  const main = MODULES.filter((module) => module.group === 'main')
+  const settings = MODULES.filter((module) => module.group === 'settings')
   return (
     <nav
-      className="no-scrollbar mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full bg-ink-850/70 p-1 shadow-pane backdrop-blur-xl max-[1439px]:order-last max-[1439px]:mx-0 max-[1439px]:w-full"
+      className="no-scrollbar mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-full bg-ink-850/70 p-1 shadow-pane backdrop-blur-xl max-[1279px]:order-last max-[1279px]:mx-0 max-[1279px]:w-full"
       aria-label="Modules"
     >
-      {MODULES.map((module) => (
+      {main.slice(0, 4).map((module) => (
         <NavItem key={module.to} module={module} badge={module.to === '/fulfilment' && open > 0 ? { count: open, alert: short } : undefined} />
+      ))}
+      {GROUPS.map((group) => (
+        <GroupPill key={group.key} group={group} current={current} />
+      ))}
+      {[...main.slice(4), ...settings].map((module) => (
+        <NavItem key={module.to} module={module} />
       ))}
     </nav>
   )
 }
 
+const pill = 'group relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-[11px] text-[12.5px] font-medium whitespace-nowrap min-[1600px]:px-3.5 min-[1600px]:text-[13px]'
+
+function ActivePill() {
+  return <motion.span layoutId="nav" className="brand-fill absolute inset-0 rounded-full" transition={{ type: 'spring', stiffness: 480, damping: 40 }} />
+}
+
 function NavItem({ module, badge }: { module: Module; badge?: { count: number; alert: boolean } }) {
   const Icon = module.icon
   return (
-    <NavLink
-      to={module.to}
-      end={module.to === '/'}
-      className="group relative flex h-9 shrink-0 items-center gap-1.5 rounded-full px-[10px] text-[12.5px] font-medium whitespace-nowrap min-[1600px]:px-3.5 min-[1600px]:text-[13px]"
-    >
+    <NavLink to={module.to} end={module.to === '/'} className={pill}>
       {({ isActive }) => (
         <>
-          {isActive ? <motion.span layoutId="nav" className="brand-fill absolute inset-0 rounded-full" transition={{ type: 'spring', stiffness: 480, damping: 40 }} /> : null}
+          {isActive ? <ActivePill /> : null}
           <Icon size={15} strokeWidth={isActive ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', isActive ? 'text-on-brand' : 'text-fg-3 group-hover:text-fg')} />
           <span className={cn('relative transition-colors', isActive ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg')}>{module.short}</span>
           {badge ? (
@@ -167,6 +204,30 @@ function NavItem({ module, badge }: { module: Module; badge?: { count: number; a
         </>
       )}
     </NavLink>
+  )
+}
+
+function GroupPill({ group, current }: { group: (typeof GROUPS)[number]; current: Module }) {
+  const navigate = useNavigate()
+  const members = MODULES.filter((module) => module.group === group.key)
+  const active = current.group === group.key
+  const Icon = active ? current.icon : group.icon
+  return (
+    <Menu
+      align="start"
+      trigger={
+        <button className={pill} aria-label={`${group.label} menu`}>
+          {active ? <ActivePill /> : null}
+          <Icon size={15} strokeWidth={active ? 2.2 : 1.8} className={cn('relative shrink-0 transition-colors', active ? 'text-on-brand' : 'text-fg-3 group-hover:text-fg')} />
+          <span className={cn('relative transition-colors', active ? 'text-on-brand' : 'text-fg-2 group-hover:text-fg')}>{active ? current.short : group.label}</span>
+          <ChevronDown size={13} className={cn('relative -mr-0.5 transition-colors', active ? 'text-on-brand/70' : 'text-fg-4 group-hover:text-fg-3')} />
+        </button>
+      }
+      items={members.map((module) => {
+        const ModuleIcon = module.icon
+        return { label: module.label, icon: <ModuleIcon size={14} />, hint: module.hint, onSelect: () => navigate(module.to) }
+      })}
+    />
   )
 }
 

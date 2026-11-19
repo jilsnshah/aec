@@ -384,7 +384,9 @@ def inventory_health(session: Session, include_archived: bool = False) -> Dict[s
         rate_30 = float(sold_30.get(product.id, ZERO)) / 30
         # Weight the recent month more, so a product that just picked up shows it.
         rate = round(rate_30 * 0.6 + rate_90 * 0.4, 4) if (rate_30 or rate_90) else 0.0
-        cover_days = round(float(max(ZERO, free)) / rate, 1) if rate > 0 else None
+        # Cover counts everything bought and not yet sold: free stock plus what is
+        # on order and not already promised (the stock figure).
+        cover_days = round(max(0.0, float(position)) / rate, 1) if rate > 0 else None
         sold_at = last_sale.get(product.id)
         days_since_sale = (now - sold_at.astimezone(_zone())).days if sold_at else None
 

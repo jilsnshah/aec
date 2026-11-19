@@ -257,9 +257,10 @@ a per-customer roll-up, and the delivery action itself.
 ## The interface
 
 AEC Desk is built as a desktop application, not a scrolling website. The
-window never scrolls as a page: a top bar carries the modules as pills (a
-black pill marks the open one), search, the light/dark switch, the **New**
-menu and the account menu, and every module is a fixed workspace of rounded
+window never scrolls as a page: a top bar carries the modules as pills —
+Home, Assistant, Insights, Fulfilment, then **Sales**, **Buying** and **Stock**
+menus, Follow-ups and Settings — with search, the alerts bell, the light/dark
+switch, the **New** menu and the account menu, and every module is a fixed workspace of rounded
 cards. Only lists inside cards scroll. See `frontend/DESIGN.md`
 for the full plan.
 
@@ -772,12 +773,9 @@ In development the Vite server forwards `/api` to the backend
 
 **Settings → Integrations** turns customer messages into sales enquiries.
 
-- **AI**: on/off and the model, with a connection test. Users never see or set
-  credentials: the server holds them in environment variables, and only models
-  whose provider is configured are offered. `VERTEX_API_KEY` (Vertex AI
-  express key) or `VERTEX_PROJECT` (Application Default Credentials, for local
-  development) enables Gemini — 3.1 Flash-Lite first, the cheapest, which read
-  14 of 14 test messages correctly; `ANTHROPIC_API_KEY` enables Claude.
+- **AI · Gemini**: the Gemini API key (encrypted, write-only), the model, the
+  assistant's change policy and temperature, a connection test, and the switch
+  that lets the AI read messages into enquiries. See **The assistant** below.
 - **WhatsApp**: on/off, phone number ID, business account ID, verify token and
   an optional app secret (when set, only requests signed by Meta are accepted).
   Copy the webhook URL into Meta for Developers → WhatsApp → Configuration and
@@ -787,7 +785,7 @@ In development the Vite server forwards `/api` to the backend
 
 Every message is recorded once (`inbound_messages`, keyed by the WhatsApp
 message id or the email Message-ID) and handed to the **enquiry agent**: a
-LangChain ReAct agent (`langchain.agents.create_agent`) on Claude. Its only job
+LangChain ReAct agent (`langchain.agents.create_agent`) on Gemini. Its only job
 is to decide whether a message is a sales enquiry and, if so, record it. It
 never replies to the customer and never asks questions. Its four tools wrap
 the existing services, so no business logic is duplicated:
@@ -811,6 +809,88 @@ changing it makes saved credentials unreadable (they must be entered again).
 Code: `app/services/ai_agent.py` (agent and tools), `whatsapp.py` (webhook),
 `email_inbox.py` (IMAP and the background poller), `inbound.py` (the shared
 pipeline), `integration_settings.py`; API in `app/api/integrations.py`.
+
+## The assistant
+
+A chat assistant that understands the business, answers from live data, makes
+tables, charts and reports, reads documents, and does the work in the app —
+with you confirming every change. Open it with the round button at the bottom
+right of any page (or **⌘J / Ctrl J**), or full screen from **Assistant** in the
+top bar. Design and reasoning: [`docs/AI-PLATFORM.md`](docs/AI-PLATFORM.md).
+
+### Connect Gemini
+
+1. Create an API key at <https://aistudio.google.com/apikey>.
+2. In the app: **Settings → AI · Gemini**, paste the key into **Gemini API key**,
+   pick a model (the list is read from your key; *Gemini 3.8 Flash* is a good
+   default for analysis) and **Save**.
+3. Press **Test connection**. The assistant is live as soon as it answers.
+
+The key is encrypted with `SECRET_KEY`, stored on the server, and never sent to
+the browser, written to logs or returned by the API (only "ends in 1234").
+Remove it with **Remove**. Without a key everything else in the app works and
+the assistant explains how to connect. A server can instead use its own
+Vertex AI credentials (`VERTEX_API_KEY`, or `VERTEX_PROJECT` with Application
+Default Credentials); a key saved in Settings takes precedence.
+
+For interface work without a key, start the API with `AI_DEV_MODE=scripted`:
+the assistant then runs a fixed, clearly labelled script that calls the real
+tools (it is never used when a key is configured).
+
+### What it can do
+
+- **Answer from data** across products, stock, customers, enquiries, orders,
+  deliveries, suppliers, purchases, receipts, follow-ups, inbound messages and
+  Tally — about 60 tools, one per API route.
+- **Analyse**: period comparisons, stock ageing and capital at risk, reorder
+  quantities, slow and dead stock, enquiry conversion by source and stale
+  quotes, customer value and dormant customers, supplier lead time, fill and
+  on-time rates — and exact calculations over any result (filter, group, sum).
+- **Show**: sortable tables with links to records, and bar, line, area,
+  stacked, horizontal and pie charts, drawn in the chat.
+- **Report**: PDF, Excel (formatted sheets with native charts) and CSV files,
+  built only from real query results.
+- **Read documents**: attach PDFs, photos, spreadsheets or text (drag, paste or
+  the paperclip). Invoices and bills are read by Gemini; spreadsheets become
+  data it can check against your records or turn into entries.
+- **Act**: create and update customers, suppliers, products, enquiries, orders,
+  purchase orders, receipts, deliveries and follow-ups, convert or lose
+  enquiries, cancel orders… Each change appears as a card with what will
+  happen, resolved to names and numbers; nothing runs until you press
+  **Confirm**, and the reply reports exactly what the app answered.
+
+### How it stays safe
+
+- **Same rules as the screens.** Each tool calls the app's own REST route
+  in-process, as the signed-in user (their session is passed along), so every
+  validation, permission, transaction and Tally side effect is identical.
+- **Confirmation.** Changes are proposals until confirmed, and run once only.
+  Settings can let routine edits (contacts, notes, follow-ups) through without
+  asking; money, stock and cancellations always wait.
+- **Grounded output.** Tables, charts and reports are built from stored tool
+  results, never from numbers the model writes.
+- **Audit.** Every tool call is logged with user, route, result and duration
+  (**Settings → Assistant activity**). Conversations are private to each user.
+
+Code: `app/ai/` (`agent.py` runtime and prompt, `catalog.py` the tool list,
+`executor.py` in-process calls, `actions.py` confirmations, `outputs.py` tables
+and charts, `reports.py` files, `documents.py` attachments, `provider.py`
+Gemini), API in `app/api/ai.py`; interface in `frontend/src/features/assistant`.
+
+## Insights and follow-ups
+
+**Insights** (top bar) turns the same data into decisions: this period against
+the last; stock health with age buckets, days of cover, capital at risk and
+reorder quantities; sales by product, customer or month; the enquiry funnel
+with stale quotes and one-click follow-ups; customer value and concentration;
+supplier reliability and late purchase orders. The **bell** lists what needs
+attention now. Figures come from `/api/insights/*` (`app/services/insights.py`),
+which the assistant uses too, so the two always agree.
+
+**Follow-ups** are dated tasks — call a customer, chase a quote, push a
+supplier — linked to the customer, enquiry, order, supplier or purchase order,
+with priority and an owner. Overdue follow-ups and quotes left untouched for a
+week raise alerts.
 
 ## Tally and invoices on WhatsApp
 

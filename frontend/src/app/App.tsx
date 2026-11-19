@@ -4,6 +4,9 @@ import { SignIn } from '@/features/auth/SignIn'
 import { AuthGate } from './auth'
 import { Shell } from './Shell'
 
+const AssistantPage = lazy(() => import('@/features/assistant/Assistant').then((module) => ({ default: module.AssistantPage })))
+const Insights = lazy(() => import('@/features/insights/Insights').then((module) => ({ default: module.Insights })))
+const Tasks = lazy(() => import('@/features/tasks/Tasks').then((module) => ({ default: module.Tasks })))
 const Customers = lazy(() => import('@/features/customers/Customers').then((module) => ({ default: module.Customers })))
 const Enquiries = lazy(() => import('@/features/enquiries/Enquiries').then((module) => ({ default: module.Enquiries })))
 const Fulfilment = lazy(() => import('@/features/fulfilment/Fulfilment').then((module) => ({ default: module.Fulfilment })))
@@ -22,6 +25,9 @@ export function App() {
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<Home />} />
+          <Route path="assistant/:id?" element={<AssistantPage />} />
+          <Route path="insights" element={<Insights />} />
+          <Route path="tasks" element={<Tasks />} />
           <Route path="fulfilment" element={<Fulfilment />} />
           <Route path="enquiries/:id?" element={<Enquiries />} />
           <Route path="orders/:id?" element={<Orders />} />
