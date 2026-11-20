@@ -68,6 +68,8 @@ def trigger(session: Session, flow: str, event: str, reference_type: str, refere
     """Run the flow's "Book transport" step for a document, if the step is on and set to this moment."""
     from . import transporters
 
+    if STEP[flow] in automation.PARKED:  # transport is booked by hand for now
+        return None
     data = automation.step(session, STEP[flow])
     if data.get("mode") == "off":
         return None
@@ -199,6 +201,8 @@ def settle(session: Session, booking: TransportBooking, answer: str, amount: Opt
 
 def handle_reply(session: Session, transporter: Transporter, text: str) -> Optional[Dict[str, Any]]:
     """A WhatsApp message from a transporter: the answer to their latest request."""
+    if automation.PARKED >= set(STEP.values()):  # parked: nobody asked a transporter, so nothing to read
+        return None
     booking = session.execute(select(TransportBooking).where(
         TransportBooking.transporter_id == transporter.id, TransportBooking.status == "requested").order_by(TransportBooking.created_at.desc())).scalars().first()
     if booking is None:

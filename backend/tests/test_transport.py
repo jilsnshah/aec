@@ -193,6 +193,9 @@ def _add_book_step(client, flow, **data):
 
 
 def test_tai_books_transport_when_order_placed(client, db, session_factory, monkeypatch, make_product, make_customer):
+    from app.services import automation as _automation
+
+    monkeypatch.setattr(_automation, "PARKED", set())  # the automatic booking is parked in the app; still keep it working
     from app.models import OutboundMessage, TransportBooking
     from app.services import inbound, transport_automation
 
@@ -228,6 +231,9 @@ def uuid_of(row):
 
 
 def test_pai_calls_transporter_for_pickup(client, db, session_factory, monkeypatch, make_product, make_supplier):
+    from app.services import automation as _automation
+
+    monkeypatch.setattr(_automation, "PARKED", set())  # the automatic booking is parked in the app; still keep it working
     from app.models import TransportBooking
     from app.services import inbound
     from app.voice import outbound
@@ -243,3 +249,19 @@ def test_pai_calls_transporter_for_pickup(client, db, session_factory, monkeypat
     booking = db.execute(select(TransportBooking)).scalars().one()
     assert booking.status == "requested" and booking.requested_by == "pai" and booking.purpose == "purchase"
     assert calls == [("9000000003", "book", {"booking": str(booking.id)})]
+
+
+def test_transport_booking_is_parked(client, db, session_factory, monkeypatch, make_product, make_customer):
+    """Transport is booked by hand for now: no automatic request, no step in the editor."""
+    from app.models import TransportBooking
+    from app.services import inbound
+
+    monkeypatch.setattr(inbound, "session_factory", session_factory)
+    client.post("/api/transporters", json={"name": "Cheap Lines", "phone": "9000000001", "rates": [{"basis": "trip", "rate": "800"}]})
+    cement = make_product("Cement", opening_stock=50, mrp="400")
+    buyer = make_customer("Builder")
+    assert client.post("/api/orders", json={"customer_id": str(buyer.id), "items": [{"product_id": str(cement.id), "quantity_ordered": "5"}]}).status_code == 201
+    db.expire_all()
+    assert db.execute(select(TransportBooking)).scalars().all() == []
+    steps = {s["key"] for s in client.get("/api/automation/library").json()["steps"]}
+    assert "sales.book_transport" not in steps and "purchase.book_transport" not in steps

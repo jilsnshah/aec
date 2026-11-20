@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Spinner } from '@/ui/core'
-import { HeaderArt } from '@/ui/art'
 
 const MarketingHome = lazy(() => import('./Home').then((m) => ({ default: m.MarketingHome })))
 const Campaigns = lazy(() => import('./Campaigns').then((m) => ({ default: m.Campaigns })))
@@ -45,32 +44,30 @@ export function Marketing() {
   const current = VIEWS.find((v) => v.key === view) ?? VIEWS[0]
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 pt-1 max-md:gap-2">
-      <header className="pane relative mx-6 flex shrink-0 flex-col gap-3 overflow-hidden px-5 pt-4 pb-3 max-md:mx-2">
-        <HeaderArt seed={21} />
-        <div className="relative flex items-center gap-3">
-          <span className="icon-tile size-11">
-            <current.icon size={20} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[20px] font-semibold tracking-[-0.02em]">{current.key ? current.label : 'Marketing'}</h1>
-            <p className="truncate text-[12.5px] text-fg-3">{current.hint}</p>
-          </div>
-        </div>
-        <nav className="no-scrollbar relative -mx-1 flex gap-1 overflow-x-auto" aria-label="Marketing sections">
-          {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              onClick={() => navigate(v.key ? `/marketing/${v.key}` : '/marketing')}
-              aria-current={v.key === current.key ? 'page' : undefined}
-              className={cn(
-                'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition-colors',
-                v.key === current.key ? 'brand-fill text-on-brand' : 'text-fg-3 hover:bg-white/7 hover:text-fg',
-              )}
-            >
-              <v.icon size={14} />
-              {v.label}
-            </button>
-          ))}
+      <header className="pane relative mx-6 flex shrink-0 items-center gap-3 overflow-hidden py-2 pr-2 pl-3 max-md:mx-2">
+        <span className="icon-tile relative size-9 shrink-0" title={current.hint}>
+          <Megaphone size={17} />
+        </span>
+        <h1 className="relative shrink-0 text-[16px] font-semibold tracking-[-0.01em] max-sm:hidden">Marketing</h1>
+        <nav className="no-scrollbar relative flex min-w-0 flex-1 gap-0.5 overflow-x-auto sm:justify-end" aria-label="Marketing sections">
+          {VIEWS.map((v) => {
+            const active = v.key === current.key
+            return (
+              <button
+                key={v.key}
+                onClick={() => navigate(v.key ? `/marketing/${v.key}` : '/marketing')}
+                aria-current={active ? 'page' : undefined}
+                title={`${v.label}: ${v.hint}`}
+                className={cn(
+                  'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition-colors',
+                  active ? 'brand-fill text-on-brand' : 'text-fg-3 hover:bg-white/7 hover:text-fg',
+                )}
+              >
+                <v.icon size={14} />
+                <span className={cn(!active && 'hidden lg:inline')}>{v.label}</span>
+              </button>
+            )
+          })}
         </nav>
       </header>
       <div className="min-h-0 flex-1">

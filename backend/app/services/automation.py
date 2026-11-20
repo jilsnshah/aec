@@ -127,6 +127,9 @@ LIBRARY: List[Dict[str, Any]] = [
           "Money leaves the business: always a person, after order, receipt and bill agree.", modes=("approval",)),
 ]
 LIBRARY_BY_KEY = {s["key"]: s for s in LIBRARY}
+#: Steps switched off for now: transport is booked by hand (Buying → Transporters).
+#: They are hidden from the flow editor, dropped from saved flows and never run.
+PARKED = {"sales.book_transport", "purchase.book_transport"}
 
 DEFAULT_SEQUENCE = {
     "sales": ["sales.trigger_incoming", "sales.identify", "sales.understand", "sales.check_stock", "sales.price", "sales.send_quote",
@@ -180,6 +183,7 @@ def _validate(key: str, flow: Dict[str, Any]) -> Dict[str, Any]:
     edges = flow.get("edges") or []
     if not isinstance(nodes, list) or not isinstance(edges, list):
         raise ValidationError("A flow needs nodes and edges.")
+    nodes, edges = _without_parked(nodes, edges)
     if len(nodes) > 80:
         raise ValidationError("A flow can have at most 80 steps.")
     ids = set()
@@ -227,11 +231,32 @@ def _validate(key: str, flow: Dict[str, Any]) -> Dict[str, Any]:
     return {"key": key, "name": "Sales" if key == "sales" else "Purchase", "nodes": clean_nodes, "edges": clean_edges}
 
 
+def _without_parked(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]):
+    """Drop parked steps, joining what came before each one to what came after."""
+    parked = {n.get("id") for n in nodes if (n.get("data") or {}).get("step") in PARKED}
+    if not parked:
+        return nodes, edges
+    edges = list(edges)
+    for node_id in parked:
+        into = [e["source"] for e in edges if e.get("target") == node_id]
+        out = [e["target"] for e in edges if e.get("source") == node_id]
+        edges = [e for e in edges if node_id not in (e.get("source"), e.get("target"))]
+        known = {(e["source"], e["target"]) for e in edges}
+        for a in into:
+            for b in out:
+                if a != b and (a, b) not in known:
+                    edges.append({"id": "{}-{}".format(a, b), "source": a, "target": b})
+                    known.add((a, b))
+    return [n for n in nodes if n.get("id") not in parked], edges
+
+
 def get(session: Session, key: str) -> Dict[str, Any]:
     if key not in DEFAULT_SEQUENCE:
         raise NotFoundError("No flow called {}.".format(key))
     row = session.get(AutomationFlow, key)
     flow = row.flow if row is not None else _defaults_from_settings(session, default_flow(key))
+    nodes, edges = _without_parked(flow.get("nodes") or [], flow.get("edges") or [])
+    flow = {**flow, "nodes": nodes, "edges": edges}
     return {**flow, "updated_at": row.updated_at if row else None, "updated_by": row.updated_by if row else None, "customised": row is not None}
 
 
@@ -346,4 +371,4 @@ def within_limits(data: Dict[str, Any], facts: Dict[str, Any]) -> Optional[str]:
 
 
 def library() -> Dict[str, Any]:
-    return {"steps": LIBRARY, "actors": ACTORS, "modes": MODES, "limit_fields": LIMIT_FIELDS}
+    return {"steps": [s for s in LIBRARY if s["key"] not in PARKED], "actors": ACTORS, "modes": MODES, "limit_fields": LIMIT_FIELDS}

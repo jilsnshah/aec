@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   Ban,
+  ChevronDown,
+  Info,
   CheckCircle2,
   Copy,
   ExternalLink,
@@ -31,7 +34,7 @@ import { Badge, Button, Empty, Field, Notice, SearchBox, Spinner } from '@/ui/co
 import { Menu, Segmented, Sheet, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
 import { Picker } from '@/ui/pickers'
 import { productOption, useProducts } from '@/ui/lines'
-import { FigureStrip, InspectorHeader, ListPane, ListRow, Section, SplitView } from '@/ui/split'
+import { ListPane, ListRow, Section, SplitView } from '@/ui/split'
 import { AudienceBuilder } from './Audiences'
 import { ChannelChips, FunnelBars, PhonePreview, PostPreview, StatusBadge, fromLocalInput, pct, toLocalInput } from './shared'
 
@@ -64,6 +67,7 @@ export function Campaigns() {
   return (
     <>
       <SplitView
+        listWidth={320}
         showDetail={Boolean(selected)}
         onBack={() => set({ id: null })}
         list={
@@ -123,6 +127,7 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const [tab, setTab] = useState('content')
   const [editing, setEditing] = useState(false)
   const [writing, setWriting] = useState(false)
+  const [checksOpen, setChecksOpen] = useState(false)
   const confirm = useConfirm()
   const submit = useAction(marketing.submit, { success: (c) => (c.status === 'review' ? 'Sent for approval' : 'Saved') })
   const approve = useAction(marketing.approve, { success: 'Approved: it goes out on schedule' })
@@ -136,8 +141,9 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
   if (!data.data) return <Empty title="Campaign not found" />
   const c = data.data
   const editable = EDITABLE.includes(c.status)
-  const blocks = (c.checks ?? []).filter((x) => x.level === 'block')
-  const warns = (c.checks ?? []).filter((x) => x.level === 'warn')
+  const unique = (c.checks ?? []).filter((x, i, all) => all.findIndex((y) => y.text === x.text) === i)
+  const blocks = unique.filter((x) => x.level === 'block')
+  const warns = unique.filter((x) => x.level === 'warn')
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
@@ -225,56 +231,71 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
     </div>
   )
 
+  const showChecks = ['draft', 'review', 'paused'].includes(c.status)
+  const stats = [
+    `${c.funnel.audience || c.audience_count || 0} people`,
+    c.funnel.sent ? `${c.funnel.sent} sent · ${pct(c.funnel.read, c.funnel.delivered)} read` : null,
+    c.instagram.reach ? `${c.instagram.reach.toLocaleString('en-IN')} reached` : null,
+    c.conversions.orders || c.conversions.enquiries ? `${c.conversions.orders} orders · ${c.conversions.enquiries} enquiries` : null,
+    c.conversions.revenue ? fmtMoneyRound(c.conversions.revenue) : null,
+  ].filter(Boolean)
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <InspectorHeader
-        eyebrow={`${c.objective_label} · ${c.code}`}
-        title={c.name}
-        badges={
-          <>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="shrink-0 border-b border-white/7 px-5 pt-3.5 pb-3 max-md:px-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate text-[17px] font-semibold tracking-[-0.01em]" title={c.name}>
+              {c.name}
+            </h2>
             <StatusBadge status={c.status} />
-            <ChannelChips channels={c.channels} />
-            {c.health.level !== 'muted' ? (
-              <Badge tone={c.health.level === 'bad' ? 'bad' : c.health.level === 'warn' ? 'warn' : 'ok'} title={c.health.why}>
-                {c.health.label}
-              </Badge>
-            ) : null}
-          </>
-        }
-        actions={actions}
-        meta={
-          <span className="text-[12px] text-fg-3">
-            {c.created_by ? `Made by ${c.created_by.startsWith('rule:') ? 'an automation' : c.created_by}` : ''}
-            {c.approved_by ? ` · approved by ${c.approved_by.startsWith('rule:') ? 'the automatic policy' : c.approved_by} ${fmtAgo(c.approved_at)}` : ''}
-          </span>
-        }
-      />
-      <FigureStrip
-        items={[
-          { label: 'Audience', value: c.funnel.audience || c.audience_count || 0, hint: c.audience_name ?? 'customers in it now' },
-          { label: 'Sent', value: c.funnel.sent, hint: c.funnel.sent ? `${pct(c.funnel.read, c.funnel.delivered)} read` : 'nothing yet' },
-          { label: 'Instagram reach', value: c.instagram.reach || 0, hint: `${c.instagram.likes || 0} likes · ${c.instagram.comments || 0} comments` },
-          { label: 'Orders', value: c.conversions.orders, hint: `${c.conversions.enquiries} enquiries` },
-          { label: 'Revenue', value: fmtMoneyRound(c.conversions.revenue), hint: c.roi === null ? `${fmtMoneyRound(c.cost)} cost` : `${c.roi.toFixed(1)}× return` },
-        ]}
-      />
-      {(c.status === 'draft' || c.status === 'review' || c.status === 'paused') && (blocks.length || warns.length) ? (
-        <div className="space-y-1.5 px-6 pt-3 max-md:px-3">
-          {blocks.map((b) => (
-            <Notice key={b.text} tone="bad">
-              {b.text}
-            </Notice>
-          ))}
-          {warns.map((w) => (
-            <Notice key={w.text} tone="warn">
-              {w.text}
-            </Notice>
-          ))}
+            <ChannelChips channels={c.channels} className="max-sm:hidden" />
+          </div>
+          {actions}
         </div>
-      ) : null}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px] text-fg-3">
+          <span>
+            {c.objective_label} · {c.code}
+          </span>
+          {stats.map((x) => (
+            <span key={x as string} className="before:mr-2 before:content-['·']">
+              {x}
+            </span>
+          ))}
+          {c.health.level !== 'muted' && !showChecks ? (
+            <Badge tone={c.health.level === 'bad' ? 'bad' : c.health.level === 'warn' ? 'warn' : 'ok'} title={c.health.why}>
+              {c.health.label}
+            </Badge>
+          ) : null}
+          {showChecks ? (
+            <button
+              onClick={() => setChecksOpen((v) => !v)}
+              aria-expanded={checksOpen}
+              className={cn(
+                'ml-auto inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-semibold',
+                blocks.length ? 'bg-bad/12 text-bad' : warns.length ? 'bg-warn/12 text-warn' : 'bg-ok/12 text-ok',
+              )}
+            >
+              {blocks.length ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+              {blocks.length ? `${blocks.length} to fix before approval` : warns.length ? `Ready · ${warns.length} note${warns.length === 1 ? '' : 's'}` : 'Ready for approval'}
+              {blocks.length || warns.length ? <ChevronDown size={12} className={cn('transition-transform', checksOpen && 'rotate-180')} /> : null}
+            </button>
+          ) : null}
+        </div>
+        {showChecks && checksOpen && (blocks.length || warns.length) ? (
+          <ul className="mt-2.5 space-y-1 rounded-[12px] bg-white/4 p-2.5 text-[12.5px]">
+            {[...blocks, ...warns].map((x) => (
+              <li key={x.text} className="flex gap-2">
+                {x.level === 'block' ? <AlertTriangle size={13} className="mt-0.5 shrink-0 text-bad" /> : <Info size={13} className="mt-0.5 shrink-0 text-fg-3" />}
+                <span className={x.level === 'block' ? 'font-medium' : 'text-fg-2'}>{x.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </header>
       <Tabs
         value={tab}
         onChange={setTab}
+        className="min-h-0 flex-1"
         tabs={[
           { value: 'content', label: 'Content', count: c.contents?.length },
           { value: 'plan', label: 'Plan' },
@@ -283,19 +304,19 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
           { value: 'activity', label: 'Activity' },
         ]}
       >
-        <TabPanel value="content" scroll={false} className="p-5 max-md:p-3">
+        <TabPanel value="content" className="p-5 max-md:p-3">
           <ContentTab c={c} editable={editable} onWrite={() => setWriting(true)} />
         </TabPanel>
-        <TabPanel value="plan" scroll={false} className="p-5 max-md:p-3">
+        <TabPanel value="plan" className="p-5 max-md:p-3">
           <PlanTab c={c} onEdit={editable ? () => setEditing(true) : undefined} />
         </TabPanel>
-        <TabPanel value="audience" scroll={false} className="p-5 max-md:p-3">
+        <TabPanel value="audience" className="p-5 max-md:p-3">
           <AudienceTab c={c} />
         </TabPanel>
-        <TabPanel value="results" scroll={false} className="p-5 max-md:p-3">
+        <TabPanel value="results" className="p-5 max-md:p-3">
           <ResultsTab c={c} />
         </TabPanel>
-        <TabPanel value="activity" scroll={false} className="p-5 max-md:p-3">
+        <TabPanel value="activity" className="p-5 max-md:p-3">
           <ActivityTab id={c.id} />
         </TabPanel>
       </Tabs>
@@ -407,7 +428,22 @@ function ResultsTab({ c }: { c: Campaign }) {
   const sends = useQuery({ queryKey: ['marketing', 'sends', c.id, c.updated_at], queryFn: () => marketing.sends(c.id) })
   const posts = (c.contents ?? []).filter((x) => x.channel === 'instagram' && x.status === 'published')
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="max-w-5xl space-y-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
+        {[
+          { label: 'People', value: c.funnel.audience || c.audience_count || 0, hint: c.audience_name ?? 'in the audience' },
+          { label: 'Sent', value: c.funnel.sent, hint: c.funnel.sent ? `${pct(c.funnel.read, c.funnel.delivered)} read` : 'nothing yet' },
+          { label: 'Instagram reach', value: (c.instagram.reach || 0).toLocaleString('en-IN'), hint: `${c.instagram.likes || 0} likes · ${c.instagram.comments || 0} comments` },
+          { label: 'Orders', value: c.conversions.orders, hint: `${c.conversions.enquiries} enquiries` },
+          { label: 'Revenue', value: fmtMoneyRound(c.conversions.revenue), hint: c.roi === null ? `${fmtMoneyRound(c.cost)} cost` : `${c.roi.toFixed(1)}× return` },
+        ].map((f) => (
+          <div key={f.label} className="rounded-[12px] border border-white/7 px-3.5 py-3">
+            <div className="text-[11.5px] text-fg-3">{f.label}</div>
+            <div className="num text-[20px] font-semibold">{f.value}</div>
+            <div className="truncate text-[11.5px] text-fg-3">{f.hint}</div>
+          </div>
+        ))}
+      </div>
       {c.channels.includes('whatsapp') ? (
         <Section title="WhatsApp">
           <FunnelBars funnel={c.funnel} extra={[{ label: 'Orders', value: c.conversions.orders }]} />
@@ -526,38 +562,103 @@ function ActivityTab({ id }: { id: string }) {
 function ContentTab({ c, editable, onWrite }: { c: Campaign; editable: boolean; onWrite: () => void }) {
   const add = useAction(marketing.addContent, { success: 'Added' })
   const contents = c.contents ?? []
-  return (
-    <div className="space-y-4">
-      {contents.map((content) => (content.channel === 'instagram' ? <InstagramEditor key={content.id} c={c} content={content} editable={editable} /> : <WhatsAppEditor key={content.id} c={c} content={content} editable={editable} />))}
-      {!contents.length ? (
-        <Empty
-          icon={<WandSparkles size={22} />}
-          title="No content yet"
-          body="Let the Creative agent write an Instagram post and a WhatsApp message from the plan, or add them yourself."
-          action={
-            editable ? (
+  const [selected, setSelected] = useState<string | undefined>(contents[0]?.id)
+  const known = contents.map((x) => x.id).join()
+  useEffect(() => {
+    if (!contents.some((x) => x.id === selected)) setSelected(contents[contents.length - 1]?.id)
+  }, [known]) // eslint-disable-line react-hooks/exhaustive-deps
+  const current = contents.find((x) => x.id === selected) ?? contents[0]
+  if (!contents.length) {
+    return (
+      <Empty
+        icon={<WandSparkles size={22} />}
+        title="No content yet"
+        body="Let the Creative agent write an Instagram post and a WhatsApp message from the plan, or add them yourself."
+        action={
+          editable ? (
+            <div className="flex flex-wrap justify-center gap-2">
               <Button kind="primary" icon={<WandSparkles size={14} />} onClick={onWrite}>
                 Write with AI
               </Button>
-            ) : undefined
-          }
-        />
-      ) : null}
-      {editable ? (
-        <div className="flex flex-wrap gap-2">
-          <Button small icon={<Instagram size={13} />} busy={add.isPending} onClick={() => add.mutate({ campaignId: c.id, channel: 'instagram' })}>
-            Add Instagram post
-          </Button>
-          <Button small icon={<MessageCircle size={13} />} busy={add.isPending} onClick={() => add.mutate({ campaignId: c.id, channel: 'whatsapp' })}>
-            Add WhatsApp broadcast
-          </Button>
-        </div>
-      ) : null}
+              <Button icon={<Instagram size={14} />} busy={add.isPending} onClick={() => add.mutate({ campaignId: c.id, channel: 'instagram' })}>
+                Instagram post
+              </Button>
+              <Button icon={<MessageCircle size={14} />} busy={add.isPending} onClick={() => add.mutate({ campaignId: c.id, channel: 'whatsapp' })}>
+                WhatsApp broadcast
+              </Button>
+            </div>
+          ) : undefined
+        }
+      />
+    )
+  }
+  return (
+    <div className="grid gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
+      <nav aria-label="Posts and messages" className="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-0 lg:flex-col lg:self-start lg:overflow-visible lg:pb-0">
+        {contents.map((x) => {
+          const Icon = x.channel === 'instagram' ? Instagram : MessageCircle
+          const active = x.id === current?.id
+          return (
+            <button
+              key={x.id}
+              onClick={() => setSelected(x.id)}
+              aria-current={active ? 'true' : undefined}
+              className={cn(
+                'flex min-w-[190px] items-center gap-2.5 rounded-[12px] p-2 text-left ring-1 ring-inset transition-colors lg:min-w-0',
+                active ? 'bg-white/8 ring-white/15' : 'ring-transparent hover:bg-white/4',
+              )}
+            >
+              {x.media ? (
+                <img src={x.media.url} alt="" className="size-10 shrink-0 rounded-[8px] object-cover" />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-[8px] bg-white/7">
+                  <Icon size={16} />
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="flex items-center gap-1 text-[12.5px] font-semibold">
+                  <Icon size={11} className="shrink-0" />
+                  {x.channel === 'instagram' ? 'Instagram post' : 'WhatsApp'}
+                </span>
+                <span className={cn('block truncate text-[11.5px]', x.status === 'failed' ? 'text-bad' : 'text-fg-3')}>
+                  {CONTENT_LABEL[x.status]}
+                  {x.scheduled_at && ['draft', 'scheduled'].includes(x.status) ? ` · ${fmtDate(x.scheduled_at)}` : ''}
+                </span>
+                <span className="block max-w-[150px] truncate text-[11.5px] text-fg-4">{(x.channel === 'instagram' ? x.caption : x.template_name ? `${x.template_name}` : x.caption) || 'Empty'}</span>
+              </span>
+            </button>
+          )
+        })}
+        {editable ? (
+          <Menu
+            align="start"
+            trigger={
+              <Button small kind="ghost" icon={<Plus size={13} />} className="shrink-0 justify-start">
+                Add
+              </Button>
+            }
+            items={[
+              { label: 'Write with AI', icon: <WandSparkles size={14} />, onSelect: onWrite },
+              { label: 'Instagram post', icon: <Instagram size={14} />, onSelect: () => add.mutate({ campaignId: c.id, channel: 'instagram' }, { onSuccess: (n) => setSelected(n.id) }) },
+              { label: 'WhatsApp broadcast', icon: <MessageCircle size={14} />, onSelect: () => add.mutate({ campaignId: c.id, channel: 'whatsapp' }, { onSuccess: (n) => setSelected(n.id) }) },
+            ]}
+          />
+        ) : null}
+      </nav>
+      <div className="min-w-0">
+        {current ? (
+          current.channel === 'instagram' ? (
+            <InstagramEditor key={current.id} c={c} content={current} editable={editable} />
+          ) : (
+            <WhatsAppEditor key={current.id} c={c} content={current} editable={editable} />
+          )
+        ) : null}
+      </div>
     </div>
   )
 }
 
-function ContentHeader({ content, icon: Icon, title, onRemove }: { content: Content; icon: typeof Instagram; title: string; onRemove?: () => void }) {
+function ContentHeader({ content, icon: Icon, title, onRemove, actions }: { content: Content; icon: typeof Instagram; title: string; onRemove?: () => void; actions?: ReactNode }) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <Icon size={16} />
@@ -571,8 +672,10 @@ function ContentHeader({ content, icon: Icon, title, onRemove }: { content: Cont
         </Badge>
       ) : null}
       {content.scheduled_at && ['draft', 'scheduled'].includes(content.status) ? <span className="text-[12px] text-fg-3">{fmtDateTime(content.scheduled_at)}</span> : null}
+      <span className="ml-auto" />
+      {actions}
       {onRemove ? (
-        <Button small kind="ghost" iconOnly aria-label="Remove" className="ml-auto" onClick={onRemove}>
+        <Button small kind="ghost" iconOnly aria-label="Remove" onClick={onRemove}>
           <Trash2 size={14} />
         </Button>
       ) : null}
@@ -610,10 +713,22 @@ function InstagramEditor({ c, content, editable: campaignEditable }: { c: Campai
   const dirty = caption !== (content.caption ?? '') || tags !== content.hashtags.join(' ') || when !== toLocalInput(content.scheduled_at)
   return (
     <section className="card p-4">
-      <ContentHeader content={content} icon={Instagram} title="Instagram post" onRemove={editable ? () => remover.run(content.id) : undefined} />
+      <ContentHeader
+        content={content}
+        icon={Instagram}
+        title="Instagram post"
+        onRemove={editable ? () => remover.run(content.id) : undefined}
+        actions={
+          editable ? (
+            <Button kind="primary" small disabled={!dirty} busy={save.isPending} onClick={() => save.mutate({ id: content.id, caption, hashtags, scheduled_at: fromLocalInput(when) })}>
+              {dirty ? 'Save changes' : 'Saved'}
+            </Button>
+          ) : null
+        }
+      />
       {content.error ? <Notice tone={content.status === 'failed' ? 'bad' : 'warn'}>{content.error}</Notice> : null}
-      <div className="mt-2 grid gap-5 lg:grid-cols-[300px_1fr]">
-        <div className="space-y-2">
+      <div className="mt-2 grid gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="space-y-2 md:sticky md:top-0 md:self-start">
           <PostPreview image={content.media?.url} caption={caption} hashtags={hashtags} username={String(settings.data?.instagram.config.username || '') || null} />
           {editable ? (
             <Button small className="w-full" icon={<ImagePlus size={13} />} onClick={() => setPicking(true)}>
@@ -622,6 +737,7 @@ function InstagramEditor({ c, content, editable: campaignEditable }: { c: Campai
           ) : null}
         </div>
         <div className="space-y-3">
+          {editable ? <RewriteBox id={content.id} /> : null}
           <Field label="Caption" hint={`${caption.length} / 2,200 · the first line shows before "more"`}>
             {(props) => <textarea {...props} className="field min-h-[150px]" value={caption} disabled={!editable} onChange={(e) => setCaption(e.target.value)} />}
           </Field>
@@ -631,14 +747,6 @@ function InstagramEditor({ c, content, editable: campaignEditable }: { c: Campai
           <Field label="Post at" optional hint="Empty: as soon as the campaign is approved.">
             {(props) => <input {...props} type="datetime-local" className="field max-w-[260px]" value={when} disabled={!editable} onChange={(e) => setWhen(e.target.value)} />}
           </Field>
-          {editable ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button kind="primary" small disabled={!dirty} busy={save.isPending} onClick={() => save.mutate({ id: content.id, caption, hashtags, scheduled_at: fromLocalInput(when) })}>
-                Save
-              </Button>
-              <RewriteBox id={content.id} />
-            </div>
-          ) : null}
           {content.permalink ? (
             <a className="inline-flex items-center gap-1 text-[12.5px] font-medium text-sky" href={content.permalink} target="_blank" rel="noreferrer">
               Open on Instagram <ExternalLink size={11} />
@@ -683,10 +791,28 @@ function WhatsAppEditor({ c, content, editable: campaignEditable }: { c: Campaig
   const insert = (token: string) => setValues((old) => old.map((v, i) => (i === focused.current ? `${v}${v && !v.endsWith(' ') ? ' ' : ''}${token}` : v)))
   return (
     <section className="card p-4">
-      <ContentHeader content={content} icon={MessageCircle} title="WhatsApp broadcast" onRemove={editable ? () => remover.run(content.id) : undefined} />
+      <ContentHeader
+        content={content}
+        icon={MessageCircle}
+        title="WhatsApp broadcast"
+        onRemove={editable ? () => remover.run(content.id) : undefined}
+        actions={
+          editable ? (
+            <Button
+              kind="primary"
+              small
+              disabled={!dirty}
+              busy={save.isPending}
+              onClick={() => save.mutate({ id: content.id, template_name: template || null, template_language: chosen?.language ?? null, variables: values, scheduled_at: fromLocalInput(when) })}
+            >
+              {dirty ? 'Save changes' : 'Saved'}
+            </Button>
+          ) : null
+        }
+      />
       {content.error ? <Notice tone="bad">{content.error}</Notice> : null}
-      <div className="mt-2 grid gap-5 lg:grid-cols-[320px_1fr]">
-        <div className="space-y-2">
+      <div className="mt-2 grid gap-5 md:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="space-y-2 md:sticky md:top-0 md:self-start">
           <PhonePreview text={text} image={content.media?.url} header={chosen?.header} footer={chosen?.footer} />
           <p className="text-[11.5px] text-fg-3">Shown for a sample customer (Ramesh). Each customer gets their own name and link.</p>
           {chosen?.header === 'IMAGE' && editable ? (
@@ -701,6 +827,7 @@ function WhatsAppEditor({ c, content, editable: campaignEditable }: { c: Campaig
               No marketing templates yet. WhatsApp only allows approved templates for offers. Create one in Channels → WhatsApp (the AI can draft it), then sync.
             </Notice>
           ) : null}
+          {editable && chosen ? <RewriteBox id={content.id} /> : null}
           <Field label="Template" hint={chosen ? `${chosen.status.toLowerCase()} · ${chosen.category.toLowerCase()} · ${chosen.language}` : 'Only approved marketing templates can be sent.'}>
             {(props) => (
               <Picker
@@ -746,20 +873,6 @@ function WhatsAppEditor({ c, content, editable: campaignEditable }: { c: Campaig
             {(props) => <input {...props} type="datetime-local" className="field max-w-[260px]" value={when} disabled={!editable} onChange={(e) => setWhen(e.target.value)} />}
           </Field>
           {content.caption ? <p className="text-[12px] text-fg-3">Idea: {content.caption}</p> : null}
-          {editable ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                kind="primary"
-                small
-                disabled={!dirty}
-                busy={save.isPending}
-                onClick={() => save.mutate({ id: content.id, template_name: template || null, template_language: chosen?.language ?? null, variables: values, scheduled_at: fromLocalInput(when) })}
-              >
-                Save
-              </Button>
-              {chosen ? <RewriteBox id={content.id} /> : null}
-            </div>
-          ) : null}
         </div>
       </div>
       <MediaPicker open={picking} onClose={() => setPicking(false)} campaign={c} onPick={(m) => save.mutate({ id: content.id, media_id: m.id }, { onSuccess: () => setPicking(false) })} />
