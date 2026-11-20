@@ -1095,6 +1095,57 @@ the same way; ask the provider to open the port to Render's outbound IPs.
 Code: `app/services/tally.py` (XML client), `tally_sync.py` (queue, push,
 retries, invoice), `invoice_pdf.py`, `whatsapp.py` (sending).
 
+## Marketing
+
+**Marketing** (top bar) turns what the ERP knows into campaigns on Instagram and
+WhatsApp. The full research and design are in `docs/marketing-module-plan.md`.
+
+- **Home**: opportunities found by the Strategist, with the numbers behind each
+  (new products, back in stock, slow or excess stock, batches near expiry, falling
+  sales, rising enquiries, quiet customers, open quotes, festivals, birthdays) and
+  one-click *Create campaign*; 30-day results; live campaigns; the Analyst's weekly
+  review; channel status; an *Ask the Strategist* box.
+- **Campaigns**: goal, products, offer, audience, dates and budget; an Instagram
+  post and/or a WhatsApp broadcast written by the Creative agent (editable, with
+  previews, rewrite in one click); approval (draft → waiting approval → scheduled →
+  live → completed, or paused/cancelled); results (sent, delivered, read, replied,
+  orders and revenue counted, cost and return); activity log.
+- **Calendar** of every post and broadcast. **AI Studio**: product cards drawn in
+  the brand colours, AI pictures (Gemini image model), WhatsApp marketing templates
+  drafted by AI and sent to Meta for approval, an image library.
+- **Audiences**: live, saved audiences from customer groups, the same figures as
+  groups, products or categories bought (or not), birthdays/anniversaries, open
+  enquiries, plus people left out by hand; live count and how many can be reached.
+  **Consent**: who agreed to WhatsApp offers, how and when; STOP opts out at once.
+- **Channels**: connect Instagram (Business/Creator account, Graph API), see posts
+  with reach/likes/comments, answer comments (replies drafted by AI, posted only when
+  you press Reply), hide spam; WhatsApp templates synced from Meta.
+- **Automations**: when something happens (any of the opportunity triggers, a
+  purchase, a schedule) suggest it, draft a campaign for approval, run it within the
+  automatic policy, or create a follow-up; cooldown per customer.
+- **Analytics**: funnel, channels side by side, revenue after campaigns, return on
+  spend, best hour to send, every campaign compared.
+- **Settings**: brand kit (name, tone, colours, hashtags, words to avoid), who
+  approves, offers per customer per week, quiet hours, opt-out words, message cost,
+  attribution window, festivals, the public address images are served from.
+
+**Safety.** Agents only create drafts; the executor alone publishes or sends, and only
+approved campaigns. Every WhatsApp offer needs recorded consent, respects the weekly
+limit and quiet hours (checked again at send time), uses an approved marketing
+template, and goes once per customer per broadcast. Instagram posts are published
+once (the container id is stored before publishing); an expired token pauses
+publishing and shows on the home page. Tokens are stored encrypted. Without Gemini,
+copy comes from labelled templates and cards replace AI pictures.
+
+**Results.** An order or enquiry from someone who got a message counts for the
+latest campaign message before it, within the attribution window (14 days by
+default); replies are marked. Instagram does not say who saw a post, so its effect
+is shown as reach and engagement.
+
+Code: `app/services/marketing*.py` (campaigns and executor, policy, audiences, media,
+agents, rules, channels), `app/services/instagram.py`, `app/api/marketing.py`,
+`frontend/src/features/marketing/`.
+
 ## Deploying to Render
 
 `render.yaml` describes one Docker web service on Render that runs the API and

@@ -24,6 +24,7 @@ const Receipts = lazy(() => import('@/features/receipts/Receipts').then((module)
 const CustomerGroups = lazy(() => import('@/features/pricing/CustomerGroups').then((module) => ({ default: module.CustomerGroups })))
 const StockCount = lazy(() => import('@/features/stock/StockCount').then((module) => ({ default: module.StockCount })))
 const StockIn = lazy(() => import('@/features/stockin/StockIn').then((module) => ({ default: module.StockIn })))
+const Marketing = lazy(() => import('@/features/marketing/Marketing').then((module) => ({ default: module.Marketing })))
 const Suppliers = lazy(() => import('@/features/suppliers/Suppliers').then((module) => ({ default: module.Suppliers })))
 
 export function App() {
@@ -54,6 +55,7 @@ export function App() {
           <Route path="transporters" element={<Transporters />} />
           <Route path="price-lists" element={<Navigate to="/customer-groups" replace />} />
           <Route path="customer-groups" element={<CustomerGroups />} />
+          <Route path="marketing/:view?" element={<Marketing />} />
           <Route path="integrations/:section?" element={<Integrations />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

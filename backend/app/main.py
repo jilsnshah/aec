@@ -26,6 +26,7 @@ from .api import (
     fulfilment,
     insights,
     integrations,
+    marketing,
     inventory,
     orders,
     parties,
@@ -157,6 +158,7 @@ for router in (
     triggers.router,
     controls.router,
     pricelists.router,
+    marketing.router,
 ):
     app.include_router(router, dependencies=signed_in)
 

@@ -72,6 +72,21 @@ def process(message_id: uuid.UUID) -> None:
         message = session.get(InboundMessage, message_id)
         if message is None or message.status != "pending":
             return
+        if message.channel == "whatsapp":
+            from . import marketing, parties as _parties
+
+            who, person = _parties.find_by_phone(session, message.sender)
+            if who == "customer" and person is not None and marketing.on_inbound(session, person, message.body) == "opt_out":
+                try:
+                    from . import outbox
+
+                    outbox.queue(session, "whatsapp", message.sender, "Done — you will not get offers from us on WhatsApp any more. "
+                                 "You can still message us any time for orders and help.", hold=False, author="system",
+                                 inbound_id=message.id, customer_id=person.id)
+                except Exception:  # the opt-out is recorded even if the confirmation cannot be sent
+                    logger.warning("Could not confirm the opt-out to %s", message.sender, exc_info=True)
+                _finish(session, message, "opt_out", summary="{} opted out of marketing messages.".format(person.name))
+                return
         ai = settings_service.get(session, settings_service.AI)
         if not ai.enabled:
             _finish(session, message, "skipped", summary="AI is switched off, so nobody read this message.")

@@ -263,6 +263,9 @@ class Customer(Base, TimestampMixin):
     gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, index=True)
     pan: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     tally_ledger_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: For greetings and occasion campaigns.
+    birthday: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    anniversary: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     orders: Mapped[List["SalesOrder"]] = relationship(back_populates="customer")
 
@@ -2558,3 +2561,303 @@ class Batch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     product: Mapped["Product"] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Marketing
+# ---------------------------------------------------------------------------
+
+
+class MarketingConsent(Base):
+    """Whether a customer agreed to marketing on a channel, how and when.
+    Nothing promotional is sent without an opted_in row for that channel."""
+
+    __tablename__ = "marketing_consents"
+    __table_args__ = (UniqueConstraint("customer_id", "channel", name="uq_marketing_consents_customer_channel"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE", name="fk_marketing_consents_customer"), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    #: opted_in | opted_out
+    status: Mapped[str] = mapped_column(String(12), nullable=False)
+    #: manual | portal | whatsapp_keyword | import | enquiry | order
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recorded_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MarketingAudience(Base, TimestampMixin):
+    """A saved, live audience: customer groups and/or rules over ERP figures,
+    with people added or kept out by hand."""
+
+    __tablename__ = "marketing_audiences"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: {"group_ids": [...], "rules": [...], "match": "all", "include": [...], "exclude": [...]}
+    definition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class MarketingOpportunity(Base):
+    """Something worth promoting, found by the Strategist or a rule: aged
+    stock, a new product, customers going quiet, a festival coming."""
+
+    __tablename__ = "marketing_opportunities"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    why: Mapped[str] = mapped_column(Text, nullable=False)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    product_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    #: Audience definition (same shape as MarketingAudience.definition).
+    audience: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    channels: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    objective: Mapped[str] = mapped_column(String(24), nullable=False, default="sales")
+    score: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
+    value_estimate: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    #: new | accepted | dismissed | expired
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="new", index=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="strategist")
+    dedupe_key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="SET NULL", name="fk_marketing_opportunities_campaign", use_alter=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MarketingCampaign(Base, TimestampMixin):
+    """A campaign: goal, audience, products, offer, dates, content per channel,
+    approval and results."""
+
+    __tablename__ = "marketing_campaigns"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: Short code used in links and replies to attribute results (e.g. C7K2Q).
+    code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    #: sales | launch | clearance | reactivation | festival | loyalty | awareness | greeting
+    objective: Mapped[str] = mapped_column(String(24), nullable=False, default="sales")
+    #: draft | review | approved | running | completed | paused | cancelled
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft", index=True)
+    channels: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    audience_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_audiences.id", ondelete="SET NULL", name="fk_marketing_campaigns_audience"), nullable=True)
+    #: Used when no saved audience is chosen.
+    audience: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    product_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    offer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    brief: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    budget: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    spend: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    #: Who made it: a username or an agent (strategist, rule:<name>).
+    created_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    opportunity_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_opportunities.id", ondelete="SET NULL", name="fk_marketing_campaigns_opportunity"), nullable=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    contents: Mapped[List["MarketingContent"]] = relationship(back_populates="campaign", cascade="all, delete-orphan", order_by="MarketingContent.created_at")
+
+
+class MarketingMedia(Base):
+    """An image for a post or message, kept in the database (hosting has no
+    disk) and served at an unguessable public URL so Instagram and WhatsApp
+    can fetch it."""
+
+    __tablename__ = "marketing_media"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    token: Mapped[str] = mapped_column(String(48), nullable=False, unique=True)
+    mime: Mapped[str] = mapped_column(String(40), nullable=False, default="image/jpeg")
+    width: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    height: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    #: upload | card | ai
+    source: Mapped[str] = mapped_column(String(12), nullable=False, default="upload")
+    prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    name: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    product_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL", name="fk_marketing_media_product"), nullable=True)
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="SET NULL", name="fk_marketing_media_campaign"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MarketingContent(Base, TimestampMixin):
+    """One piece of a campaign on one channel: an Instagram post or a
+    WhatsApp broadcast, with its schedule, state and results."""
+
+    __tablename__ = "marketing_contents"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="CASCADE", name="fk_marketing_contents_campaign"), nullable=False, index=True)
+    #: instagram | whatsapp
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    hashtags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    #: WhatsApp: the approved template, its language and the value of each {{n}}
+    #: (may contain {name}, {first_name}, {product}, {offer}, {link}).
+    template_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    template_language: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    variables: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    media_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_media.id", ondelete="SET NULL", name="fk_marketing_contents_media"), nullable=True)
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    #: draft | scheduled | publishing | published | sending | sent | failed | cancelled
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft", index=True)
+    ai_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Instagram: container id, media id and link once published.
+    container_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    permalink: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    campaign: Mapped["MarketingCampaign"] = relationship(back_populates="contents")
+    media: Mapped[Optional["MarketingMedia"]] = relationship()
+
+
+class MarketingSend(Base):
+    """One customer in a WhatsApp broadcast. Unique per broadcast and customer,
+    so nobody is messaged twice by the same broadcast."""
+
+    __tablename__ = "marketing_sends"
+    __table_args__ = (UniqueConstraint("content_id", "customer_id", name="uq_marketing_sends_content_customer"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="CASCADE", name="fk_marketing_sends_campaign"), nullable=False, index=True)
+    content_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_contents.id", ondelete="CASCADE", name="fk_marketing_sends_content"), nullable=False, index=True)
+    customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE", name="fk_marketing_sends_customer"), nullable=False, index=True)
+    to: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    #: queued | sending | sent | delivered | read | replied | failed | skipped
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="queued", index=True)
+    skip_reason: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    wamid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InstagramComment(Base):
+    """A comment on one of our Instagram posts, with our reply."""
+
+    __tablename__ = "instagram_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    external_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    media_external_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    content_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_contents.id", ondelete="SET NULL", name="fk_instagram_comments_content"), nullable=True, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    commented_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The suggested or sent reply.
+    reply_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: none | draft | sent | failed
+    reply_status: Mapped[str] = mapped_column(String(8), nullable=False, default="none")
+    reply_external_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: question | buying | praise | complaint | spam | other
+    intent: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class WhatsappTemplate(Base):
+    """A message template on the WhatsApp Business account, as Meta last
+    reported it."""
+
+    __tablename__ = "whatsapp_templates"
+    __table_args__ = (UniqueConstraint("name", "language", name="uq_whatsapp_templates_name_language"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    language: Mapped[str] = mapped_column(String(12), nullable=False, default="en")
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="MARKETING")
+    #: APPROVED | PENDING | REJECTED | PAUSED | DISABLED | DRAFT (not sent to Meta yet)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="DRAFT")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    header: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    footer: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    variable_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    examples: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    external_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MarketingRule(Base, TimestampMixin):
+    """A marketing automation: when <trigger> (and <conditions>), do <action>,
+    with an approval policy and a cooldown so it does not repeat itself."""
+
+    __tablename__ = "marketing_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Trigger settings: days, threshold, product/category, festival...
+    conditions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    #: suggest | draft_campaign | send_message | create_task
+    action: Mapped[str] = mapped_column(String(24), nullable=False, default="draft_campaign")
+    action_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    #: approval: drafts wait for a person; auto: allowed to run within the limits.
+    approval: Mapped[str] = mapped_column(String(10), nullable=False, default="approval")
+    cooldown_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class MarketingConversion(Base):
+    """An order or enquiry counted towards a campaign, and why."""
+
+    __tablename__ = "marketing_conversions"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "sales_order_id", name="uq_marketing_conversions_order"),
+        UniqueConstraint("campaign_id", "enquiry_id", name="uq_marketing_conversions_enquiry"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="CASCADE", name="fk_marketing_conversions_campaign"), nullable=False, index=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL", name="fk_marketing_conversions_customer"), nullable=True)
+    sales_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="CASCADE", name="fk_marketing_conversions_order"), nullable=True)
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customer_enquiries.id", ondelete="CASCADE", name="fk_marketing_conversions_enquiry"), nullable=True)
+    value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    #: reply | link | after_message | after_post
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MarketingEvent(Base):
+    """The marketing log: what agents and the executor did, and what failed."""
+
+    __tablename__ = "marketing_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_campaigns.id", ondelete="CASCADE", name="fk_marketing_events_campaign"), nullable=True, index=True)
+    content_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("marketing_contents.id", ondelete="SET NULL", name="fk_marketing_events_content"), nullable=True)
+    #: strategist | creative | executor | engagement | analyst | person | rule
+    actor: Mapped[str] = mapped_column(String(24), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: info | success | warning | error
+    level: Mapped[str] = mapped_column(String(8), nullable=False, default="info")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)

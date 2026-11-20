@@ -98,6 +98,30 @@ def parse_messages(payload: Dict[str, Any], phone_number_id: str) -> List[Dict[s
     return found
 
 
+def parse_statuses(payload: Dict[str, Any], phone_number_id: str) -> List[Dict[str, Any]]:
+    """Delivery receipts for messages we sent: sent, delivered, read, failed."""
+    found: List[Dict[str, Any]] = []
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            if str((value.get("metadata") or {}).get("phone_number_id", "")) != str(phone_number_id):
+                continue
+            for status in value.get("statuses") or []:
+                if not status.get("id") or not status.get("status"):
+                    continue
+                at = None
+                try:
+                    at = datetime.fromtimestamp(int(status.get("timestamp")), tz=timezone.utc)
+                except (TypeError, ValueError):
+                    pass
+                errors = status.get("errors") or []
+                found.append({"wamid": status["id"], "status": status["status"], "at": at,
+                              "error_code": (errors[0] or {}).get("code") if errors else None,
+                              "error": ((errors[0] or {}).get("title") or (errors[0] or {}).get("message")) if errors else None,
+                              "pricing": status.get("pricing") or {}})
+    return found
+
+
 def receive(session: Session, payload: Dict[str, Any], raw_body: bytes, signature: Optional[str]) -> List[uuid.UUID]:
     """Record the new messages in a webhook call. Returns the ids to process."""
     row = settings_service.get(session, settings_service.WHATSAPP)
@@ -108,6 +132,11 @@ def receive(session: Session, payload: Dict[str, Any], raw_body: bytes, signatur
     if not check_signature(app_secret, raw_body, signature):
         raise WebhookRejected("The request signature does not match the app secret.")
 
+    statuses = parse_statuses(payload, row.config.get("phone_number_id") or "")
+    if statuses:
+        from . import marketing
+
+        marketing.on_statuses(session, statuses)
     recorded: List[uuid.UUID] = []
     for message in parse_messages(payload, row.config.get("phone_number_id") or ""):
         stored = inbound.record(session, CHANNEL, **message)
@@ -129,6 +158,17 @@ http_factory: Callable[[], httpx.Client] = lambda: httpx.Client(timeout=60)
 
 class SendError(Exception):
     """Meta refused or could not take the message; the text is Meta's reason."""
+
+    def __init__(self, message: str, code: Optional[int] = None):
+        super().__init__(message)
+        self.code = code
+
+
+def _graph_code(response: httpx.Response) -> Optional[int]:
+    try:
+        return (response.json().get("error") or {}).get("code")
+    except ValueError:
+        return None
 
 
 def recipient(phone: Optional[str], country_code: str) -> Optional[str]:
@@ -205,9 +245,15 @@ def send_invoice(
     return messages[0].get("id") or ""
 
 
-def send_template(config: Dict[str, Any], access_token: str, to: str, template: str, body_parameters: List[str]) -> str:
-    """Send an approved text template (no attachment), e.g. an order
-    confirmation. Returns the WhatsApp message id."""
+def send_template(config: Dict[str, Any], access_token: str, to: str, template: str, body_parameters: List[str],
+                  language: Optional[str] = None, header_image: Optional[str] = None) -> str:
+    """Send an approved template, e.g. an order confirmation or a marketing
+    message (optionally with an image header). Returns the WhatsApp message id."""
+    components: List[Dict[str, Any]] = []
+    if header_image:
+        components.append({"type": "header", "parameters": [{"type": "image", "image": {"link": header_image}}]})
+    if body_parameters:
+        components.append({"type": "body", "parameters": [{"type": "text", "text": text} for text in body_parameters]})
     base = "{}/{}/{}".format(GRAPH, config.get("graph_version") or "v23.0", config["phone_number_id"])
     try:
         with http_factory() as client:
@@ -220,15 +266,15 @@ def send_template(config: Dict[str, Any], access_token: str, to: str, template: 
                     "type": "template",
                     "template": {
                         "name": template,
-                        "language": {"code": config.get("template_language") or "en"},
-                        "components": [{"type": "body", "parameters": [{"type": "text", "text": text} for text in body_parameters]}],
+                        "language": {"code": language or config.get("template_language") or "en"},
+                        "components": components,
                     },
                 },
             )
     except httpx.HTTPError as exc:
         raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
     if message.status_code >= 400:
-        raise SendError("WhatsApp refused the message: " + _graph_error(message))
+        raise SendError("WhatsApp refused the message: " + _graph_error(message), code=_graph_code(message))
     messages = message.json().get("messages") or [{}]
     return messages[0].get("id") or ""
 
@@ -253,3 +299,49 @@ def template_status(config: Dict[str, Any], access_token: str) -> str:
     if not matches:
         return "NOT_FOUND"
     return ", ".join(sorted({"{} ({})".format(t.get("status"), t.get("language")) for t in matches}))
+
+
+# ---------------------------------------------------------------------------
+# Message templates (marketing)
+# ---------------------------------------------------------------------------
+
+
+def list_templates(config: Dict[str, Any], access_token: str) -> List[Dict[str, Any]]:
+    waba = config.get("business_account_id")
+    if not waba:
+        raise SendError("Add the WhatsApp Business Account ID in Settings → WhatsApp.")
+    out: List[Dict[str, Any]] = []
+    url = "{}/{}/{}/message_templates".format(GRAPH, config.get("graph_version") or "v23.0", waba)
+    params: Optional[Dict[str, Any]] = {"fields": "id,name,status,language,category,components,rejected_reason", "limit": 100}
+    try:
+        with http_factory() as client:
+            for _ in range(10):
+                response = client.get(url, headers={"Authorization": "Bearer " + access_token}, params=params)
+                if response.status_code >= 400:
+                    raise SendError(_graph_error(response), code=_graph_code(response))
+                data = response.json()
+                out.extend(data.get("data") or [])
+                url = ((data.get("paging") or {}).get("next")) or ""
+                params = None
+                if not url:
+                    break
+    except httpx.HTTPError as exc:
+        raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
+    return out
+
+
+def create_template(config: Dict[str, Any], access_token: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    waba = config.get("business_account_id")
+    if not waba:
+        raise SendError("Add the WhatsApp Business Account ID in Settings → WhatsApp.")
+    try:
+        with http_factory() as client:
+            response = client.post(
+                "{}/{}/{}/message_templates".format(GRAPH, config.get("graph_version") or "v23.0", waba),
+                headers={"Authorization": "Bearer " + access_token}, json=payload,
+            )
+    except httpx.HTTPError as exc:
+        raise SendError("Could not reach WhatsApp: {}".format(exc)) from exc
+    if response.status_code >= 400:
+        raise SendError("WhatsApp refused the template: " + _graph_error(response), code=_graph_code(response))
+    return response.json()

@@ -62,3 +62,12 @@ def my_invoice_pdf(token: str, sync_id: uuid.UUID, db: Session = Depends(get_db)
 @router.post("/e/{token}/reorder/{order_id}", status_code=201)
 def order_again(token: str, order_id: uuid.UUID, db: Session = Depends(get_db)):
     return portal.reorder(db, token, order_id)
+
+
+@router.get("/media/{token}.jpg")
+def public_media(token: str, db: Session = Depends(get_db)):
+    """A marketing image, for Instagram and WhatsApp to fetch. The token is the secret."""
+    from ..services import marketing_media
+
+    row = marketing_media.by_token(db, token)
+    return Response(content=row.data, media_type=row.mime, headers={"Cache-Control": "public, max-age=31536000, immutable"})

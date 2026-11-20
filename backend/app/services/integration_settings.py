@@ -29,6 +29,8 @@ WHATSAPP = "whatsapp"
 EMAIL = "email"
 TALLY = "tally"
 CONTROLS = "controls"
+INSTAGRAM = "instagram"
+MARKETING = "marketing"
 CREDIT_MODES = ("off", "warn", "block")
 
 TAX_MODES = ("none", "cgst_sgst", "igst")
@@ -142,6 +144,76 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
         },
         "secrets": ["app_secret", "access_token"],
     },
+    # An Instagram Business (or Creator) account, through Meta's Graph API.
+    INSTAGRAM: {
+        "config": {
+            "ig_user_id": "",
+            # graph.facebook.com (Facebook Login) or graph.instagram.com (Instagram Login).
+            "api_host": "graph.facebook.com",
+            "graph_version": "v23.0",
+            # Filled by "Check connection".
+            "username": "",
+            "account_name": "",
+            "followers": 0,
+            "publish_quota": 0,
+            "publish_used": 0,
+            "last_checked_at": "",
+            "last_error": "",
+        },
+        "secrets": ["access_token"],
+    },
+    # Marketing policies and the brand kit the agents follow.
+    MARKETING: {
+        "config": {
+            "brand_name": "",
+            "brand_tone": "friendly, clear and trustworthy; no hype",
+            "brand_colors": ["#0B1220", "#38BDF8", "#FFFFFF"],
+            "brand_hashtags": [],
+            "brand_avoid": "",
+            "brand_signature": "",
+            # Shown in replies and captions ("message us on WhatsApp at ...").
+            "whatsapp_number": "",
+            "logo_media_id": "",
+            # Who may publish. approval: a person approves every campaign.
+            # auto: campaigns made by rules marked auto go out without waiting,
+            # if their audience is no bigger than auto_max_audience.
+            "approval": "approval",
+            "auto_max_audience": 50,
+            # Frequency cap: at most N promotional messages per customer per D days.
+            "frequency_max": 2,
+            "frequency_days": 7,
+            # No promotional messages between these hours (local time).
+            "quiet_start": "21:00",
+            "quiet_end": "09:00",
+            "timezone": "Asia/Kolkata",
+            # WhatsApp messages sent per minute by the executor.
+            "send_per_minute": 60,
+            # Orders/enquiries within this many days of a message count for the campaign.
+            "attribution_days": 14,
+            # Replies that opt a customer out of marketing.
+            "opt_out_words": ["STOP", "UNSUBSCRIBE", "STOP PROMOTIONS", "BAND", "बंद", "બંધ"],
+            # Rough cost of one marketing message, for ROI (₹).
+            "message_cost": 0.95,
+            # The address the internet reaches this app at (for images Instagram fetches).
+            "public_url": "",
+            # Gemini model that draws images (cards are drawn without AI).
+            "image_model": "gemini-2.5-flash-image",
+            # Agents: how often the Strategist looks for opportunities.
+            "scan_hours": 24,
+            "analyst_weekday": 0,
+            # Festivals and seasons the Strategist plans for (edit the dates each year).
+            "occasions": [
+                {"name": "Makar Sankranti", "date": "2027-01-14", "lead_days": 10},
+                {"name": "Republic Day", "date": "2027-01-26", "lead_days": 7},
+                {"name": "Holi", "date": "2027-03-22", "lead_days": 10},
+                {"name": "Independence Day", "date": "2027-08-15", "lead_days": 7},
+            ],
+            "last_scan_at": "",
+            "last_sync_at": "",
+            "last_analysis_at": "",
+        },
+        "secrets": [],
+    },
     TALLY: {
         "config": {
             # TallyPrime's HTTP server, e.g. http://tally.example.com:9000
@@ -196,6 +268,11 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
 }
 #: Settings the system writes itself; a client cannot set them.
 SYSTEM_FIELDS = {"last_checked_at", "last_error"}
+#: Values an integration tracks itself, per integration (never set from the browser).
+SYSTEM_BY_NAME = {
+    "instagram": {"username", "account_name", "followers", "publish_quota", "publish_used"},
+    "marketing": {"last_scan_at", "last_sync_at", "last_analysis_at"},
+}
 
 
 def _fernet() -> Fernet:
@@ -283,7 +360,7 @@ def update(
 
         merged = {**definition["config"], **(row.config or {})}
         for key, value in (config or {}).items():
-            if key not in definition["config"] or key in SYSTEM_FIELDS:
+            if key not in definition["config"] or key in SYSTEM_FIELDS or key in SYSTEM_BY_NAME.get(name, ()):
                 raise ValidationError("'{}' is not a setting of the {} integration.".format(key, name))
             merged[key] = value.strip() if isinstance(value, str) else value
         _validate_config(name, merged)
@@ -376,6 +453,14 @@ def _validate_config(name: str, config: Dict[str, Any]) -> None:
             config[key] = int(number) if key == "overdue_grace_days" else number
     if name == WHATSAPP:
         config["country_code"] = "".join(ch for ch in str(config["country_code"]) if ch.isdigit())
+    if name == MARKETING:
+        from . import marketing_policy
+
+        marketing_policy.validate(config)
+    if name == INSTAGRAM:
+        config["ig_user_id"] = "".join(ch for ch in str(config["ig_user_id"]) if ch.isdigit())
+        if config["api_host"] not in ("graph.facebook.com", "graph.instagram.com"):
+            raise ValidationError("The Instagram API host must be graph.facebook.com or graph.instagram.com.")
     if name == EMAIL:
         for key, low, high in (("imap_port", 1, 65535), ("smtp_port", 1, 65535), ("poll_minutes", 1, 1440)):
             try:
@@ -404,6 +489,11 @@ def _require_ready(name: str, config: Dict[str, Any], secrets: Dict[str, str]) -
                 missing.append("an access token (to send invoices)")
             if not config["invoice_template"]:
                 missing.append("the invoice template name")
+    if name == INSTAGRAM:
+        if not config["ig_user_id"]:
+            missing.append("the Instagram account ID")
+        if not secrets.get("access_token"):
+            missing.append("an access token")
     if name == TALLY:
         if not config["server_url"]:
             missing.append("the Tally server address")
