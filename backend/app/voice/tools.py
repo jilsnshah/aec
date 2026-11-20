@@ -128,6 +128,64 @@ BOOKING_DECLARATIONS = [
 ]
 
 
+_END_CALL = types.FunctionDeclaration(name="end_call", description="Hang up after saying goodbye.", parameters=types.Schema(type="OBJECT", properties={}))
+
+#: The purchasing agent asking a supplier for prices.
+SUPPLIER_QUOTE_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="record_quote",
+        description="Record the supplier's quote once you have read it back and they agreed it is right. One entry per item they priced, "
+                    "using the item number from the request and the price per the unit named in the request (before GST).",
+        parameters=types.Schema(type="OBJECT", properties={
+            "lines": types.Schema(type="ARRAY", items=types.Schema(type="OBJECT", properties={
+                "item": types.Schema(type="INTEGER", description="Item number from the request."),
+                "price": types.Schema(type="NUMBER", description="Rupees per unit as named in the request."),
+                "available_quantity": types.Schema(type="NUMBER", description="Only if they can supply less than asked, in the same unit.")},
+                required=["item", "price"])),
+            "delivery_days": types.Schema(type="INTEGER", description="Days from order to delivery."),
+            "freight": types.Schema(type="NUMBER", description="Freight or delivery charge in rupees for the whole order, 0 if free."),
+            "gst_included": types.Schema(type="BOOLEAN", description="True only if they said the price includes GST."),
+            "valid_days": types.Schema(type="INTEGER", description="How many days the price holds."),
+            "notes": types.Schema(type="STRING", description="Anything else they said: minimum quantity, payment terms, brand.")},
+            required=["lines"]),
+    ),
+    types.FunctionDeclaration(
+        name="order_now",
+        description="Only when record_quote returned can_order true and the supplier agreed to supply now: place the purchase order.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "delivery_date": types.Schema(type="STRING", description="Agreed delivery date as YYYY-MM-DD."),
+            "notes": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="cannot_quote",
+        description="The supplier cannot supply these items.",
+        parameters=types.Schema(type="OBJECT", properties={"reason": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="call_back_later",
+        description="They are busy or need time to check prices: call again later.",
+        parameters=types.Schema(type="OBJECT", properties={"minutes": types.Schema(type="INTEGER", description="When to call back, in minutes.")}),
+    ),
+    _END_CALL,
+]
+
+#: The purchasing agent confirming a placed purchase order.
+SUPPLIER_ORDER_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="confirm_order",
+        description="The supplier confirmed the purchase order. Record the dispatch or delivery date they gave.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "dispatch_date": types.Schema(type="STRING", description="YYYY-MM-DD."), "notes": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="cannot_supply",
+        description="The supplier cannot supply this order (or part of it).",
+        parameters=types.Schema(type="OBJECT", properties={"reason": types.Schema(type="STRING")}),
+    ),
+    _END_CALL,
+]
+
+
 class CallTools:
     def __init__(self, factory: Callable[[], Session], caller_number: Optional[str]):
         self.factory = factory
@@ -140,6 +198,9 @@ class CallTools:
         self.booking_id: Optional[uuid.UUID] = None
         self.task_id: Optional[uuid.UUID] = None
         self.task_finished = False
+        self.quote_id: Optional[uuid.UUID] = None
+        self.po_id: Optional[uuid.UUID] = None
+        self.call_record_id: Optional[uuid.UUID] = None
 
     def identify(self) -> str:
         session = self.factory()
@@ -346,6 +407,55 @@ class CallTools:
         triggers.finish_call(session, self.task_id, str(args.get("outcome") or "needs_person"), str(args.get("summary") or ""))
         self.task_finished = True
         return {"ok": True, "say": "Thank them and say goodbye, then end the call."}
+
+    # --- purchasing agent -------------------------------------------------
+
+    def supplier_brief(self) -> str:
+        from ..services import supplier_calls
+
+        session = self.factory()
+        try:
+            if self.quote_id:
+                return supplier_calls.quote_brief(session, self.quote_id)
+            if self.po_id:
+                return supplier_calls.order_brief(session, self.po_id)
+            return ""
+        finally:
+            session.close()
+
+    def _record_quote(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        if not self.quote_id:
+            return {"error": "No price request on this call."}
+        return supplier_calls.record_quote(session, self.quote_id, args, self.call_record_id)
+
+    def _order_now(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        if not self.quote_id:
+            return {"error": "No price request on this call."}
+        return supplier_calls.order_now(session, self.quote_id, args, self.call_record_id)
+
+    def _cannot_quote(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        return supplier_calls.cannot_quote(session, self.quote_id, str(args.get("reason") or "")) if self.quote_id else {"error": "No price request."}
+
+    def _call_back_later(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        return supplier_calls.call_back(session, self.quote_id, args.get("minutes")) if self.quote_id else {"error": "No price request."}
+
+    def _confirm_order(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        return supplier_calls.confirm_order(session, self.po_id, args) if self.po_id else {"error": "No purchase order."}
+
+    def _cannot_supply(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import supplier_calls
+
+        return supplier_calls.cannot_supply(session, self.po_id, str(args.get("reason") or "")) if self.po_id else {"error": "No purchase order."}
 
     def _end_call(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         self.hangup = True

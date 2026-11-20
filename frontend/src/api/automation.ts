@@ -21,6 +21,9 @@ export interface StepType {
   timing: Record<string, unknown> | null
   modes: Mode[]
   config_fields: ConfigField[]
+  /** The agent that carries out this step (null for system and people steps). */
+  agent?: string | null
+  agent_label?: string | null
 }
 export interface ConfigField {
   key: string
@@ -128,7 +131,26 @@ export interface Rfq {
   quotes: { id: string; supplier_id: string; supplier: string; status: string; channel: string | null; source: string | null; asked_at: string | null; replied_at: string | null; reply: string | null; delivery_days: number | null; score: number | null; prices: Record<string, number> }[]
 }
 
+export interface AgentProfile {
+  key: string
+  label: string
+  name: string
+  voice: string | null
+  instructions: string
+  job: string
+  mediums: ('text' | 'phone')[]
+  parked: boolean
+  steps: { key: string; label: string }[]
+}
+export interface AgentCatalogue {
+  agents: AgentProfile[]
+  others: { key: string; label: string; job: string }[]
+  voices: string[]
+}
+
 export const automation = {
+  agents: () => http.get<AgentCatalogue>('/api/automation/agents'),
+  saveAgents: (profiles: Record<string, { name: string; voice: string; instructions: string }>) => http.put<AgentCatalogue>('/api/automation/agents', { profiles }),
   library: () => http.get<Library>('/api/automation/library'),
   flow: (key: string) => http.get<Flow>(`/api/automation/flows/${key}`),
   save: ({ key, nodes, edges }: { key: string; nodes: FlowNode[]; edges: FlowEdge[] }) => http.put<Flow>(`/api/automation/flows/${key}`, { nodes, edges }),

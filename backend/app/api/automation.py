@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,22 @@ class FlowIn(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
     name: Optional[str] = None
+
+
+@router.get("/agents")
+def agents_list(db: Session = Depends(get_db)):
+    """The AI agents, the steps each one runs and how it works (text, phone)."""
+    from ..services import agents
+
+    return agents.catalogue(db)
+
+
+@router.put("/agents")
+def agents_save(payload: Dict[str, Any] = Body(...), db: Session = Depends(get_db)):
+    """Set each agent's name, voice and extra instructions."""
+    from ..services import agents
+
+    return agents.save_profiles(db, payload.get("profiles") or {})
 
 
 @router.get("/library")

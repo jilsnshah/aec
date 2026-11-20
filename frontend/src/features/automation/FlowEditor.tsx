@@ -58,8 +58,8 @@ import { ConfigForm } from './ConfigForm'
 export const ACTOR: Record<Actor, { label: string; short: string; icon: LucideIcon; hint: string }> = {
   system: { label: 'System', short: 'System', icon: Cpu, hint: 'The app does it by rule' },
   person: { label: 'Person', short: 'Person', icon: UserRound, hint: 'Someone on the team' },
-  tai: { label: 'TAI · text AI', short: 'TAI', icon: MessageSquareText, hint: 'AI on WhatsApp and email' },
-  pai: { label: 'PAI · phone AI', short: 'PAI', icon: PhoneCall, hint: 'AI on phone calls' },
+  tai: { label: 'AI by text', short: 'Text', icon: MessageSquareText, hint: 'The agent writes on WhatsApp and email (TAI)' },
+  pai: { label: 'AI by phone', short: 'Phone', icon: PhoneCall, hint: 'The agent talks on phone calls (PAI)' },
 }
 export const MODE: Record<Mode, { label: string; icon: LucideIcon; hint: string }> = {
   auto: { label: 'Automatic', icon: Zap, hint: 'Runs on its own' },
@@ -112,6 +112,11 @@ function StepNode({ id, data, selected }: NodeProps<StepNodeType>) {
               </span>
             ) : null}
           </div>
+          {type?.agent_label && data.actors.some((a) => a === 'tai' || a === 'pai') ? (
+            <div className="mt-0.5 flex items-center gap-1 truncate text-[11.5px] text-fg-3">
+              <Bot size={11} className="shrink-0" /> {type.agent_label}
+            </div>
+          ) : null}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {data.actors.map((actor) => {
               const A = ACTOR[actor]
@@ -371,6 +376,11 @@ function Inspector({ node, type, library, onChange, onRemove, onClose, dirty }: 
           <div className="eyebrow">{CATEGORY[type.category]?.label}</div>
           <input className="mt-1 w-full bg-transparent text-[17px] font-semibold outline-none" value={d.title} onChange={(e) => onChange({ title: e.target.value })} aria-label="Step title" />
           <p className="mt-1 text-[12px] text-fg-3">{type.description}</p>
+          {type.agent_label ? (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue/20 px-2.5 py-1 text-[11.5px] font-semibold">
+              <Bot size={12} /> Carried out by the {type.agent_label}
+            </p>
+          ) : null}
           {!type.live ? (
             <p className="mt-2 rounded-lg bg-peri/35 px-2.5 py-1.5 text-[11.5px]">Planned: these settings are kept, and the app will follow them when this step is built.</p>
           ) : (
@@ -384,7 +394,7 @@ function Inspector({ node, type, library, onChange, onRemove, onClose, dirty }: 
         </button>
       </header>
       <div className="space-y-5 p-4">
-        <Section title="Who does it" hint="Choose one or more. TAI writes on WhatsApp and email; PAI talks on the phone.">
+        <Section title="Who does it" hint={type.agent_label ? `Choose one or more. "AI by text" and "AI by phone" are how the ${type.agent_label} works: on WhatsApp/email, or on calls.` : 'Choose one or more.'}>
           <div className="grid grid-cols-2 gap-1.5">
             {(Object.keys(ACTOR) as Actor[]).map((actor) => {
               const A = ACTOR[actor]

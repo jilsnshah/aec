@@ -8,10 +8,11 @@ import { Badge, Button, Empty, Spinner } from '@/ui/core'
 import { Segmented } from '@/ui/overlays'
 import { FlowEditor } from './FlowEditor'
 import { ActivityView } from './Activity'
+import { AgentsView } from './Agents'
 
 /** Settings -> Automation: the sales and purchase pipelines, step by step. */
 export function AutomationPane() {
-  const [flow, setFlow] = useState<'sales' | 'purchase' | 'activity'>('sales')
+  const [flow, setFlow] = useState<'sales' | 'purchase' | 'activity' | 'agents'>('sales')
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/7 px-5 py-4">
@@ -20,20 +21,21 @@ export function AutomationPane() {
         </span>
         <div className="min-w-[220px] flex-1">
           <h2 className="text-[17px] font-semibold tracking-[-0.02em]">Automation</h2>
-          <p className="text-[12px] text-fg-3">Drag steps in, connect them, and click a step to choose who does it (System, Person, TAI, PAI), how much on its own, its limits and its AI model.</p>
+          <p className="text-[12px] text-fg-3">Drag steps in, connect them, and click a step to choose who does it (System, Person, or its AI agent by text or phone), how much on its own and its limits.</p>
         </div>
         <Segmented
-          className="w-[380px] max-w-full"
+          className="w-[460px] max-w-full"
           value={flow}
           onChange={setFlow}
           options={[
             { value: 'sales', label: 'Sales flow' },
             { value: 'purchase', label: 'Purchase flow' },
+            { value: 'agents', label: 'Agents' },
             { value: 'activity', label: 'Activity' },
           ]}
         />
       </header>
-      {flow === 'activity' ? <ActivityView /> : <FlowEditor flowKey={flow} />}
+      {flow === 'activity' ? <ActivityView /> : flow === 'agents' ? <AgentsView /> : <FlowEditor flowKey={flow} />}
     </div>
   )
 }

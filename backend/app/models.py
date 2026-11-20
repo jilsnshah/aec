@@ -925,6 +925,13 @@ class PurchaseOrder(Base, TimestampMixin):
     cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     cancellation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The supplier's confirmation of the order: none, to_call, calling,
+    #: confirmed, declined or no_answer (voice agent), with when and how.
+    confirm_status: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    confirm_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    confirm_last_call_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirm_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     supplier: Mapped["Supplier"] = relationship(back_populates="purchase_orders")
     items: Mapped[List["PurchaseOrderItem"]] = relationship(
@@ -2493,7 +2500,7 @@ class SupplierQuote(Base, TimestampMixin):
     """One supplier's answer to a request."""
 
     __tablename__ = "supplier_quotes"
-    __table_args__ = (CheckConstraint("status IN ('to_ask', 'asked', 'replied', 'declined', 'no_reply')", name="ck_supplier_quotes_status"),)
+    __table_args__ = (CheckConstraint("status IN ('to_ask', 'asked', 'calling', 'replied', 'declined', 'no_reply')", name="ck_supplier_quotes_status"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     request_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("supplier_quote_requests.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -2508,6 +2515,14 @@ class SupplierQuote(Base, TimestampMixin):
     #: Why this supplier was asked (preferred, contract, past supplier).
     source: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     score: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
+    #: Phone calls by the purchasing voice agent.
+    call_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_call_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    phone_call_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    #: Terms given with the price.
+    freight: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    gst_included: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    valid_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     request: Mapped["SupplierQuoteRequest"] = relationship(back_populates="quotes")
     supplier: Mapped["Supplier"] = relationship()

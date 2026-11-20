@@ -101,7 +101,8 @@ LIBRARY: List[Dict[str, Any]] = [
     _step("purchase.choose_supplier", "purchase", "Choose supplier and quantity", "decide", ["system", "person"], "system", True,
           "Cheapest reliable supplier, quantity from lead time and sales, target price from the last paid.", limits=("supplier_score",)),
     _step("purchase.ask_supplier", "purchase", "Ask the supplier", "communicate", ["tai", "pai", "person"], "tai", True,
-          "Ask availability, price and delivery date; to two or three suppliers at once.", ai=True, channels=("whatsapp", "call", "email")),
+          "Ask availability, price and delivery date; to two or three suppliers at once. By WhatsApp/email (text AI) or by phone "
+          "(purchasing voice AI), which can also place the order on the call.", ai=True, channels=("whatsapp", "call", "email")),
     _step("purchase.read_reply", "purchase", "Read the reply", "communicate", ["tai", "pai", "person"], "tai", True,
           "Record the supplier's price, quantity and date; unclear replies go to a person.", ai=True),
     _step("purchase.compare_quotes", "purchase", "Compare and pick", "decide", ["system", "person"], "system", True,
@@ -110,8 +111,9 @@ LIBRARY: List[Dict[str, Any]] = [
           "Automatic within limits, otherwise one tap in the approvals inbox.", limits=("po_value", "price_change_percent")),
     _step("purchase.place_po", "purchase", "Create and place the PO", "record", ["system", "person"], "person", True,
           "The purchase order is placed and sent to Tally."),
-    _step("purchase.send_po", "purchase", "Send the PO to the supplier", "communicate", ["system"], "system", True,
-          "WhatsApp message with the PO PDF (approved template).", channels=("whatsapp",), modes=("auto", "off")),
+    _step("purchase.send_po", "purchase", "Send the PO to the supplier", "communicate", ["system", "pai"], "system", True,
+          "WhatsApp message with the PO; optionally the voice AI calls to confirm the order and the dispatch date.",
+          channels=("whatsapp", "call"), modes=("auto", "off")),
     _step("purchase.chase_delivery", "purchase", "Chase the delivery", "communicate", ["tai", "pai", "person"], "tai", True,
           "Confirm before the due date, ask again when late, update the expected date from the reply, then a task for the buyer.",
           ai=True, channels=("whatsapp", "call")),
@@ -371,4 +373,8 @@ def within_limits(data: Dict[str, Any], facts: Dict[str, Any]) -> Optional[str]:
 
 
 def library() -> Dict[str, Any]:
-    return {"steps": [s for s in LIBRARY if s["key"] not in PARKED], "actors": ACTORS, "modes": MODES, "limit_fields": LIMIT_FIELDS}
+    from . import agents
+
+    steps = [{**s, "agent": agents.agent_for(s["key"]), "agent_label": agents.AGENTS.get(agents.agent_for(s["key"]) or "", {}).get("label")}
+             for s in LIBRARY if s["key"] not in PARKED]
+    return {"steps": steps, "actors": ACTORS, "modes": MODES, "limit_fields": LIMIT_FIELDS}

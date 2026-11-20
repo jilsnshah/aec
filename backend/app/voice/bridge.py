@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..database import SessionLocal
 from ..models import PhoneCall
 from ..services import integration_settings as settings_service
-from .tools import BOOKING_DECLARATIONS, DECLARATIONS, FINISH_TASK, CallTools
+from .tools import BOOKING_DECLARATIONS, DECLARATIONS, FINISH_TASK, SUPPLIER_ORDER_DECLARATIONS, SUPPLIER_QUOTE_DECLARATIONS, CallTools
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,16 @@ def instructions(seller: str, brief: str) -> str:
     finally:
         session.close()
     return _instructions(seller, brief, agent_name, knowledge)
+
+
+def _knowledge() -> str:
+    from ..services import integration_settings as settings_service
+
+    session = SessionLocal()
+    try:
+        return settings_service.company_knowledge(session)
+    finally:
+        session.close()
 
 
 def _instructions(seller: str, brief: str, AGENT_NAME: str, knowledge: str) -> str:
@@ -93,6 +103,47 @@ BOOK = """
 
 THIS IS A CALL YOU PLACED TO A TRANSPORTER to book a vehicle. You are not selling. Say who you are and which business, then ask for the vehicle exactly as in this request: {request}
 Ask whether they can send it, the vehicle number, the freight in rupees and the driver's number. If they agree, read the vehicle number and amount back, then call confirm_booking. If they cannot, call decline_booking with the reason. Keep it short and polite, in their language, then end the call."""
+
+
+#: Which agent handles each kind of call.
+MODE_AGENT = {"answer": "sales", "pitch": "outreach", "task": "followup", "book": "logistics",
+              "supplier_quote": "purchasing", "supplier_order": "purchasing"}
+
+
+def _profile(mode: str) -> Dict[str, Any]:
+    from ..services import agents
+
+    session = SessionLocal()
+    try:
+        return agents.profile(session, MODE_AGENT.get(mode, "sales"))
+    finally:
+        session.close()
+
+
+def purchasing_instructions(seller: str, name: str, extra: str, brief: str, mode: str, today: str) -> str:
+    """The purchasing agent: a buyer calling a supplier, not a salesperson."""
+    if mode == "supplier_order":
+        task = ("You are calling to CONFIRM A PURCHASE ORDER we have placed. Read it out clearly (items, quantities, prices), ask them to confirm "
+                "they will supply it and on which date they will dispatch or deliver. If they confirm, call confirm_order with the date. "
+                "If they cannot supply all or part of it, call cannot_supply with the reason.")
+    else:
+        task = ("You are calling to ASK FOR PRICES. For each numbered item ask: the rate per unit (the unit named in the request), whether GST is extra, "
+                "freight or delivery charges, how many days to deliver, how long the price holds, and whether they have the full quantity. "
+                "Read the prices back item by item. When they agree, call record_quote with the item numbers. "
+                "If they cannot supply, call cannot_quote. If they are busy or need to check, call call_back_later.")
+    return f"""You are {name}, the purchasing assistant of {seller}, a building materials and hardware trader in India. You are calling a SUPPLIER: you are the buyer, polite and businesslike. If asked whether you are a person, say honestly you are an AI assistant calling for {seller}; never say Gemini or Google.
+On the phone:
+- Short replies, one or two sentences, natural speech, no lists. Speak their language: Gujarati, Hindi, English or a mix, as they do.
+- Say numbers clearly and repeat prices back ("three hundred and sixty five rupees a bag, plus GST?").
+- Today is {today}. Turn dates like "kal", "parso", "Monday" into a date (YYYY-MM-DD) for the tools.
+- Never reveal another supplier's price, our customers, or anything not in the request. Never agree to advance payment, credit terms or anything not in the request: say the team will confirm.
+- Only order with order_now, and only if record_quote said can_order is true; otherwise say the team will confirm the order shortly.
+{task}
+When done, thank them, say goodbye and call end_call.
+{extra}
+
+The request:
+{brief}"""
 
 
 PITCH = """
@@ -152,6 +203,8 @@ class Call:
                 self.mode = params.get("mode", "answer")
                 self.booking = params.get("booking")
                 self.task = params.get("task")
+                self.quote = params.get("quote")
+                self.po = params.get("po")
         self.tools = CallTools(SessionLocal, self.caller)
         if self.mode == "book" and getattr(self, "booking", None):
             import uuid as _uuid
@@ -162,19 +215,36 @@ class Call:
             import uuid as _uuid
 
             self.tools.task_id = _uuid.UUID(self.task)
-        extra = PITCH if self.mode == "pitch" else ""
-        if self.mode == "task":
-            extra = FOLLOW_UP.format(brief=await asyncio.to_thread(self.tools.task_brief))
-        if self.mode == "book":
-            extra = BOOK.format(request=await asyncio.to_thread(self.tools.booking_brief))
+        import uuid as _uuid
+
+        if self.mode == "supplier_quote" and getattr(self, "quote", None):
+            self.tools.quote_id = _uuid.UUID(self.quote)
+        if self.mode == "supplier_order" and getattr(self, "po", None):
+            self.tools.po_id = _uuid.UUID(self.po)
+        profile = await asyncio.to_thread(_profile, self.mode)
+        seller = await asyncio.to_thread(_seller)
+        own = ("\nExtra instructions from the owner: " + profile["instructions"]) if profile["instructions"] else ""
         self._open_record()
+        self.tools.call_record_id = self.record_id
+        if self.mode in ("supplier_quote", "supplier_order"):
+            system = purchasing_instructions(seller, profile["name"], own, await asyncio.to_thread(self.tools.supplier_brief), self.mode,
+                                             datetime.now(timezone.utc).strftime("%A %d %B %Y"))
+            declarations = SUPPLIER_QUOTE_DECLARATIONS if self.mode == "supplier_quote" else SUPPLIER_ORDER_DECLARATIONS
+        else:
+            extra = PITCH if self.mode == "pitch" else ""
+            if self.mode == "task":
+                extra = FOLLOW_UP.format(brief=await asyncio.to_thread(self.tools.task_brief))
+            if self.mode == "book":
+                extra = BOOK.format(request=await asyncio.to_thread(self.tools.booking_brief))
+            system = _instructions(seller, brief, profile["name"], await asyncio.to_thread(_knowledge)) + extra + own
+            declarations = BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + ([FINISH_TASK] if self.mode == "task" else [])
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
-            system_instruction=instructions(await asyncio.to_thread(_seller), brief) + extra,
-            tools=[types.Tool(function_declarations=BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + ([FINISH_TASK] if self.mode == "task" else []))],
+            system_instruction=system,
+            tools=[types.Tool(function_declarations=declarations)],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE_NAME))),
+            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=profile["voice"] or VOICE_NAME))),
         )
         try:
             client = _client()
@@ -199,7 +269,9 @@ class Call:
                         "(You placed this call to the transporter and they just picked up. Greet them and ask for the vehicle.)"
                         if self.mode == "book" else
                         "(You placed this follow-up call and they just picked up. Greet them and do the follow-up.)"
-                        if self.mode == "task" else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
+                        if self.mode == "task" else
+                        "(You placed this call to the supplier and they just picked up. Greet them, say who you are and why you are calling.)"
+                        if self.mode in ("supplier_quote", "supplier_order") else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
                     turn_complete=True,
                 )
                 await asyncio.gather(self._from_twilio(session), self._from_gemini(session))
@@ -306,6 +378,13 @@ class Call:
             call.enquiry_id = self.tools.enquiry_id if self.tools else None
             call.summary = _summary(self.transcript, self.tools)
             session.commit()
+            if self.tools and (self.tools.quote_id or self.tools.po_id):
+                from ..services import supplier_calls
+
+                if self.tools.quote_id:
+                    supplier_calls.quote_call_ended(session, self.tools.quote_id, call.summary or "")
+                else:
+                    supplier_calls.order_call_ended(session, self.tools.po_id, call.summary or "")
             if self.tools and self.tools.task_id:
                 from ..services import triggers
 

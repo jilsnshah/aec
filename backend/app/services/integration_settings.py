@@ -31,6 +31,7 @@ TALLY = "tally"
 CONTROLS = "controls"
 INSTAGRAM = "instagram"
 MARKETING = "marketing"
+AGENTS = "agents"
 CREDIT_MODES = ("off", "warn", "block")
 
 TAX_MODES = ("none", "cgst_sgst", "igst")
@@ -144,6 +145,8 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
         },
         "secrets": ["app_secret", "access_token"],
     },
+    # Each AI agent's name, voice and extra instructions (see services/agents.py).
+    AGENTS: {"config": {"profiles": {}}, "secrets": []},
     # An Instagram Business (or Creator) account, through Meta's Graph API.
     INSTAGRAM: {
         "config": {

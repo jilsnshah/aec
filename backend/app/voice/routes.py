@@ -46,6 +46,8 @@ async def incoming(request: Request):
         f'<Parameter name="mode" value={quoteattr(request.query_params.get("mode", "answer"))}/>'
         f'<Parameter name="booking" value={quoteattr(request.query_params.get("booking", ""))}/>'
         f'<Parameter name="task" value={quoteattr(request.query_params.get("task", ""))}/>'
+        f'<Parameter name="quote" value={quoteattr(request.query_params.get("quote", ""))}/>'
+        f'<Parameter name="po" value={quoteattr(request.query_params.get("po", ""))}/>'
         "</Stream></Connect></Response>"
     )
     return Response(content=twiml, media_type="application/xml")

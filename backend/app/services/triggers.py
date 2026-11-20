@@ -403,11 +403,16 @@ def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
         rfq.quotes.append(quote)
     session.flush()
     window_ok = in_window(cfg)
+    from . import supplier_calls
+
+    by_phone = (cfg.get("how") == "call") and supplier_calls.calls_on(data)
     for quote in rfq.quotes:
         if quote.status != "to_ask":
             continue
         if not window_ok:
             continue  # asked on the next tick inside working hours
+        if by_phone and quote.supplier.phone:
+            continue  # the purchasing agent rings them (supplier_calls.run_quote_calls)
         status, channel = _send(session, data, quote.supplier.phone, quote.supplier.email, request_text(session, rfq, quote.supplier),
                                 subject="Request for quotation {}".format(rfq.number))
         if status in ("sent", "held"):
@@ -614,7 +619,7 @@ def tick_rfqs(session: Session) -> int:
                 quote.reminded_at = _now()
         if rfq.reply_by and _now() >= rfq.reply_by:
             for quote in rfq.quotes:
-                if quote.status == "asked":
+                if quote.status in ("asked", "to_ask"):
                     quote.status = "no_reply"
             session.commit()
             decide(session, rfq.id)
@@ -640,6 +645,11 @@ def po_text(session: Session, po: PurchaseOrder, template: Optional[str] = None)
 
 def send_po(session: Session, po_id: uuid.UUID) -> Optional[str]:
     """The 'Send the PO to the supplier' step, when the PO is placed."""
+    from . import supplier_calls
+
+    placed_po = session.get(PurchaseOrder, po_id)
+    if placed_po is not None:
+        supplier_calls.queue_order_call(session, placed_po)
     data = automation.step(session, "purchase.send_po")
     if data.get("mode") != "auto" or data["config"].get("send_on") != "placed":
         return None
@@ -1110,7 +1120,9 @@ def tick() -> int:
     session = inbound.session_factory()
     done = 0
     try:
-        for job in (run_ai_calls, run_purchase, tick_rfqs, tick_chase, run_outreach, run_after_sales):
+        from . import supplier_calls
+
+        for job in (run_ai_calls, run_purchase, tick_rfqs, supplier_calls.tick, tick_chase, run_outreach, run_after_sales):
             try:
                 result = job(session)
                 done += 1 if result else 0

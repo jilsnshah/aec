@@ -72,6 +72,13 @@ CONFIG: Dict[str, List[Dict[str, Any]]] = {
                      ["all_category", "Every supplier who has sold this category"]]},
         {"key": "how_many", "label": "Ask at most", "type": "number", "default": 3, "unit": "suppliers"},
         {"key": "use_contract", "label": "If a rate contract is running, buy on it without asking", "type": "toggle", "default": True},
+        {"key": "how", "label": "Ask by", "type": "select", "default": "text",
+         "options": [["text", "WhatsApp or email (text AI)"], ["call", "Phone call (purchasing voice AI)"],
+                     ["text_then_call", "WhatsApp first, call if no reply"]]},
+        {"key": "call_after_hours", "label": "Call if no reply after", "type": "number", "default": 2, "unit": "hours"},
+        {"key": "call_tries", "label": "Call attempts", "type": "number", "default": 2, "unit": "tries"},
+        {"key": "negotiate", "label": "On calls, ask for the last price paid when the quote is higher", "type": "toggle", "default": True},
+        {"key": "order_on_call", "label": "On calls, place the order right away when the offer is within limits", "type": "toggle", "default": False},
         {"key": "wait_hours", "label": "Wait for replies", "type": "number", "default": 6, "unit": "hours"},
         {"key": "remind_after_hours", "label": "Remind those who have not replied after", "type": "number", "default": 3, "unit": "hours"},
         {"key": "window_start", "label": "Send from", "type": "time", "default": "09:00"},
@@ -94,6 +101,7 @@ CONFIG: Dict[str, List[Dict[str, Any]]] = {
     "purchase.send_po": [
         {"key": "send_on", "label": "Send", "type": "select", "default": "placed", "options": [["placed", "When the PO is placed"], ["manual", "Only when asked"]]},
         {"key": "message", "label": "Message", "type": "textarea", "default": "Please find our purchase order {po} attached. Kindly confirm the delivery date."},
+        {"key": "confirm_by_call", "label": "Voice AI calls the supplier to confirm the order and dispatch date", "type": "toggle", "default": False},
     ],
     "purchase.chase_delivery": [
         {"key": "before_days", "label": "Confirm with the supplier before the due date", "type": "number", "default": 1, "unit": "days"},
