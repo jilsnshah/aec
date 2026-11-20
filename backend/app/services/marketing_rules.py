@@ -256,6 +256,9 @@ def run_rule(session: Session, rule: MarketingRule, force: bool = False) -> Dict
             item["audience"] = {"only": fresh}
         if cfg.get("audience_id"):
             item["audience_id"] = cfg["audience_id"]
+        # This automation already handled it: nothing to do.
+        if session.execute(select(MarketingOpportunity.id).where(MarketingOpportunity.dedupe_key == key)).first():
+            continue
         # If the Strategist already listed this and nobody acted yet, the automation takes it over.
         opp = session.execute(select(MarketingOpportunity).where(MarketingOpportunity.dedupe_key == base_key,
                                                                 MarketingOpportunity.status == "new")).scalar_one_or_none()

@@ -522,3 +522,6 @@ def test_automation_takes_over_the_strategists_opportunity(client, db, meta, mak
     assert len(opps) == 1 and opps[0].status == "accepted" and opps[0].campaign_id
     # A later scan does not list it again.
     assert client.post("/api/marketing/opportunities/scan").json()["found"] == 0
+    # Running the automation again does not make a second campaign.
+    assert client.post("/api/marketing/rules/{}/run".format(rule["id"])).json()["done"] == []
+    assert len(db.execute(select(MarketingCampaign)).scalars().all()) == 1

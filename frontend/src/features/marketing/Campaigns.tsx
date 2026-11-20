@@ -226,7 +226,7 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <InspectorHeader
         eyebrow={`${c.objective_label} · ${c.code}`}
         title={c.name}
@@ -275,7 +275,6 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
       <Tabs
         value={tab}
         onChange={setTab}
-        className="min-h-0 flex-1"
         tabs={[
           { value: 'content', label: 'Content', count: c.contents?.length },
           { value: 'plan', label: 'Plan' },
@@ -284,19 +283,19 @@ function CampaignDetail({ id, onGone }: { id: string; onGone: () => void }) {
           { value: 'activity', label: 'Activity' },
         ]}
       >
-        <TabPanel value="content" className="min-h-0 flex-1 overflow-y-auto p-5 max-md:p-3">
+        <TabPanel value="content" scroll={false} className="p-5 max-md:p-3">
           <ContentTab c={c} editable={editable} onWrite={() => setWriting(true)} />
         </TabPanel>
-        <TabPanel value="plan" className="min-h-0 flex-1 overflow-y-auto p-5 max-md:p-3">
+        <TabPanel value="plan" scroll={false} className="p-5 max-md:p-3">
           <PlanTab c={c} onEdit={editable ? () => setEditing(true) : undefined} />
         </TabPanel>
-        <TabPanel value="audience" className="min-h-0 flex-1 overflow-y-auto p-5 max-md:p-3">
+        <TabPanel value="audience" scroll={false} className="p-5 max-md:p-3">
           <AudienceTab c={c} />
         </TabPanel>
-        <TabPanel value="results" className="min-h-0 flex-1 overflow-y-auto p-5 max-md:p-3">
+        <TabPanel value="results" scroll={false} className="p-5 max-md:p-3">
           <ResultsTab c={c} />
         </TabPanel>
-        <TabPanel value="activity" className="min-h-0 flex-1 overflow-y-auto p-5 max-md:p-3">
+        <TabPanel value="activity" scroll={false} className="p-5 max-md:p-3">
           <ActivityTab id={c.id} />
         </TabPanel>
       </Tabs>

@@ -197,8 +197,10 @@ export function Tabs({
     </RadixTabs.Root>
   )
 }
-export const TabPanel = ({ value, children, className }: { value: string; children: ReactNode; className?: string }) => (
-  <RadixTabs.Content value={value} className={cn('min-h-0 flex-1 overflow-x-auto overflow-y-auto outline-none animate-fade', className)}>
+/** One tab's content. It scrolls on its own unless `scroll` is false (when the
+ *  whole page around the tabs scrolls instead). */
+export const TabPanel = ({ value, children, className, scroll = true }: { value: string; children: ReactNode; className?: string; scroll?: boolean }) => (
+  <RadixTabs.Content value={value} className={cn(scroll ? 'min-h-0 flex-1 overflow-x-auto overflow-y-auto' : 'min-w-0', 'outline-none animate-fade', className)}>
     {children}
   </RadixTabs.Content>
 )
