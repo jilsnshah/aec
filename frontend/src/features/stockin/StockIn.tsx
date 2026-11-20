@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { WarehouseSelect } from '@/features/stock/WarehouseSelect'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
@@ -65,6 +66,7 @@ function Entry({ productId }: { productId: string }) {
   const [quantity, setQuantity] = useState('')
   const [cost, setCost] = useState('')
   const [reference, setReference] = useState('')
+  const [warehouse, setWarehouse] = useState('')
   const [note, setNote] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [result, setResult] = useState<StockReceiptResult | null>(null)
@@ -88,7 +90,7 @@ function Entry({ productId }: { productId: string }) {
 
   function submit() {
     record.mutate(
-      { product_id: productId, quantity, unit_cost: cost, supplier_reference: reference || null, note: note || null, allocations: required > 0 ? plan.allocations : null, idempotency_key: key },
+      { product_id: productId, quantity, unit_cost: cost, warehouse_id: warehouse || null, supplier_reference: reference || null, note: note || null, allocations: required > 0 ? plan.allocations : null, idempotency_key: key },
       { onSuccess: setResult },
     )
   }
@@ -154,6 +156,7 @@ function Entry({ productId }: { productId: string }) {
             <Field label={`Cost per ${product.unit_of_measure}`} hint={product.last_purchase_price ? `Last paid ${fmtMoney(product.last_purchase_price)}` : undefined} error={!costValid && cost !== '' ? 'Enter a cost.' : null}>
               {(props) => <input {...props} className="field field-num h-12 text-[20px] font-semibold" inputMode="decimal" placeholder="0.00" value={cost} onChange={(event) => setCost(event.target.value)} />}
             </Field>
+            <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Put into" />
             <Field label="Supplier / invoice" optional>
               {(props) => <input {...props} className="field" placeholder="Northgate Mills · INV-9912" value={reference} onChange={(event) => setReference(event.target.value)} />}
             </Field>

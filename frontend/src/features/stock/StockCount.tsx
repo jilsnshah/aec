@@ -11,6 +11,7 @@ import { Badge, Button, Empty, Field, Notice, SearchBox, Spinner } from '@/ui/co
 import { Sheet, TabPanel, Tabs, useConfirm } from '@/ui/overlays'
 import { HeaderArt } from '@/ui/art'
 import { AiStrip, PageGuide, Stat } from '@/ui/smart'
+import { useWarehouses } from './WarehouseSelect'
 
 const REASONS: { value: string; label: string; sign: 1 | -1 | 0 }[] = [
   { value: 'damaged', label: 'Damaged', sign: -1 },
@@ -73,11 +74,13 @@ export function StockCount() {
 
 function CountSheet({ onDone }: { onDone: () => void }) {
   const [category, setCategory] = useState('')
+  const [warehouse, setWarehouse] = useState('')
+  const houses = useWarehouses()
   const [search, setSearch] = useState('')
   const [counted, setCounted] = useState<Record<string, string>>({})
   const [onlyEntered, setOnlyEntered] = useState(false)
   const confirm = useConfirm()
-  const sheet = useQuery({ queryKey: ['stock', 'count-sheet', category], queryFn: () => stock.countSheet(category || undefined) })
+  const sheet = useQuery({ queryKey: ['stock', 'count-sheet', category, warehouse], queryFn: () => stock.countSheet(category || undefined, warehouse || undefined) })
   const categories = useQuery({ queryKey: ['products', 'categories'], queryFn: api.products.categories })
   const post = useAction(stock.post, { success: (r) => `${r.count_number}: ${r.adjusted} adjusted, ${r.matched} matched` })
   const rows = useMemo(
@@ -98,7 +101,7 @@ function CountSheet({ onDone }: { onDone: () => void }) {
       confirm: 'Post count',
     })
     if (!answer.ok) return
-    const lines: AdjustmentLineIn[] = entered.map((row) => ({ product_id: row.product_id, counted_quantity: counted[row.product_id] }))
+    const lines: AdjustmentLineIn[] = entered.map((row) => ({ product_id: row.product_id, counted_quantity: counted[row.product_id], warehouse_id: warehouse || undefined }))
     post.mutate({ lines, as_count: true }, { onSuccess: () => (setCounted({}), onDone()) })
   }
 
@@ -116,6 +119,16 @@ function CountSheet({ onDone }: { onDone: () => void }) {
             </option>
           ))}
         </select>
+        {houses.usable.length > 1 ? (
+          <select className="field field-sm w-[200px]" value={warehouse} onChange={(e) => (setWarehouse(e.target.value), setCounted({}))} aria-label="Warehouse">
+            <option value="">All warehouses</option>
+            {houses.usable.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <button className={cn('h-[30px] rounded-full px-3 text-[12px] font-semibold', onlyEntered ? 'brand-fill' : 'bg-ink-700 text-fg-2')} onClick={() => setOnlyEntered(!onlyEntered)}>
           Only counted ({entered.length})
         </button>

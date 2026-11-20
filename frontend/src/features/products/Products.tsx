@@ -13,6 +13,7 @@ import { AiStrip, PageGuide, QuickChips, Stat, Timeline, type Chip } from '@/ui/
 import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import type { ProductInventoryOut } from '@/api/types'
+import { warehouses } from '@/api/warehouses'
 import { cn } from '@/lib/cn'
 import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtQty, n } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
@@ -393,6 +394,7 @@ function ProductInspector({ id }: { id: string }) {
       >
         <TabPanel value="overview">
           <ProductAbout data={data} />
+          <ProductWarehouses id={id} unit={data.unit_of_measure} />
           {intel ? <Intelligence row={intel} onBuy={() => navigate(buyLink([intel]))} onAsk={() => ask(`Analyse product ${data.name} (id ${id}): demand trend, stock position, ageing, profitability and enquiries. Should we buy, hold or clear it, and how much?`)} /> : null}
           <Section title="Warehouse over time" hint="Physical quantity after each movement">
             <StockHistory data={data} />
@@ -762,6 +764,34 @@ function ProductAbout({ data }: { data: ProductInventoryOut }) {
             ))}
           </dl>
         ) : null}
+      </div>
+    </Section>
+  )
+}
+
+/** Where this product is: quantity and value per warehouse (and on the road). */
+function ProductWarehouses({ id, unit }: { id: string; unit: string }) {
+  const rows = useQuery({ queryKey: ['warehouses', 'stock', 'product', id], queryFn: () => warehouses.stock({ product_id: id }) })
+  const items = rows.data?.items ?? []
+  if (items.length < 2 && !items.some((r) => r.warehouse_kind === 'transit')) return null
+  const total = items.reduce((s, r) => s + r.quantity, 0)
+  return (
+    <Section title="Stock by warehouse" hint="Move stock between them under Stock → Warehouses">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+        {items.map((r) => (
+          <div key={r.warehouse_id} className={cn('card p-3.5', r.warehouse_kind === 'transit' && 'ring-1 ring-sky/30')}>
+            <div className="truncate text-[12px] text-fg-3">{r.warehouse}</div>
+            <div className="num mt-1 text-[18px] font-semibold">
+              {fmtQty(r.quantity)} <span className="text-[12px] font-normal text-fg-3">{unit}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8">
+              <div className="h-full rounded-full bg-blue" style={{ width: `${total ? (r.quantity / total) * 100 : 0}%` }} />
+            </div>
+            <div className="mt-1 text-[11px] text-fg-3">
+              {fmtMoney(r.value)} · avg {fmtMoney(r.average_cost)}
+            </div>
+          </div>
+        ))}
       </div>
     </Section>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { WarehouseSelect } from '@/features/stock/WarehouseSelect'
 import { Truck } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -14,6 +15,7 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [reference, setReference] = useState('')
   const [notes, setNotes] = useState('')
+  const [warehouse, setWarehouse] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
   const deliver = useAction((body: Parameters<typeof api.orders.deliver>[1]) => api.orders.deliver(orderId, body), {
     success: (result) => `${result.delivery_number} · ${fmtQty(result.total_delivered)} delivered`,
@@ -38,7 +40,7 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
 
   function submit() {
     deliver.mutate(
-      { lines: chosen.map((line) => ({ order_item_id: line.order_item_id, quantity: amounts[line.order_item_id] })), reference: reference || null, notes: notes || null, idempotency_key: key },
+      { lines: chosen.map((line) => ({ order_item_id: line.order_item_id, quantity: amounts[line.order_item_id] })), reference: reference || null, notes: notes || null, idempotency_key: key, warehouse_id: warehouse || null },
       { onSuccess: onClose },
     )
   }
@@ -101,6 +103,7 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
             </table>
           </div>
           {errors.length > 0 ? <Notice tone="bad">You can deliver at most what is ready on each line.</Notice> : null}
+          <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Deliver from" anyLabel="Oldest stock, any warehouse" hint="Goods leave this warehouse; it must hold enough." />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Reference" optional>
               {(props) => <input {...props} className="field" placeholder="Vehicle, docket…" value={reference} onChange={(event) => setReference(event.target.value)} />}

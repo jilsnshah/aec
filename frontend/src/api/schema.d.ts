@@ -2806,6 +2806,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/warehouses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Warehouses
+         * @description Every warehouse with how many products, units and what value it holds.
+         */
+        get: operations["list_warehouses_api_warehouses_get"];
+        put?: never;
+        /**
+         * Create Warehouse
+         * @description Add a godown, yard, shop or site store.
+         */
+        post: operations["create_warehouse_api_warehouses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/warehouses/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Warehouse Stock
+         * @description Quantity, value and average cost on hand per product and warehouse.
+         */
+        get: operations["warehouse_stock_api_warehouses_stock_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/warehouses/{warehouse_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Warehouse */
+        get: operations["get_warehouse_api_warehouses__warehouse_id__get"];
+        /**
+         * Update Warehouse
+         * @description Change a warehouse, make it the default, or close it (only when empty).
+         */
+        put: operations["update_warehouse_api_warehouses__warehouse_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Transfers
+         * @description Transfers between warehouses, newest first.
+         */
+        get: operations["list_transfers_api_stock_transfers_get"];
+        put?: never;
+        /**
+         * Create Transfer
+         * @description Draft a transfer: from, to, products and the costs of moving them. With dispatch, send it at once.
+         */
+        post: operations["create_transfer_api_stock_transfers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-transfers/{transfer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Transfer */
+        get: operations["get_transfer_api_stock_transfers__transfer_id__get"];
+        /**
+         * Update Transfer
+         * @description Change a draft; on the road only costs and notes can change.
+         */
+        put: operations["update_transfer_api_stock_transfers__transfer_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-transfers/{transfer_id}/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dispatch Transfer
+         * @description The goods leave the source (oldest stock first) and are in transit.
+         */
+        post: operations["dispatch_transfer_api_stock_transfers__transfer_id__dispatch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-transfers/{transfer_id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive Transfer
+         * @description The goods arrive. Costs are spread over what arrived and added to its cost; anything short is written off.
+         *     With Tally on, the transfer goes to Tally as a Stock Journal.
+         */
+        post: operations["receive_transfer_api_stock_transfers__transfer_id__receive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/stock-transfers/{transfer_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Transfer
+         * @description Drop a draft, or bring goods on the road back to the source.
+         */
+        post: operations["cancel_transfer_api_stock_transfers__transfer_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/controls/check": {
         parameters: {
             query?: never;
@@ -3057,6 +3228,11 @@ export interface components {
             unit_cost?: string | null;
             /** Note */
             note?: string | null;
+            /**
+             * Warehouse Id
+             * @description Warehouse counted or adjusted; omit for the whole stock (increases go to the default warehouse).
+             */
+            warehouse_id?: string | null;
         };
         /** AiModelOut */
         AiModelOut: {
@@ -3647,6 +3823,11 @@ export interface components {
         DeliveryRequest: {
             /** Lines */
             lines: components["schemas"]["DeliveryLineInput"][];
+            /**
+             * Warehouse Id
+             * @description Warehouse the goods leave from; omit to use the oldest stock anywhere.
+             */
+            warehouse_id?: string | null;
             /** Reference */
             reference?: string | null;
             /** Notes */
@@ -4100,6 +4281,11 @@ export interface components {
              * Format: uuid
              */
             purchase_order_id: string;
+            /**
+             * Warehouse Id
+             * @description Where the goods are put; the default warehouse if omitted.
+             */
+            warehouse_id?: string | null;
             /** Lines */
             lines: components["schemas"]["GoodsReceiptLineInput"][];
             /** Delivery Note Reference */
@@ -4553,7 +4739,7 @@ export interface components {
          * MovementType
          * @enum {string}
          */
-        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT" | "SALES_RETURN";
+        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT" | "SALES_RETURN" | "TRANSFER_OUT" | "TRANSFER_IN";
         /** NegativePositionRow */
         NegativePositionRow: {
             /**
@@ -5417,6 +5603,11 @@ export interface components {
         };
         /** ProductCreate */
         ProductCreate: {
+            /**
+             * Warehouse Id
+             * @description Where the opening stock is; the default warehouse if omitted.
+             */
+            warehouse_id?: string | null;
             /** Sku */
             sku: string;
             /** Name */
@@ -6295,6 +6486,29 @@ export interface components {
             /** Quantity Reserved */
             quantity_reserved: string;
         };
+        /** ReceiveIn */
+        ReceiveIn: {
+            /**
+             * Lines
+             * @description What arrived per line; omit when everything arrived.
+             */
+            lines?: components["schemas"]["ReceiveLine"][] | null;
+            /**
+             * Note
+             * @description E.g. why something is short.
+             */
+            note?: string | null;
+        };
+        /** ReceiveLine */
+        ReceiveLine: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Quantity Received */
+            quantity_received: string;
+        };
         /** RecentOrderRow */
         RecentOrderRow: {
             /**
@@ -6423,6 +6637,11 @@ export interface components {
             note?: string | null;
             /** Lines */
             lines: components["schemas"]["ReturnLineIn"][];
+            /**
+             * Warehouse Id
+             * @description Where restocked goods go; the default warehouse if omitted.
+             */
+            warehouse_id?: string | null;
         };
         /** ReturnLineIn */
         ReturnLineIn: {
@@ -6493,6 +6712,11 @@ export interface components {
              * Format: uuid
              */
             product_id: string;
+            /**
+             * Warehouse Id
+             * @description Where it is put; the default warehouse if omitted.
+             */
+            warehouse_id?: string | null;
             /** Quantity */
             quantity: number | string;
             /**
@@ -7074,6 +7298,70 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** TransferCostIn */
+        TransferCostIn: {
+            /**
+             * Kind
+             * @description freight, loading, unloading, toll, insurance or other.
+             * @default freight
+             */
+            kind: string;
+            /** Amount */
+            amount: string;
+            /** Paid To */
+            paid_to?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** TransferIn */
+        TransferIn: {
+            /**
+             * From Warehouse Id
+             * @description Source; the default warehouse if omitted.
+             */
+            from_warehouse_id?: string | null;
+            /** To Warehouse Id */
+            to_warehouse_id?: string | null;
+            /** Items */
+            items?: components["schemas"]["TransferLine"][] | null;
+            /**
+             * Costs
+             * @description Costs of moving the goods (replaces them all).
+             */
+            costs?: components["schemas"]["TransferCostIn"][] | null;
+            /**
+             * Cost Method
+             * @description Spread costs by quantity, value or weight.
+             */
+            cost_method?: string | null;
+            /** Vehicle */
+            vehicle?: string | null;
+            /** Transporter */
+            transporter?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Dispatch
+             * @description Create and send it straight away.
+             * @default false
+             */
+            dispatch: boolean;
+        };
+        /** TransferLine */
+        TransferLine: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Quantity
+             * @description In `unit` if given, else the product's base unit.
+             */
+            quantity: string;
+            /** Unit */
+            unit?: string | null;
+        };
         /** UnitIn */
         UnitIn: {
             /**
@@ -7136,6 +7424,45 @@ export interface components {
         VoidIn: {
             /** Reason */
             reason?: string | null;
+        };
+        /** WarehouseIn */
+        WarehouseIn: {
+            /** Name */
+            name?: string | null;
+            /**
+             * Code
+             * @description Short code; made from the name if omitted.
+             */
+            code?: string | null;
+            /**
+             * Kind
+             * @description godown, yard, shop or site.
+             */
+            kind?: string | null;
+            /** Address */
+            address?: string | null;
+            /**
+             * Contact
+             * @description Who looks after it, and their phone.
+             */
+            contact?: string | null;
+            /**
+             * Tally Godown
+             * @description The matching godown name in Tally.
+             */
+            tally_godown?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Is Default
+             * @description Use when no warehouse is chosen.
+             */
+            is_default?: boolean | null;
+            /**
+             * Is Active
+             * @description False closes it (only when empty).
+             */
+            is_active?: boolean | null;
         };
     };
     responses: never;
@@ -12464,6 +12791,397 @@ export interface operations {
             header?: never;
             path: {
                 adjustment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_warehouses_api_warehouses_get: {
+        parameters: {
+            query?: {
+                include_closed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_warehouse_api_warehouses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarehouseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    warehouse_stock_api_warehouses_stock_get: {
+        parameters: {
+            query?: {
+                warehouse_id?: string | null;
+                product_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_warehouse_api_warehouses__warehouse_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                warehouse_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_warehouse_api_warehouses__warehouse_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                warehouse_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarehouseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_transfers_api_stock_transfers_get: {
+        parameters: {
+            query?: {
+                /** @description draft, in_transit, received or cancelled */
+                status?: string | null;
+                warehouse_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_transfer_api_stock_transfers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transfer_api_stock_transfers__transfer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_transfer_api_stock_transfers__transfer_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dispatch_transfer_api_stock_transfers__transfer_id__dispatch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_transfer_api_stock_transfers__transfer_id__receive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_transfer_api_stock_transfers__transfer_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transfer_id: string;
             };
             cookie?: never;
         };

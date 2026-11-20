@@ -45,10 +45,11 @@ def list_adjustments(
 
 
 @router.get("/count-sheet")
-def count_sheet(category: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
-    """Products to count, with the quantity the books expect, what is set aside
-    for customers, average cost and when each was last counted."""
-    return {"products": adjustments.count_sheet(db, category), "reasons": adjustments.REASONS}
+def count_sheet(category: Optional[str] = Query(default=None), warehouse_id: Optional[uuid.UUID] = Query(default=None),
+                db: Session = Depends(get_db)):
+    """Products to count, with the quantity the books expect (in one warehouse if
+    given), what is set aside for customers, average cost and when each was last counted."""
+    return {"products": adjustments.count_sheet(db, category, warehouse_id), "reasons": adjustments.REASONS}
 
 
 @router.post("", status_code=201)

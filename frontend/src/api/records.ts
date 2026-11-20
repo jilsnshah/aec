@@ -163,6 +163,7 @@ export interface AdjustmentLineIn {
   reason?: string
   unit_cost?: string
   note?: string
+  warehouse_id?: string
 }
 export interface PostResult {
   count_number: string | null
@@ -177,7 +178,7 @@ export interface PostResult {
 export const stock = {
   adjustments: (query: { product_id?: string; reason?: string; count_number?: string; limit?: number } = {}) =>
     http.get<{ items: Adjustment[]; total: number; by_reason: { reason: string; label: string; count: number; value_change: number }[] }>('/api/stock-adjustments', query),
-  countSheet: (category?: string) => http.get<{ products: CountRow[]; reasons: Record<string, string> }>('/api/stock-adjustments/count-sheet', { category }),
+  countSheet: (category?: string, warehouse_id?: string) => http.get<{ products: CountRow[]; reasons: Record<string, string> }>('/api/stock-adjustments/count-sheet', { category, warehouse_id }),
   post: (body: { lines: AdjustmentLineIn[]; as_count?: boolean }) => http.post<PostResult>('/api/stock-adjustments', body),
 }
 

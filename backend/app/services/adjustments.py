@@ -235,8 +235,15 @@ def list_adjustments(session: Session, limit: int = 100, offset: int = 0, **filt
     }
 
 
-def count_sheet(session: Session, category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Products to count, with the quantity the books expect."""
+def count_sheet(session: Session, category: Optional[str] = None, warehouse_id: Optional[uuid.UUID] = None) -> List[Dict[str, Any]]:
+    """Products to count, with the quantity the books expect (in one warehouse if given;
+    otherwise everything except goods in transit)."""
+    from . import warehouses as warehouse_service
+
+    held: Dict[uuid.UUID, Decimal] = {}
+    for row in warehouse_service.stock(session, warehouse_id):
+        if warehouse_id or row["warehouse_kind"] != "transit":
+            held[row["product_id"]] = held.get(row["product_id"], ZERO) + Decimal(str(row["quantity"]))
     stmt = select(Product).where(Product.is_active.is_(True)).order_by(Product.category.nulls_last(), Product.name)
     if category:
         stmt = stmt.where(Product.category == category)
@@ -247,7 +254,7 @@ def count_sheet(session: Session, category: Optional[str] = None) -> List[Dict[s
     reserved = reservations.reserved_map(session)
     return [
         {"product_id": p.id, "name": p.name, "sku": p.sku, "unit": p.unit_of_measure, "category": p.category,
-         "system_quantity": float(p.physical_stock), "reserved": float(reserved.get(p.id, ZERO)),
+         "system_quantity": float(held.get(p.id, ZERO)), "reserved": float(reserved.get(p.id, ZERO)),
          "average_cost": float(valuation.get(p.id, {}).get("average_cost") or p.last_purchase_price or 0),
          "last_counted": last.get(p.id)}
         for p in session.execute(stmt).scalars()

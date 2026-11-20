@@ -51,6 +51,7 @@ export const MODULES: Module[] = [
   { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor', hint: 'Who you buy from' },
   { to: '/products', label: 'Products', short: 'Products', icon: Boxes, group: 'stock', keywords: 'sku item stock', hint: 'Catalogue and stock' },
   { to: '/stock-in', label: 'Stock In', short: 'Stock in', icon: PackagePlus, group: 'stock', keywords: 'receipt without po adhoc', hint: 'Stock without a purchase order' },
+  { to: '/warehouses', label: 'Warehouses', short: 'Warehouses', icon: Warehouse, group: 'stock', keywords: 'godown yard shop site location transfer move freight landed cost transit', hint: 'Godowns and transfers' },
   { to: '/stock-count', label: 'Stock Count', short: 'Stock count', icon: ClipboardCheck, group: 'stock', keywords: 'physical verification adjustment damage loss shrinkage cycle count', hint: 'Count, damage and loss' },
   { to: '/integrations', label: 'Settings', short: 'Settings', icon: Settings2, group: 'settings', keywords: 'ai gemini whatsapp email tally integrations' },
 ]

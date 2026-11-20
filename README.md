@@ -997,6 +997,19 @@ gap analysis, roadmap and sources).
   rules, and what members pay: a discount on everything plus per-product fixed
   prices or discounts with quantity breaks. There is no separate price list
   screen; old price lists were turned into groups (migration 5b7e2c1d9a40).
+- **Units of measure**: a product is stocked in one base unit and can be bought
+  and sold in any others (1 tonne = 20 bags, 1 brass = 100 cft), each switched on
+  for sales and/or purchases, with default units and a whole-units rule. Order,
+  quote and purchase lines keep the unit they were entered in; stock and costing
+  stay in the base unit. Products also carry brand, HSN, GST rate, weight and any
+  details (grade, size...), which TAI and PAI use to describe them.
+- **Warehouses** (Stock → Warehouses): godowns, yards, shops and site stores, one
+  of them the default. Stock-in, goods receipts, counts, returns and deliveries can
+  name a warehouse. Transfers go draft → dispatched (in transit) → received;
+  freight, loading, unloading, toll and other costs are spread by quantity, value
+  or weight and added to the goods' cost at the destination (landed cost), and
+  shortages are written off as lost in transit. With Tally on, received transfers
+  post as Stock Journals between godowns.
 - **Payment reminders** (Finance → Reminders): friendly, firm and final levels
   by days late, message ready for WhatsApp, each reminder logged with a
   follow-up to check payment.

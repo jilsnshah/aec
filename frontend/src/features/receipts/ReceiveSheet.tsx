@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { WarehouseSelect } from '@/features/stock/WarehouseSelect'
 import { useQuery } from '@tanstack/react-query'
 import { PackageCheck } from 'lucide-react'
 import { errorText } from '@/api/client'
@@ -27,6 +28,7 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
   const [entries, setEntries] = useState<Record<string, Entry>>({})
   const [note, setNote] = useState('')
   const [deliveryNote, setDeliveryNote] = useState('')
+  const [warehouse, setWarehouse] = useState('')
   const [allowOver, setAllowOver] = useState(false)
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [plans, setPlans] = useState<Record<string, { balanced: boolean; allocations: { order_item_id: string; quantity: string }[] }>>({})
@@ -79,6 +81,7 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
         purchase_order_id: poId,
         lines: requestLines.map((line) => ({ ...line, allocations: plans[line.purchase_order_item_id]?.allocations ?? null })),
         delivery_note_reference: deliveryNote || null,
+        warehouse_id: warehouse || null,
         notes: note || null,
         idempotency_key: key,
         allow_over_receipt: allowOver,
@@ -190,6 +193,7 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
               <LinePlan key={line.purchase_order_item_id + line.required_allocation} line={line} onState={(state) => setPlans((current) => ({ ...current, [line.purchase_order_item_id]: state }))} />
             ))}
             {previewLines.length > 0 && needs.length === 0 && !preview.isFetching ? <Notice tone="sky">Nobody is waiting for these products, so everything goes into free stock.</Notice> : null}
+            <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Put into" hint="Where the goods are unloaded." />
             <div className="grid grid-cols-2 gap-4">
               <Field label="Supplier's delivery note" optional>
                 {(props) => <input {...props} className="field" placeholder="DN-4471" value={deliveryNote} onChange={(event) => setDeliveryNote(event.target.value)} />}
