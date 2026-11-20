@@ -205,6 +205,7 @@ def create_delivery(
     notes: Optional[str] = None,
     idempotency_key: Optional[str] = None,
     warehouse_id: Optional[uuid.UUID] = None,
+    transport: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Hand reserved goods to the customer, from one warehouse if given
     (otherwise from wherever the oldest stock is, never from goods in transit).
@@ -317,8 +318,21 @@ def create_delivery(
                     raise ValidationError(
                         "{} {} of {} is still in transit; receive the transfer before delivering it.".format(on_road, product.unit_of_measure, product.name))
 
+        transport = transport or {}
+        if transport.get("transporter_id"):
+            from .transporters import get as get_transporter
+
+            get_transporter(session, transport["transporter_id"])
+        if transport.get("freight_paid_by") not in (None, "us", "customer"):
+            raise ValidationError("Freight is paid by us or the customer.")
         delivery = CustomerDelivery(
             warehouse_id=source,
+            transporter_id=transport.get("transporter_id"),
+            vehicle_number=(transport.get("vehicle_number") or "").strip().upper() or None,
+            lr_number=(transport.get("lr_number") or "").strip() or None,
+            driver_phone=(transport.get("driver_phone") or "").strip() or None,
+            freight_amount=money(transport.get("freight_amount") or 0),
+            freight_paid_by=transport.get("freight_paid_by") or "us",
             delivery_number=next_document_number(session, DELIVERY_COUNTER, "DN"),
             sales_order_id=order.id,
             customer_id=order.customer_id,

@@ -39,6 +39,8 @@ DELIVERY_INVOICE = "delivery_invoice"
 PURCHASE_ORDER = "purchase_order"
 #: A received transfer between warehouses, as a Stock Journal.
 STOCK_TRANSFER = "stock_transfer"
+#: Goods sent back to a supplier, as a Debit Note.
+PURCHASE_RETURN = "purchase_return"
 #: Automatic attempts before a failure waits for a person.
 MAX_ATTEMPTS = 5
 
@@ -104,6 +106,22 @@ def queue_transfer(session: Session, transfer_id: uuid.UUID) -> List[uuid.UUID]:
     if transfer is None or transfer.status != "received":
         return []
     row_id = _queue(session, STOCK_TRANSFER, transfer.id, transfer.number)
+    session.commit()
+    return [row_id] if row_id else []
+
+
+def queue_purchase_return(session: Session, return_id: uuid.UUID) -> List[uuid.UUID]:
+    """Queue a purchase return for Tally (Debit Note), if Tally is on."""
+    from ..models import PurchaseReturn
+
+    config = settings_service.get(session, settings_service.TALLY)
+    if not config.enabled or not config.config.get("sync_purchase_orders", True):
+        return []
+    begin_write(session)
+    record = session.get(PurchaseReturn, return_id)
+    if record is None:
+        return []
+    row_id = _queue(session, PURCHASE_RETURN, record.id, record.number)
     session.commit()
     return [row_id] if row_id else []
 
@@ -209,6 +227,27 @@ def ledger_name(party) -> str:
 
 
 def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tally.TallyClient) -> None:
+    if row.kind == PURCHASE_RETURN:
+        from sqlalchemy.orm import joinedload
+
+        from ..models import PurchaseReturn, PurchaseReturnItem, Warehouse
+
+        record = session.execute(select(PurchaseReturn).where(PurchaseReturn.id == row.entity_id).options(
+            joinedload(PurchaseReturn.items).joinedload(PurchaseReturnItem.product), joinedload(PurchaseReturn.supplier))).unique().scalar_one()
+        ledger = ledger_name(record.supplier)
+        client.ensure_ledger(ledger, config["supplier_group"], record.supplier.phone, record.supplier.email)
+        for item in record.items:
+            client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
+        lines = [tally.Line(i.product.name, i.product.unit_of_measure, i.quantity, i.unit_cost, _cents(i.amount)) for i in record.items]
+        house = session.get(Warehouse, record.warehouse_id) if record.warehouse_id else None
+        result = client.create_voucher(
+            config.get("debit_note_type") or "Debit Note", _local_day(record.created_at), ledger, config["purchase_ledger"], lines,
+            party_is_debit=True, godown=godown_for(config, house), number=record.number, reference=record.number,
+            narration="Goods returned: {}{}".format(record.reason.replace("_", " "), " - " + record.note if record.note else ""),
+        )
+        row.tally_master_id = result.master_id
+        row.tally_number = record.number
+        return
     if row.kind == STOCK_TRANSFER:
         from . import warehouses as warehouse_service
         from ..models import StockTransfer

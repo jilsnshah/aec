@@ -24,7 +24,8 @@ class PaymentIn(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_on: Optional[date] = Field(default=None, description="Date of the payment (YYYY-MM-DD); today if omitted.")
     customer_id: Optional[uuid.UUID] = Field(default=None, description="For money in.")
-    supplier_id: Optional[uuid.UUID] = Field(default=None, description="For money out.")
+    supplier_id: Optional[uuid.UUID] = Field(default=None, description="For money out to a supplier.")
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="For freight paid to a transporter (money out).")
     method: str = Field(default="bank", description="cash, bank, upi, cheque, card or other.")
     reference: Optional[str] = Field(default=None, max_length=128, description="Cheque number, UTR, transaction id.")
     notes: Optional[str] = None

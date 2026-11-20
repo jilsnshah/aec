@@ -99,6 +99,26 @@ DECLARATIONS = [
 ]
 
 
+BOOKING_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="confirm_booking",
+        description="The transporter agreed to send a vehicle: record the vehicle number, the agreed freight in rupees and the driver's phone if given.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "vehicle_number": types.Schema(type="STRING"), "amount": types.Schema(type="NUMBER"), "driver_phone": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="decline_booking",
+        description="The transporter cannot send a vehicle for this trip.",
+        parameters=types.Schema(type="OBJECT", properties={"reason": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="end_call",
+        description="Hang up after saying goodbye.",
+        parameters=types.Schema(type="OBJECT", properties={}),
+    ),
+]
+
+
 class CallTools:
     def __init__(self, factory: Callable[[], Session], caller_number: Optional[str]):
         self.factory = factory
@@ -108,6 +128,7 @@ class CallTools:
         self.enquiry_id: Optional[uuid.UUID] = None
         self.actions: List[Dict[str, Any]] = []
         self.hangup = False
+        self.booking_id: Optional[uuid.UUID] = None
 
     def identify(self) -> str:
         session = self.factory()
@@ -261,6 +282,41 @@ class CallTools:
         session.commit()
         notifications.order_placed(order.id)
         return {"placed": order.order_number, "say": "Tell them the order number in words."}
+
+    def booking_brief(self) -> str:
+        """What PAI needs to ask a transporter for this booking."""
+        from ..models import TransportBooking
+        from ..services import transporters
+
+        session = self.factory()
+        try:
+            booking = session.get(TransportBooking, self.booking_id) if self.booking_id else None
+            if booking is None:
+                return ""
+            return transporters.request_message(session, booking)
+        finally:
+            session.close()
+
+    def _settle(self, session: Session, answer: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..models import TransportBooking
+        from ..services import transport_automation
+
+        booking = session.get(TransportBooking, self.booking_id) if self.booking_id else None
+        if booking is None:
+            return {"error": "No booking on this call."}
+        amount = args.get("amount")
+        result = transport_automation.settle(
+            session, booking, answer, Decimal(str(amount)) if amount not in (None, "") else None,
+            (str(args.get("vehicle_number") or "").replace(" ", "").upper() or None), args.get("driver_phone") or None,
+            reply="On the call: {}".format(args.get("reason") or (answer + (" " + str(amount) if amount else ""))), via="pai")
+        return {"status": result["status"], "say": "Thank them and say goodbye." if result["status"] in ("confirmed", "declined") else
+                "Tell them the team will confirm shortly, then say goodbye."}
+
+    def _confirm_booking(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        return self._settle(session, "yes", args)
+
+    def _decline_booking(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        return self._settle(session, "no", args)
 
     def _end_call(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         self.hangup = True

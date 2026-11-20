@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..database import SessionLocal
 from ..models import PhoneCall
 from ..services import integration_settings as settings_service
-from .tools import DECLARATIONS, CallTools
+from .tools import BOOKING_DECLARATIONS, DECLARATIONS, CallTools
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,12 @@ for a clear yes; only then place_order and say exactly what it returned. If orde
 {brief}"""
 
 
+BOOK = """
+
+THIS IS A CALL YOU PLACED TO A TRANSPORTER to book a vehicle. You are not selling. Say who you are and which business, then ask for the vehicle exactly as in this request: {request}
+Ask whether they can send it, the vehicle number, the freight in rupees and the driver's number. If they agree, read the vehicle number and amount back, then call confirm_booking. If they cannot, call decline_booking with the reason. Keep it short and polite, in their language, then end the call."""
+
+
 PITCH = """
 
 THIS IS AN OUTBOUND SALES CALL that you placed. Introduce yourself as calling from the business. First call find_products \
@@ -138,13 +144,21 @@ class Call:
                 params = start.get("customParameters") or {}
                 self.caller, self.to = params.get("from"), params.get("to")
                 self.mode = params.get("mode", "answer")
+                self.booking = params.get("booking")
         self.tools = CallTools(SessionLocal, self.caller)
+        if self.mode == "book" and getattr(self, "booking", None):
+            import uuid as _uuid
+
+            self.tools.booking_id = _uuid.UUID(self.booking)
         brief = await asyncio.to_thread(self.tools.identify)
+        extra = PITCH if self.mode == "pitch" else ""
+        if self.mode == "book":
+            extra = BOOK.format(request=await asyncio.to_thread(self.tools.booking_brief))
         self._open_record()
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
-            system_instruction=instructions(await asyncio.to_thread(_seller), brief) + (PITCH if self.mode == "pitch" else ""),
-            tools=[types.Tool(function_declarations=DECLARATIONS)],
+            system_instruction=instructions(await asyncio.to_thread(_seller), brief) + extra,
+            tools=[types.Tool(function_declarations=BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS)],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE_NAME))),
@@ -168,7 +182,9 @@ class Call:
                 await session.send_client_content(
                     turns=types.Content(role="user", parts=[types.Part(text=(
                         "(You placed this call and the person just picked up. Introduce yourself and the business, then start the pitch.)"
-                        if self.mode == "pitch" else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
+                        if self.mode == "pitch" else
+                        "(You placed this call to the transporter and they just picked up. Greet them and ask for the vehicle.)"
+                        if self.mode == "book" else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
                     turn_complete=True,
                 )
                 await asyncio.gather(self._from_twilio(session), self._from_gemini(session))

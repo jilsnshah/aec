@@ -80,6 +80,7 @@ def record_payment(
     sales_order_id: Optional[uuid.UUID] = None,
     purchase_order_id: Optional[uuid.UUID] = None,
     created_by_id: Optional[uuid.UUID] = None,
+    transporter_id: Optional[uuid.UUID] = None,
 ) -> Payment:
     if direction not in ("in", "out"):
         raise ValidationError("direction must be in (from a customer) or out (to a supplier).")
@@ -103,6 +104,14 @@ def record_payment(
             if order is None or order.customer_id != customer_id:
                 raise ValidationError("That order does not belong to this customer.")
         purchase_order_id = None
+    elif transporter_id is not None:
+        from ..models import Transporter
+
+        if supplier_id is not None or customer_id is not None:
+            raise ValidationError("Freight paid to a transporter: give transporter_id only.")
+        if session.get(Transporter, transporter_id) is None:
+            raise NotFoundError("Transporter not found.")
+        sales_order_id = purchase_order_id = None
     else:
         if supplier_id is None or customer_id is not None:
             raise ValidationError("Money out goes to a supplier: give supplier_id only.")
@@ -115,7 +124,7 @@ def record_payment(
         sales_order_id = None
     number = next_document_number(session, "payment_" + direction, "RCV" if direction == "in" else "PAY")
     payment = Payment(
-        number=number, direction=direction, customer_id=customer_id, supplier_id=supplier_id,
+        number=number, direction=direction, customer_id=customer_id, supplier_id=supplier_id, transporter_id=transporter_id,
         sales_order_id=sales_order_id, purchase_order_id=purchase_order_id, amount=value,
         paid_on=datetime.combine(day, time(12), tzinfo=_zone()), method=method,
         reference=(reference or "").strip()[:128] or None, notes=(notes or "").strip() or None,
@@ -180,7 +189,9 @@ def payment_view(payment: Payment) -> Dict[str, Any]:
         "direction": payment.direction,
         "customer_id": payment.customer_id,
         "supplier_id": payment.supplier_id,
-        "party_name": payment.customer.name if payment.customer else payment.supplier.name if payment.supplier else None,
+        "transporter_id": payment.transporter_id,
+        "party_name": payment.customer.name if payment.customer else payment.supplier.name if payment.supplier else (
+            payment.transporter.name if getattr(payment, "transporter", None) else None),
         "sales_order_id": payment.sales_order_id,
         "purchase_order_id": payment.purchase_order_id,
         "amount": payment.amount,
@@ -249,6 +260,13 @@ def _paid(session: Session, direction: str) -> Dict[uuid.UUID, Decimal]:
 
         for customer_id, credit in returns.credits_by_customer(session).items():
             paid[customer_id] = paid.get(customer_id, ZERO_MONEY) + credit
+    else:
+        # Debit notes (purchase returns) reduce what we owe the supplier.
+        from ..models import PurchaseReturn
+
+        for supplier_id, amount in session.execute(select(PurchaseReturn.supplier_id, func.sum(PurchaseReturn.amount)).group_by(PurchaseReturn.supplier_id)).all():
+            paid[supplier_id] = paid.get(supplier_id, ZERO_MONEY) + money(amount or 0)
+    paid.pop(None, None)
     return paid
 
 
@@ -367,11 +385,16 @@ def statement(session: Session, party: str, party_id: uuid.UUID) -> Dict[str, An
         ).order_by(Payment.paid_on)
     ).scalars().all()
     credits = []
+    debit_notes = []
     if receivable:
         from ..models import SalesReturn
 
         credits = session.execute(select(SalesReturn).where(SalesReturn.customer_id == party_id).order_by(SalesReturn.created_at)).scalars().all()
-    paid_total = sum((p.amount for p in payments), ZERO) + sum((c.amount for c in credits), ZERO)
+    else:
+        from ..models import PurchaseReturn
+
+        debit_notes = session.execute(select(PurchaseReturn).where(PurchaseReturn.supplier_id == party_id).order_by(PurchaseReturn.created_at)).scalars().all()
+    paid_total = sum((p.amount for p in payments), ZERO) + sum((c.amount for c in credits), ZERO) + sum((d.amount for d in debit_notes), ZERO)
     matched, advance = _match(documents, paid_total, record.payment_terms_days or 0)
     entries = [
         {"date": doc["date"], "kind": "invoice" if receivable else "bill", "number": doc["number"], "id": doc["id"],
@@ -386,6 +409,10 @@ def statement(session: Session, party: str, party_id: uuid.UUID) -> Dict[str, An
         {"date": _local_day(c.created_at), "kind": "credit_note", "number": c.number, "id": c.id, "order_id": c.sales_order_id,
          "order_number": None, "debit": 0.0, "credit": _f(c.amount), "method": "return", "reference": c.note}
         for c in credits
+    ] + [
+        {"date": _local_day(d.created_at), "kind": "debit_note", "number": d.number, "id": d.id, "order_id": d.purchase_order_id,
+         "order_number": None, "debit": 0.0, "credit": _f(d.amount), "method": "return", "reference": d.note}
+        for d in debit_notes
     ]
     entries.sort(key=lambda entry: (entry["date"], 0 if entry["kind"] != "payment" else 1))
     balance = 0.0

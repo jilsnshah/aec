@@ -17,6 +17,10 @@ from ..models import ContactPoint, SalesOrder, User
 from . import integration_settings as settings_service
 from . import whatsapp
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _number(session, order: SalesOrder) -> Optional[str]:
     points = session.execute(
@@ -79,5 +83,50 @@ def order_placed(order_id: uuid.UUID) -> None:
         send_order_confirmation(session, order_id, automatic=True)
     except Exception:
         session.rollback()  # recorded in the audit log when it reached WhatsApp; never blocks the order
+    try:
+        from . import transport_automation
+
+        transport_automation.trigger(session, "sales", "order_placed", "sales_order", order_id)
+        if _fully_ready(session, order_id):
+            transport_automation.trigger(session, "sales", "stock_ready", "sales_order", order_id)
+    except Exception:
+        session.rollback()
+        logger.exception("Booking transport for order %s failed", order_id)
+    finally:
+        session.close()
+
+
+def _fully_ready(session, order_id) -> bool:
+    from ..models import SalesOrder
+
+    order = session.get(SalesOrder, order_id)
+    return bool(order and order.items and all(i.quantity_reserved >= i.quantity_pending for i in order.items))
+
+
+def stock_arrived(order_ids) -> None:
+    """Background task after goods arrive: orders now fully ready may need transport."""
+    from . import inbound, transport_automation
+
+    session = inbound.session_factory()
+    try:
+        for order_id in order_ids:
+            if _fully_ready(session, order_id):
+                transport_automation.trigger(session, "sales", "stock_ready", "sales_order", order_id)
+    except Exception:
+        session.rollback()
+        logger.exception("Booking transport after a receipt failed")
+    finally:
+        session.close()
+
+
+def po_placed(po_id) -> None:
+    from . import inbound, transport_automation
+
+    session = inbound.session_factory()
+    try:
+        transport_automation.trigger(session, "purchase", "po_placed", "purchase_order", po_id)
+    except Exception:
+        session.rollback()
+        logger.exception("Booking pickup for purchase order %s failed", po_id)
     finally:
         session.close()

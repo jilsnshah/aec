@@ -37,6 +37,8 @@ LIMIT_FIELDS = {
     "price_change_percent": {"label": "Price above last paid", "unit": "%"},
     "supplier_score": {"label": "Supplier score", "unit": "/100"},
     "days_overdue": {"label": "Days overdue", "unit": "days"},
+    "freight_amount": {"label": "Freight agreed", "unit": "₹"},
+    "over_estimate_percent": {"label": "Freight above the rate card", "unit": "%"},
 }
 
 
@@ -85,6 +87,11 @@ LIBRARY: List[Dict[str, Any]] = [
     _step("sales.after_sales", "sales", "After-sales follow-up", "communicate", ["tai", "person"], "tai", False,
           "A few days after delivery: was everything right, anything else needed.", ai=True, channels=("whatsapp",), timing={"after_days": 3}),
     # --- Purchase ---------------------------------------------------------------------
+    _step("sales.book_transport", "sales", "Book transport", "communicate", ["system", "person", "tai", "pai"], "tai", True,
+          "Ask a transporter for a vehicle: when the order is placed or its stock is ready. TAI asks on WhatsApp, PAI calls; "
+          "a YES with the vehicle number and rate confirms it within the limits, a NO moves on to the next transporter.",
+          limits=("freight_amount", "over_estimate_percent"), ai=True, channels=("whatsapp", "call"),
+          timing={"when": "order_placed", "choose": "cheapest", "transporter_id": "", "vehicle_type": ""}),
     _step("purchase.need_detected", "purchase", "Need detected", "trigger", ["system", "person"], "system", True,
           "Stock below reorder point, customers waiting on short stock, or the scheduled buying run.", timing={"every_days": 1}),
     _step("purchase.choose_supplier", "purchase", "Choose supplier and quantity", "decide", ["system", "person"], "system", True,
@@ -107,6 +114,10 @@ LIBRARY: List[Dict[str, Any]] = [
           "Count and receive; 'scan bill' fills it in from a photo of the delivery note.", modes=("approval",)),
     _step("purchase.allocate", "purchase", "Give stock to waiting customers", "record", ["system"], "system", True,
           "Oldest orders first.", modes=("auto",)),
+    _step("purchase.book_transport", "purchase", "Book transport (pickup)", "communicate", ["system", "person", "tai", "pai"], "tai", True,
+          "When we collect from the supplier: book a vehicle once the purchase order is placed. TAI asks on WhatsApp, PAI calls.",
+          limits=("freight_amount", "over_estimate_percent"), ai=True, channels=("whatsapp", "call"),
+          timing={"when": "po_placed", "choose": "cheapest", "transporter_id": "", "vehicle_type": ""}),
     _step("purchase.pay_supplier", "purchase", "Pay the supplier", "person", ["person"], "person", True,
           "Money leaves the business: always a person, after order, receipt and bill agree.", modes=("approval",)),
 ]

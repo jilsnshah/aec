@@ -38,11 +38,12 @@ from ..models import (
     SalesOrder,
     SalesReturn,
     Supplier,
+    Transporter,
     Task,
     User,
 )
 
-KINDS = {"customer": Customer, "supplier": Supplier}
+KINDS = {"customer": Customer, "supplier": Supplier, "transporter": Transporter}
 NAME_NOISE = re.compile(
     r"\b(m/s|messrs|pvt|private|ltd|limited|llp|co|company|corp|corporation|and|&|the|traders?|trading|enterprises?|"
     r"industries|agency|agencies|sons|brothers|bros)\b\.?",
@@ -90,7 +91,7 @@ def norm_pan(value: Optional[str]) -> Optional[str]:
 
 def _model(kind: str):
     if kind not in KINDS:
-        raise ValidationError("Party must be customer or supplier.")
+        raise ValidationError("Party must be customer, supplier or transporter.")
     return KINDS[kind]
 
 
@@ -102,11 +103,20 @@ def _party(session: Session, kind: str, party_id: uuid.UUID):
 
 
 def _owner(kind: str, party_id: uuid.UUID) -> Dict[str, uuid.UUID]:
-    return {"customer_id": party_id} if kind == "customer" else {"supplier_id": party_id}
+    return {"{}_id".format(kind): party_id}
 
 
 def _owner_col(model, kind: str):
-    return model.customer_id if kind == "customer" else model.supplier_id
+    return getattr(model, "{}_id".format(kind))
+
+
+def owner_kind(row) -> Tuple[Optional[str], Optional[uuid.UUID]]:
+    """Which party a contact, number or address belongs to: (kind, id)."""
+    for kind in KINDS:
+        value = getattr(row, "{}_id".format(kind), None)
+        if value:
+            return kind, value
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -124,35 +134,33 @@ def owner_of_point(session: Session, kind: str, value: str) -> Optional[ContactP
 
 
 def find_by_phone(session: Session, number: Optional[str]) -> Tuple[Optional[str], Optional[Any]]:
-    """The customer or supplier a phone number belongs to: ("customer", record)."""
+    """The customer, supplier or transporter a phone number belongs to: ("customer", record)."""
     point = owner_of_point(session, "phone", number or "")
     if point is not None:
-        if point.customer_id:
-            return "customer", session.get(Customer, point.customer_id)
-        return "supplier", session.get(Supplier, point.supplier_id)
+        kind, party_id = owner_kind(point)
+        return kind, session.get(KINDS[kind], party_id)
     return None, None
 
 
 def find_by_email(session: Session, email: Optional[str]) -> Tuple[Optional[str], Optional[Any]]:
     point = owner_of_point(session, "email", email or "")
     if point is not None:
-        if point.customer_id:
-            return "customer", session.get(Customer, point.customer_id)
-        return "supplier", session.get(Supplier, point.supplier_id)
+        kind, party_id = owner_kind(point)
+        return kind, session.get(KINDS[kind], party_id)
     return None, None
 
 
 def search_condition(kind: str, search: str):
     """Extra match for party listings: any of the party's numbers or emails."""
     model = _model(kind)
-    col = ContactPoint.customer_id if kind == "customer" else ContactPoint.supplier_id
+    col = _owner_col(ContactPoint, kind)
     phone = norm_phone(search)
     pattern = "%{}%".format(search.strip().lower())
     conditions = [ContactPoint.normalized.like(pattern)]
     if phone:
         conditions.append(ContactPoint.normalized.like("%{}%".format(phone)))
     sub = select(col).where(ContactPoint.is_active.is_(True), or_(*conditions))
-    contacts = select(Contact.customer_id if kind == "customer" else Contact.supplier_id).where(func.lower(Contact.name).like(pattern))
+    contacts = select(_owner_col(Contact, kind)).where(func.lower(Contact.name).like(pattern))
     return or_(model.id.in_(sub), model.id.in_(contacts))
 
 
@@ -173,12 +181,11 @@ def duplicates(session: Session, kind: str, name: Optional[str] = None, phones: 
             point = owner_of_point(session, point_kind, value)
             if point is None:
                 continue
-            owner_kind = "customer" if point.customer_id else "supplier"
-            owner_id = point.customer_id or point.supplier_id
-            if owner_kind == kind and owner_id == exclude_id:
+            point_kind_of, owner_id = owner_kind(point)
+            if point_kind_of == kind and owner_id == exclude_id:
                 continue
-            owner = session.get(KINDS[owner_kind], owner_id)
-            blocking.append({"kind": owner_kind, "id": owner_id, "name": owner.name if owner else None,
+            owner = session.get(KINDS[point_kind_of], owner_id)
+            blocking.append({"kind": point_kind_of, "id": owner_id, "name": owner.name if owner else None,
                              "reason": "{} {} already belongs to {}".format(point_kind, value, owner.name if owner else "another record")})
     if gstin:
         try:
@@ -269,9 +276,9 @@ def _mirror(session: Session, kind: str, party) -> None:
         .order_by((Address.kind == "billing").desc(), Address.is_default.desc(), Address.created_at)
     ).scalars().first()
     party.address = ", ".join(x for x in (address.line, address.city, address.state, address.pincode) if x) if address else None
-    if kind == "supplier":
+    if kind in ("supplier", "transporter"):
         contact = session.execute(
-            select(Contact).where(Contact.supplier_id == party.id, Contact.is_active.is_(True)).order_by(Contact.is_primary.desc(), Contact.created_at)
+            select(Contact).where(_owner_col(Contact, kind) == party.id, Contact.is_active.is_(True)).order_by(Contact.is_primary.desc(), Contact.created_at)
         ).scalars().first()
         party.contact_person = contact.name if contact else None
 
@@ -329,9 +336,10 @@ def save_point(session: Session, kind: str, party_id: uuid.UUID, data: Dict[str,
             raise ValidationError("Enter a valid {}.".format("phone number" if row.kind == "phone" else "email address"))
         clash = owner_of_point(session, row.kind, value)
         if clash is not None and clash.id != row.id:
-            owner = session.get(Customer, clash.customer_id) if clash.customer_id else session.get(Supplier, clash.supplier_id)
+            clash_kind, clash_id = owner_kind(clash)
+            owner = session.get(KINDS[clash_kind], clash_id)
             raise ConflictError("{} already belongs to {}.".format(value, owner.name if owner else "another record"),
-                                {"duplicate": {"kind": "customer" if clash.customer_id else "supplier", "id": str(clash.customer_id or clash.supplier_id), "name": owner.name if owner else None}})
+                                {"duplicate": {"kind": clash_kind, "id": str(clash_id), "name": owner.name if owner else None}})
         row.value, row.normalized = value, normalized
     if not row.value:
         raise ValidationError("Enter the number or email.")
@@ -441,13 +449,13 @@ def sync_from_columns(session: Session, kind: str, party, phone: Optional[str] =
                 current.line, current.city, current.state, current.pincode = address.strip(), None, None, None
         elif current is not None:
             current.is_active = False
-    if kind == "supplier" and contact_person is not None:
+    if kind in ("supplier", "transporter") and contact_person is not None:
         current = session.execute(
-            select(Contact).where(Contact.supplier_id == party.id, Contact.is_active.is_(True)).order_by(Contact.is_primary.desc(), Contact.created_at)
+            select(Contact).where(_owner_col(Contact, kind) == party.id, Contact.is_active.is_(True)).order_by(Contact.is_primary.desc(), Contact.created_at)
         ).scalars().first()
         if contact_person.strip():
             if current is None:
-                session.add(Contact(supplier_id=party.id, name=contact_person.strip(), role="Contact", is_primary=True))
+                session.add(Contact(**owner, name=contact_person.strip(), role="Contact", is_primary=True))
             else:
                 current.name = contact_person.strip()
         elif current is not None:
@@ -473,6 +481,15 @@ def merge(session: Session, kind: str, keep_id: uuid.UUID, drop_id: uuid.UUID, u
                        (CustomerDelivery, CustomerDelivery.customer_id), (Payment, Payment.customer_id),
                        (SalesReturn, SalesReturn.customer_id), (Task, Task.customer_id), (PhoneCall, PhoneCall.customer_id),
                        (Contact, Contact.customer_id), (Address, Address.customer_id), (ContactPoint, ContactPoint.customer_id)]
+        elif kind == "transporter":
+            from ..models import LandedCostCharge, PurchaseReturn, StockTransfer, StockTransferCost, TransportBooking, TransporterRate, TransporterVehicle
+
+            targets = [(CustomerDelivery, CustomerDelivery.transporter_id), (GoodsReceipt, GoodsReceipt.transporter_id), (Payment, Payment.transporter_id),
+                       (StockTransfer, StockTransfer.transporter_id), (StockTransferCost, StockTransferCost.transporter_id),
+                       (LandedCostCharge, LandedCostCharge.transporter_id), (PurchaseReturn, PurchaseReturn.transporter_id),
+                       (TransportBooking, TransportBooking.transporter_id), (TransporterVehicle, TransporterVehicle.transporter_id),
+                       (TransporterRate, TransporterRate.transporter_id),
+                       (Contact, Contact.transporter_id), (Address, Address.transporter_id), (ContactPoint, ContactPoint.transporter_id)]
         else:
             targets = [(PurchaseOrder, PurchaseOrder.supplier_id), (GoodsReceipt, GoodsReceipt.supplier_id), (Payment, Payment.supplier_id),
                        (Task, Task.supplier_id), (Product, Product.preferred_supplier_id), (ProductAlias, ProductAlias.supplier_id),

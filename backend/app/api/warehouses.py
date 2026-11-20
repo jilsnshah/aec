@@ -38,6 +38,7 @@ class TransferCostIn(BaseModel):
     kind: str = Field(default="freight", description="freight, loading, unloading, toll, insurance or other.")
     amount: str
     paid_to: Optional[str] = Field(default=None, max_length=120)
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="Owed to this transporter; freight defaults to the transfer's transporter.")
     note: Optional[str] = None
 
 
@@ -49,6 +50,8 @@ class TransferIn(BaseModel):
     cost_method: Optional[str] = Field(default=None, description="Spread costs by quantity, value or weight.")
     vehicle: Optional[str] = Field(default=None, max_length=60)
     transporter: Optional[str] = Field(default=None, max_length=120)
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="The transporter carrying it.")
+    lr_number: Optional[str] = Field(default=None, max_length=64, description="Lorry receipt number.")
     notes: Optional[str] = None
     dispatch: bool = Field(default=False, description="Create and send it straight away.")
 

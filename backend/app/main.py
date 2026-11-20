@@ -37,6 +37,8 @@ from .api import (
     tasks,
     workspace,
     warehouses,
+    transporters,
+    buying_extra,
 )
 from .config import get_settings
 from .api.auth import require_user
@@ -149,6 +151,8 @@ for router in (
     records.router,
     adjustments.router,
     warehouses.router,
+    transporters.router,
+    buying_extra.router,
     controls.router,
     pricelists.router,
 ):

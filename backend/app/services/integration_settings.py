@@ -159,6 +159,7 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "sales_order_type": "Sales Order",
             "sales_invoice_type": "Sales",
             "purchase_order_type": "Purchase Order",
+            "debit_note_type": "Debit Note",
             "tax_mode": "none",
             "gst_rate": 0,
             "cgst_ledger": "Output CGST",

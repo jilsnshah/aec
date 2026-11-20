@@ -165,6 +165,11 @@ def sources_for(session: Session, customer: Optional[Customer]) -> List[Tuple[st
         assigned = _load(session, customer.price_list_id)
         if _active(assigned):
             out.append((assigned.name, assigned))
+    from . import rate_contracts
+
+    for label, contract_list in rate_contracts.customer_lists(session, customer.id):
+        if _active(contract_list):
+            out.append((label, contract_list))
     for group in group_service.groups_of(session, customer.id):
         if group.price_list_id:
             group_list = _load(session, group.price_list_id)

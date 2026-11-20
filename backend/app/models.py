@@ -117,6 +117,8 @@ class MovementType(str, enum.Enum):
     #: Stock leaving one warehouse for another, and arriving there.
     TRANSFER_OUT = "TRANSFER_OUT"
     TRANSFER_IN = "TRANSFER_IN"
+    #: Goods sent back to the supplier.
+    PURCHASE_RETURN = "PURCHASE_RETURN"
 
 
 class AllocationSource(str, enum.Enum):
@@ -955,6 +957,10 @@ class PurchaseOrderItem(UnitLineMixin, Base, TimestampMixin):
     #: recorded on the receipt line, which may differ.
     unit_cost: Mapped[Decimal] = mapped_column(UnitCost, nullable=False, default=Decimal("0.0000"))
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The rate contract this line's cost came from, if any.
+    rate_contract_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("rate_contracts.id", ondelete="SET NULL"), nullable=True
+    )
 
     purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
@@ -983,6 +989,13 @@ class GoodsReceipt(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: Who carried the goods, in what, the lorry receipt number and the freight.
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    vehicle_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    lr_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    driver_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     #: The godown or yard this happened in.
     warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -1054,6 +1067,16 @@ class CustomerDelivery(Base):
     __table_args__ = (Index("ix_deliveries_order_created", "sales_order_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: Who carried the goods, in what, the lorry receipt number and the freight.
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    vehicle_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    lr_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    driver_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    #: Freight for this trip, and who pays it: us (an expense) or the customer.
+    freight_amount: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"), server_default="0")
+    freight_paid_by: Mapped[str] = mapped_column(String(10), nullable=False, default="us", server_default="us")
     #: The godown or yard this happened in.
     warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -1080,6 +1103,7 @@ class CustomerDelivery(Base):
     sales_order: Mapped["SalesOrder"] = relationship()
     customer: Mapped["Customer"] = relationship()
     warehouse: Mapped[Optional["Warehouse"]] = relationship()
+    transporter: Mapped[Optional["Transporter"]] = relationship()
     items: Mapped[List["CustomerDeliveryItem"]] = relationship(
         back_populates="delivery", cascade="all, delete-orphan"
     )
@@ -1483,6 +1507,9 @@ class Payment(Base):
     sales_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="SET NULL"), nullable=True
     )
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True
     )
@@ -1500,13 +1527,14 @@ class Payment(Base):
     void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     customer: Mapped[Optional["Customer"]] = relationship()
+    transporter: Mapped[Optional["Transporter"]] = relationship()
     supplier: Mapped[Optional["Supplier"]] = relationship()
 
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
         CheckConstraint(
-            "(direction = 'in' AND customer_id IS NOT NULL AND supplier_id IS NULL) OR "
-            "(direction = 'out' AND supplier_id IS NOT NULL AND customer_id IS NULL)",
+            "(direction = 'in' AND customer_id IS NOT NULL AND supplier_id IS NULL AND transporter_id IS NULL)"
+            " OR (direction = 'out' AND num_nonnulls(supplier_id, transporter_id) = 1 AND customer_id IS NULL)",
             name="ck_payments_party",
         ),
     )
@@ -1715,6 +1743,8 @@ class PriceListItem(Base):
     min_quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
     price: Mapped[Optional[Decimal]] = mapped_column(UnitCost, nullable=True)
     discount_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    #: For a rate contract: the quantity agreed over its life (base units).
+    committed_quantity: Mapped[Optional[Decimal]] = mapped_column(Quantity, nullable=True)
 
     price_list: Mapped["PriceList"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
@@ -1754,7 +1784,7 @@ class PhoneCall(Base):
 # supplier's own phone, email and address columns mirror the primary entries,
 # for screens and integrations that show a single value.
 
-_ONE_PARTY = "(customer_id IS NOT NULL) <> (supplier_id IS NOT NULL)"
+_ONE_PARTY = "num_nonnulls(customer_id, supplier_id, transporter_id) = 1"
 
 
 class Contact(Base, TimestampMixin):
@@ -1766,6 +1796,7 @@ class Contact(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
     supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -1788,6 +1819,7 @@ class ContactPoint(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
     supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="CASCADE"), nullable=True, index=True)
     contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(8), nullable=False)
     value: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -1811,6 +1843,7 @@ class Address(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
     supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=True, index=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="CASCADE"), nullable=True, index=True)
     contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
     kind: Mapped[str] = mapped_column(String(12), nullable=False, default="site")
     label: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
@@ -2003,6 +2036,10 @@ class StockTransfer(Base, TimestampMixin):
     cost_method: Mapped[str] = mapped_column(String(10), nullable=False, default="quantity")
     vehicle: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     transporter: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    lr_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     #: Value of the goods sent (FIFO cost at the source) and the costs added.
     goods_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
@@ -2058,6 +2095,270 @@ class StockTransferCost(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default="freight")
     amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
     paid_to: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     transfer: Mapped["StockTransfer"] = relationship(back_populates="costs")
+
+
+# ---------------------------------------------------------------------------
+# Transporters, landed costs, purchase returns, rate contracts, bookings
+# ---------------------------------------------------------------------------
+
+
+class Transporter(Base, TimestampMixin):
+    """A lorry owner, transport company, broker or tempo operator who carries
+    goods. A complete party like a customer or supplier: contacts, numbers,
+    addresses, GSTIN, Tally ledger, vehicles and a rate card."""
+
+    __tablename__ = "transporters"
+    __table_args__ = (
+        CheckConstraint("kind IN ('company', 'fleet_owner', 'broker', 'tempo', 'courier', 'own_fleet')", name="ck_transporters_kind"),
+        Index("ix_transporters_active_name", "is_active", "name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(12), nullable=False, default="company")
+    contact_person: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gstin: Mapped[Optional[str]] = mapped_column(String(15), nullable=True, index=True)
+    pan: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    tally_ledger_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Places and routes they serve, as free text ("Ahmedabad, Gandhinagar, Mehsana").
+    service_areas: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Days of credit they give on freight bills.
+    payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: How to reach them for a booking: whatsapp, call or either.
+    booking_channel: Mapped[str] = mapped_column(String(10), nullable=False, default="whatsapp")
+    #: Our own rating of them, 1-5.
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+    vehicles: Mapped[List["TransporterVehicle"]] = relationship(back_populates="transporter", cascade="all, delete-orphan", order_by="TransporterVehicle.created_at")
+    rates: Mapped[List["TransporterRate"]] = relationship(back_populates="transporter", cascade="all, delete-orphan", order_by="TransporterRate.created_at")
+
+
+VEHICLE_TYPES = ("tempo", "pickup", "lcv", "6_wheeler", "10_wheeler", "12_wheeler", "14_wheeler", "trailer", "tractor", "container", "other")
+
+
+class TransporterVehicle(Base, TimestampMixin):
+    __tablename__ = "transporter_vehicles"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    transporter_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="CASCADE"), nullable=False, index=True)
+    number: Mapped[str] = mapped_column(String(32), nullable=False)
+    vehicle_type: Mapped[str] = mapped_column(String(16), nullable=False, default="other")
+    capacity_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    driver_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    driver_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    transporter: Mapped["Transporter"] = relationship(back_populates="vehicles")
+
+
+class TransporterRate(Base, TimestampMixin):
+    """One line of a transporter's rate card: a route and vehicle, and how it is charged."""
+
+    __tablename__ = "transporter_rates"
+    __table_args__ = (
+        CheckConstraint("basis IN ('trip', 'km', 'tonne', 'quintal', 'kg', 'unit', 'hour')", name="ck_transporter_rates_basis"),
+        CheckConstraint("rate >= 0", name="ck_transporter_rates_rate"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    transporter_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: Empty means anywhere.
+    from_place: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    to_place: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    vehicle_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    basis: Mapped[str] = mapped_column(String(8), nullable=False, default="trip")
+    rate: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    min_charge: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
+    loading_included: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    transporter: Mapped["Transporter"] = relationship(back_populates="rates")
+
+
+class LandedCost(Base, TimestampMixin):
+    """Freight, unloading, insurance and other charges on a goods receipt,
+    spread over its lines and added to the goods' cost. Added with the receipt
+    or later, when the transporter's bill comes in."""
+
+    __tablename__ = "landed_costs"
+    __table_args__ = (CheckConstraint("method IN ('quantity', 'value', 'weight')", name="ck_landed_costs_method"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    goods_receipt_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("goods_receipts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String(10), nullable=False, default="quantity")
+    total: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    #: Of the total, what went onto stock still on hand, and what was for goods
+    #: already sold (charged to cost of sales).
+    on_stock: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    on_sold: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    charges: Mapped[List["LandedCostCharge"]] = relationship(back_populates="landed_cost", cascade="all, delete-orphan")
+    lines: Mapped[List["LandedCostLine"]] = relationship(back_populates="landed_cost", cascade="all, delete-orphan")
+
+
+class LandedCostCharge(Base):
+    __tablename__ = "landed_cost_charges"
+    __table_args__ = (CheckConstraint("amount >= 0", name="ck_landed_charges_amount"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    landed_cost_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("landed_costs.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="freight")
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True)
+    paid_to: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    bill_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    landed_cost: Mapped["LandedCost"] = relationship(back_populates="charges")
+
+
+class LandedCostLine(Base):
+    __tablename__ = "landed_cost_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    landed_cost_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("landed_costs.id", ondelete="CASCADE"), nullable=False, index=True)
+    goods_receipt_item_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("goods_receipt_items.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    per_unit: Mapped[Decimal] = mapped_column(UnitCost, nullable=False)
+    on_stock: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    on_sold: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+
+    landed_cost: Mapped["LandedCost"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+
+
+class PurchaseReturn(Base, TimestampMixin):
+    """Goods sent back to a supplier (damaged, short-dated, wrong item...):
+    stock goes out at the cost it came in, and a debit note is raised. With
+    ``replace`` the supplier is to send the goods again, so the purchase
+    order is owed that quantity once more."""
+
+    __tablename__ = "purchase_returns"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    supplier_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=True, index=True)
+    goods_receipt_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("goods_receipts.id", ondelete="RESTRICT"), nullable=True, index=True)
+    warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True)
+    reason: Mapped[str] = mapped_column(String(16), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    replace: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: What the supplier owes back (debit note), at the purchase price.
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    #: What the goods cost on our books (FIFO), taken out of stock value.
+    stock_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True)
+    vehicle_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    supplier: Mapped["Supplier"] = relationship()
+    items: Mapped[List["PurchaseReturnItem"]] = relationship(back_populates="purchase_return", cascade="all, delete-orphan")
+
+
+class PurchaseReturnItem(Base):
+    __tablename__ = "purchase_return_items"
+    __table_args__ = (CheckConstraint("quantity > 0", name="ck_purchase_return_items_qty"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    purchase_return_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("purchase_returns.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    goods_receipt_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("goods_receipt_items.id", ondelete="RESTRICT"), nullable=True)
+    purchase_order_item_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("purchase_order_items.id", ondelete="RESTRICT"), nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(UnitCost, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Money, nullable=False)
+    stock_value: Mapped[Decimal] = mapped_column(Money, nullable=False, default=Decimal("0.00"))
+
+    purchase_return: Mapped["PurchaseReturn"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()
+
+
+class RateContract(Base, TimestampMixin):
+    """An agreed rate for a period: with a supplier (a mill's annual rate) or
+    a customer (a builder's project rate). Its rates live in a price list
+    with the contract's dates; purchase orders and quotes pick them up while
+    it runs, and the quantity bought or sold against it is tracked."""
+
+    __tablename__ = "rate_contracts"
+    __table_args__ = (
+        CheckConstraint("(customer_id IS NOT NULL) <> (supplier_id IS NOT NULL)", name="ck_rate_contracts_one_party"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="RESTRICT"), nullable=True, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=True, index=True)
+    #: For a customer's project: the site it is for.
+    address_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("addresses.id", ondelete="SET NULL"), nullable=True)
+    price_list_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("price_lists.id", ondelete="RESTRICT"), nullable=False)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reference: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    terms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    price_list: Mapped["PriceList"] = relationship()
+    customer: Mapped[Optional["Customer"]] = relationship()
+    supplier: Mapped[Optional["Supplier"]] = relationship()
+
+
+class TransportBooking(Base, TimestampMixin):
+    """A request to a transporter for a vehicle: by a person, or by TAI on
+    WhatsApp or PAI on a call, at whichever workflow step needs one."""
+
+    __tablename__ = "transport_bookings"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'requested', 'confirmed', 'declined', 'done', 'cancelled')", name="ck_transport_bookings_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="draft", index=True)
+    #: delivery, purchase, transfer, return or other; and the document it is for.
+    purpose: Mapped[str] = mapped_column(String(10), nullable=False, default="other")
+    reference_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    reference_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True, index=True)
+    reference_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    from_place: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    to_place: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    needed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    vehicle_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    load: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    weight_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    #: The estimate from the rate card, and what was agreed.
+    estimate: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
+    agreed_amount: Mapped[Optional[Decimal]] = mapped_column(Money, nullable=True)
+    vehicle_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    driver_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    #: Who asked (person, tai, pai) and how (whatsapp, call, manual).
+    requested_by: Mapped[str] = mapped_column(String(8), nullable=False, default="person")
+    channel: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")
+    reply: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    transporter: Mapped[Optional["Transporter"]] = relationship()

@@ -79,6 +79,15 @@ def process(message_id: uuid.UUID) -> None:
 
         from . import automation, parties
 
+        kind, party = (parties.find_by_email if message.channel == "email" else parties.find_by_phone)(session, message.sender)
+        if kind == "transporter" and party is not None:
+            from . import transport_automation
+
+            booking = transport_automation.handle_reply(session, party, message.body)
+            _finish(session, message, "transport_reply" if booking else "skipped",
+                    summary="Reply to booking {}: {}".format(booking["number"], booking["status"]) if booking else
+                    "Message from transporter {}; no booking was waiting for an answer.".format(party.name))
+            return
         steps = {key: automation.step(session, key) for key in ("sales.trigger_incoming", "sales.understand", "sales.price", "sales.send_quote", "sales.confirm_order")}
         if not automation.allowed(steps["sales.trigger_incoming"], "tai") or message.channel not in (steps["sales.trigger_incoming"].get("channels") or []):
             _finish(session, message, "skipped", summary="TAI is not set to read {} messages (Settings -> Automation).".format(message.channel))

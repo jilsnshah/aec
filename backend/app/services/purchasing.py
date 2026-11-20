@@ -204,6 +204,30 @@ def _load_products(session: Session, product_ids: Iterable[uuid.UUID]) -> Dict[u
     return found
 
 
+def _contract_rates(session: Session, supplier_id: Any, items: List[Dict[str, Any]]) -> Dict[uuid.UUID, uuid.UUID]:
+    """Lines with no cost take the supplier's running rate contract, if any."""
+    from . import rate_contracts
+
+    found: Dict[uuid.UUID, uuid.UUID] = {}
+    try:
+        supplier = uuid.UUID(str(supplier_id))
+    except (TypeError, ValueError):
+        return found
+    for item in items:
+        cost = item.get("unit_cost")
+        if cost not in (None, "") and Decimal(str(cost)) > 0:
+            continue
+        try:
+            product_id = uuid.UUID(str(item.get("product_id")))
+        except (TypeError, ValueError):
+            continue
+        hit = rate_contracts.supplier_rate(session, supplier, product_id, Decimal(str(item.get("quantity_ordered") or 0)))
+        if hit is not None:
+            item["unit_cost"] = hit[0].quantize(Decimal("0.0001"))
+            found[product_id] = hit[1].id
+    return found
+
+
 def create_purchase_order(
     session: Session,
     supplier_id: uuid.UUID,
@@ -216,6 +240,7 @@ def create_purchase_order(
     """Raise a purchase order. Confirmed straight away, it counts as stock at once."""
     items = [dict(item) for item in items]
     unit_of = units.apply(session, items, "quantity_ordered", "unit_cost", "purchase")
+    contract_of = _contract_rates(session, supplier_id, items)
     cleaned = _clean_po_lines(items)
 
     try:
@@ -251,6 +276,7 @@ def create_purchase_order(
                     notes=line["notes"],
                     unit=unit_of.get(product.id, (None, 1))[0],
                     unit_factor=unit_of.get(product.id, (None, 1))[1],
+                    rate_contract_id=contract_of.get(product.id),
                 )
             )
 
@@ -847,6 +873,7 @@ def create_goods_receipt(
     idempotency_key: Optional[str] = None,
     allow_over_receipt: bool = False,
     warehouse_id: Optional[uuid.UUID] = None,
+    transport: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Book goods in against a purchase order and settle waiting customers.
 
@@ -894,8 +921,17 @@ def create_goods_receipt(
         from . import warehouses as warehouse_service
 
         into = warehouse_service.resolve(session, warehouse_id)
+        transport = transport or {}
+        if transport.get("transporter_id"):
+            from .transporters import get as get_transporter
+
+            get_transporter(session, transport["transporter_id"])
         receipt = GoodsReceipt(
             warehouse_id=into,
+            transporter_id=transport.get("transporter_id"),
+            vehicle_number=(transport.get("vehicle_number") or "").strip().upper() or None,
+            lr_number=(transport.get("lr_number") or "").strip() or None,
+            driver_phone=(transport.get("driver_phone") or "").strip() or None,
             receipt_number=next_document_number(session, GOODS_RECEIPT_COUNTER, "GR"),
             purchase_order_id=order.id,
             supplier_id=order.supplier_id,

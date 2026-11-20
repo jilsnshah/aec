@@ -919,8 +919,22 @@ class GoodsReceiptLineInput(BaseModel):
     allocations: Optional[List[ReceiptAllocationInput]] = None
 
 
+class LandedChargeInput(BaseModel):
+    kind: str = Field(default="freight", description="freight, unloading, loading, insurance, octroi, commission or other.")
+    amount: Decimal = Field(ge=0)
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="Owed to this transporter (shows on their statement).")
+    paid_to: Optional[str] = Field(default=None, max_length=120)
+    bill_number: Optional[str] = Field(default=None, max_length=64)
+
+
 class GoodsReceiptRequest(BaseModel):
     purchase_order_id: uuid.UUID
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="Who carries the goods.")
+    vehicle_number: Optional[str] = Field(default=None, max_length=32)
+    lr_number: Optional[str] = Field(default=None, max_length=64, description="Lorry receipt (LR / bilty) number.")
+    driver_phone: Optional[str] = Field(default=None, max_length=32)
+    costs: Optional[List[LandedChargeInput]] = Field(default=None, description="Freight and other charges to add to the goods' cost (landed cost).")
+    cost_method: Optional[str] = Field(default=None, description="Spread costs by quantity, value or weight.")
     warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Where the goods are put; the default warehouse if omitted.")
     lines: List[GoodsReceiptLineInput] = Field(min_length=1)
     delivery_note_reference: Optional[str] = Field(default=None, max_length=128)
@@ -1031,6 +1045,8 @@ class GoodsReceiptResultLine(BaseModel):
 class GoodsReceiptResult(BaseModel):
     receipt_id: uuid.UUID
     receipt_number: str
+    #: Freight and other charges added to the goods' cost on this receipt.
+    landed_cost: Optional[Dict[str, Any]] = None
     created_at: datetime
     purchase_order_id: uuid.UUID
     po_number: str
@@ -1083,6 +1099,12 @@ class DeliveryLineInput(BaseModel):
 
 class DeliveryRequest(BaseModel):
     lines: List[DeliveryLineInput] = Field(min_length=1)
+    transporter_id: Optional[uuid.UUID] = Field(default=None, description="Who carries the goods.")
+    vehicle_number: Optional[str] = Field(default=None, max_length=32)
+    lr_number: Optional[str] = Field(default=None, max_length=64, description="Lorry receipt (LR / bilty) number.")
+    driver_phone: Optional[str] = Field(default=None, max_length=32)
+    freight_amount: Optional[Decimal] = Field(default=None, ge=0, description="Freight for this trip.")
+    freight_paid_by: Optional[str] = Field(default=None, description="us (our expense, owed to the transporter) or customer (they pay the driver).")
     warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Warehouse the goods leave from; omit to use the oldest stock anywhere.")
     reference: Optional[str] = Field(default=None, max_length=128)
     notes: Optional[str] = None

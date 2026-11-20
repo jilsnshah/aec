@@ -117,9 +117,12 @@ def create_purchase_order(
 
 
 def _to_tally(db: Session, order, background: BackgroundTasks) -> None:
-    """A placed purchase order goes to Tally, after the response."""
+    """A placed purchase order goes to Tally, after the response (and may need a pickup booked)."""
     for sync_id in tally_sync.queue_purchase_order(db, order):
         background.add_task(tally_sync.process, sync_id)
+    from ..services import notifications
+
+    background.add_task(notifications.po_placed, order.id)
 
 
 @po_router.get("/{po_id}", response_model=schemas.PurchaseOrderOut)
@@ -217,7 +220,7 @@ def preview_goods_receipt(payload: schemas.GoodsReceiptRequest, db: Session = De
 
 
 @receipts_router.post("", response_model=schemas.GoodsReceiptResult, status_code=201)
-def create_goods_receipt(payload: schemas.GoodsReceiptRequest, db: Session = Depends(get_db)):
+def create_goods_receipt(payload: schemas.GoodsReceiptRequest, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Book goods in and compulsorily reserve them against waiting orders.
 
     Omit a line's ``allocations`` to allocate FIFO. Anything sent is
@@ -230,7 +233,7 @@ def create_goods_receipt(payload: schemas.GoodsReceiptRequest, db: Session = Dep
         if entry.get("allocations") is not None:
             entry["allocations"] = [dict(row) for row in entry["allocations"]]
         lines.append(entry)
-    return purchasing_service.create_goods_receipt(
+    result = purchasing_service.create_goods_receipt(
         db,
         po_id=payload.purchase_order_id,
         lines=lines,
@@ -239,7 +242,24 @@ def create_goods_receipt(payload: schemas.GoodsReceiptRequest, db: Session = Dep
         idempotency_key=payload.idempotency_key,
         allow_over_receipt=payload.allow_over_receipt,
         warehouse_id=payload.warehouse_id,
+        transport=payload.model_dump(include={"transporter_id", "vehicle_number", "lr_number", "driver_phone"}),
     )
+    charges = [c.model_dump() for c in payload.costs or [] if c.amount > 0]
+    if charges:
+        from ..services import landed_costs
+
+        # The transporter on the receipt is owed the freight unless a charge names someone else.
+        for charge in charges:
+            if not charge.get("transporter_id") and not charge.get("paid_to") and charge.get("kind") == "freight":
+                charge["transporter_id"] = payload.transporter_id
+        result["landed_cost"] = landed_costs.add(db, uuid.UUID(str(result["receipt_id"])), charges, payload.cost_method or "quantity")
+    # Orders this receipt made ready may need a vehicle booked.
+    from ..services import notifications
+
+    ready = {a["order_id"] for line in result.get("lines", []) for a in line.get("allocations", []) if a.get("order_id")}
+    if ready:
+        background.add_task(notifications.stock_arrived, sorted(ready, key=str))
+    return result
 
 
 @receipts_router.get("/{receipt_id}", response_model=schemas.GoodsReceiptResult)

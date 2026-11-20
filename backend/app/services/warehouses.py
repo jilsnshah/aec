@@ -306,6 +306,7 @@ def view(session: Session, transfer: StockTransfer) -> Dict[str, Any]:
         "from_warehouse_id": transfer.from_warehouse_id, "from_warehouse": transfer.from_warehouse.name,
         "to_warehouse_id": transfer.to_warehouse_id, "to_warehouse": transfer.to_warehouse.name,
         "cost_method": transfer.cost_method, "vehicle": transfer.vehicle, "transporter": transfer.transporter, "notes": transfer.notes,
+        "transporter_id": transfer.transporter_id, "lr_number": transfer.lr_number,
         "goods_value": float(transfer.goods_value), "extra_cost": float(transfer.extra_cost or costs), "costs_total": float(costs),
         "loss_value": float(transfer.loss_value),
         "landed_value": float(transfer.goods_value - transfer.loss_value + (transfer.extra_cost if transfer.status == "received" else 0)),
@@ -321,7 +322,8 @@ def view(session: Session, transfer: StockTransfer) -> Dict[str, Any]:
             "unit_cost_after": float(((i.goods_value / i.quantity) + (i.extra_cost / i.quantity_received)).quantize(Decimal("0.01")))
             if i.quantity and i.quantity_received and transfer.status == "received" else None,
         } for i in transfer.items],
-        "costs": [{"id": c.id, "kind": c.kind, "label": COST_KINDS.get(c.kind, c.kind), "amount": float(c.amount), "paid_to": c.paid_to, "note": c.note} for c in transfer.costs],
+        "costs": [{"id": c.id, "kind": c.kind, "label": COST_KINDS.get(c.kind, c.kind), "amount": float(c.amount), "paid_to": c.paid_to,
+                   "transporter_id": c.transporter_id, "note": c.note} for c in transfer.costs],
     }
 
 
@@ -361,9 +363,18 @@ def _apply_draft(session: Session, transfer: StockTransfer, data: Dict[str, Any]
         if data["cost_method"] not in METHODS:
             raise ValidationError("Spread costs by quantity, value or weight.")
         transfer.cost_method = data["cost_method"]
-    for key in ("vehicle", "transporter", "notes"):
+    for key in ("vehicle", "transporter", "notes", "lr_number"):
         if key in data:
             setattr(transfer, key, (data[key] or "").strip() or None)
+    if "transporter_id" in data:
+        if data["transporter_id"]:
+            from .transporters import get as get_transporter
+
+            found = get_transporter(session, uuid.UUID(str(data["transporter_id"])))
+            transfer.transporter_id = found.id
+            transfer.transporter = transfer.transporter or found.name
+        else:
+            transfer.transporter_id = None
     if data.get("items") is not None:
         lines = [dict(line) for line in data["items"] if line.get("product_id")]
         if not lines:
@@ -399,7 +410,11 @@ def _apply_draft(session: Session, transfer: StockTransfer, data: Dict[str, Any]
             kind = cost.get("kind") or "freight"
             if kind not in COST_KINDS:
                 raise ValidationError("Unknown cost '{}'.".format(kind))
+            cost_transporter = cost.get("transporter_id")
+            if cost_transporter is None and kind == "freight" and not cost.get("paid_to"):
+                cost_transporter = data.get("transporter_id") or transfer.transporter_id
             transfer.costs.append(StockTransferCost(kind=kind, amount=amount, paid_to=(cost.get("paid_to") or "").strip() or None,
+                                                    transporter_id=uuid.UUID(str(cost_transporter)) if cost_transporter else None,
                                                     note=(cost.get("note") or "").strip() or None))
     transfer.extra_cost = sum((c.amount for c in transfer.costs), ZERO_MONEY)
 
@@ -429,7 +444,7 @@ def update_transfer(session: Session, transfer_id: uuid.UUID, data: Dict[str, An
             _apply_draft(session, transfer, data)
         elif transfer.status == "in_transit":
             # On the road, only the paperwork and the costs can still change.
-            allowed = {k: v for k, v in data.items() if k in ("vehicle", "transporter", "notes", "costs", "cost_method")}
+            allowed = {k: v for k, v in data.items() if k in ("vehicle", "transporter", "notes", "costs", "cost_method", "transporter_id", "lr_number")}
             if set(data) - set(allowed) - {"items", "from_warehouse_id", "to_warehouse_id"}:
                 pass
             if any(k in data and data[k] is not None for k in ("items", "from_warehouse_id", "to_warehouse_id")):
