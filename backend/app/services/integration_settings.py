@@ -197,7 +197,7 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             # The address the internet reaches this app at (for images Instagram fetches).
             "public_url": "",
             # Gemini model that draws images (cards are drawn without AI).
-            "image_model": "gemini-2.5-flash-image",
+            "image_model": "gemini-3.1-flash-image",
             # Agents: how often the Strategist looks for opportunities.
             "scan_hours": 24,
             "analyst_weekday": 0,

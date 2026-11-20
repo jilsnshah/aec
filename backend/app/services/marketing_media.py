@@ -34,7 +34,7 @@ MAX_UPLOAD = 8 * 1024 * 1024
 #: Instagram feed images: aspect ratio between 4:5 and 1.91:1.
 SIZES = {"portrait": (1080, 1350), "square": (1080, 1080), "landscape": (1080, 566)}
 #: Image model used when none is set in Settings → Marketing.
-DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
+DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image"
 
 
 def _font(size: int, weight: str = "Regular") -> ImageFont.FreeTypeFont:
