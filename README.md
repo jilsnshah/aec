@@ -1,4 +1,4 @@
-# AEC Business Management
+# Feles — business management for traders
 
 A business management system covering **enquiries, sales, purchasing,
 inventory and fulfilment**, from a customer asking for a price to the goods
@@ -256,7 +256,7 @@ a per-customer roll-up, and the delivery action itself.
 
 ## The interface
 
-AEC Desk is built as a desktop application, not a scrolling website. The
+Feles is built as a desktop application, not a scrolling website. The
 window never scrolls as a page: a top bar carries the modules as pills —
 Home, Assistant, Insights, Fulfilment, then **Sales**, **Buying** and **Stock**
 menus, Follow-ups and Settings — with search, the alerts bell, the light/dark

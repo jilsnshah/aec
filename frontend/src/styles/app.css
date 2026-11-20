@@ -4,7 +4,7 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /* ==========================================================================
-   AEC Desk theme. Two themes share one set of names; :root is light and
+   Feles theme. Two themes share one set of names; :root is light and
    [data-theme='dark'] swaps the values. Tailwind's "white" is remapped to a
    tint, so white/7 lines and hovers read on both themes.
    ========================================================================== */

@@ -41,7 +41,7 @@ export function SignIn() {
           <Contours className="absolute -right-[30%] -bottom-[45%] size-[130%] text-[rgb(255_255_255/0.5)]" rings={14} seed={4} />
           <div className="flex items-center gap-2.5">
             <Logo size={30} />
-            <span className="text-[19px] font-bold tracking-[-0.035em]">AEC Desk</span>
+            <span className="text-[19px] font-bold tracking-[-0.035em]">Feles</span>
           </div>
           <div className="flex h-[150px] items-end gap-3" aria-hidden="true">
             {[52, 74, 60, 92, 70, 84].map((height, index) => (
@@ -66,7 +66,7 @@ export function SignIn() {
             <Logo size={36} />
           </div>
           <h1 className="text-[30px] font-light tracking-[-0.035em] max-md:mt-5">Welcome back</h1>
-          <p className="mt-1 text-[13px] text-fg-3">Sign in to continue to AEC Desk.</p>
+          <p className="mt-1 text-[13px] text-fg-3">Sign in to continue to Feles.</p>
           <div className="mt-7 space-y-4">
             {error ? <Notice tone="bad">{error}</Notice> : null}
             <Field label="Username">

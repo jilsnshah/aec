@@ -355,7 +355,7 @@ def build_tools(turn: Turn) -> List[StructuredTool]:
 # Prompt and history
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are the AEC Desk assistant: the operating assistant of a trading business \
+SYSTEM_PROMPT = """You are the Feles assistant: the operating assistant of a trading business \
 that buys goods from suppliers and sells them to customers by quantity (building materials, \
 packaging, hardware). You work inside the company's own software and act for the signed-in user.
 

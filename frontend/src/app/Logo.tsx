@@ -25,7 +25,7 @@ export function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
       <Logo size={30} />
-      <span className="text-[19px] font-bold tracking-[-0.035em]">AEC Desk</span>
+      <span className="text-[19px] font-bold tracking-[-0.035em]">Feles</span>
     </div>
   )
 }
