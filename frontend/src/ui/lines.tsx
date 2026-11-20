@@ -103,7 +103,7 @@ export function lineErrors(raw: Line[], mode: Mode, products?: Map<string, Produ
 }
 
 /** Products, quantities and prices for an order, enquiry or purchase. */
-export function LineEditor({ lines, onChange, mode }: { lines: Line[]; onChange: (lines: Line[]) => void; mode: Mode }) {
+export function LineEditor({ lines, onChange, mode, contractRates }: { lines: Line[]; onChange: (lines: Line[]) => void; mode: Mode; contractRates?: Record<string, { rate: number | string; contract: string }> }) {
   const products = useProducts()
   const options = products.items.map(productOption)
   const update = (key: string, patch: Partial<Line>) => onChange(lines.map((line) => (line.key === key ? { ...line, ...patch } : line)))
@@ -148,7 +148,7 @@ export function LineEditor({ lines, onChange, mode }: { lines: Line[]; onChange:
                     const chosen = products.byId.get(value)
                     const unit = defaultUnit(chosen, mode)
                     const factor = factorOf({ unit }, chosen)
-                    update(line.key, { product_id: value, unit, cost: mode === 'purchase' && !line.cost && chosen ? String(n(chosen.last_purchase_price ?? chosen.average_cost) * factor || '') : line.cost })
+                    update(line.key, { product_id: value, unit, cost: mode === 'purchase' && !line.cost && chosen ? String(Math.round(n(contractRates?.[value]?.rate ?? chosen.last_purchase_price ?? chosen.average_cost) * factor * 100) / 100 || '') : line.cost })
                   }}
                 />
                 <input className="field field-sm field-num" inputMode="decimal" value={line.quantity} aria-label="Quantity" aria-invalid={line.product_id && !isQty(line.quantity) ? true : undefined} onChange={(event) => update(line.key, { quantity: event.target.value })} />
@@ -205,6 +205,11 @@ export function LineEditor({ lines, onChange, mode }: { lines: Line[]; onChange:
                   ) : null}
                   {mode === 'sale' && baseQty(line, product) > Math.max(0, n(product.stock)) ? <span className="text-warn">· {fmtQty(baseQty(line, product) - Math.max(0, n(product.stock)))} {product.unit_of_measure} will be short</span> : null}
                   {mode === 'purchase' && product.last_purchase_price ? <span>· last paid {fmtMoney(product.last_purchase_price)}</span> : null}
+                  {mode === 'purchase' && contractRates?.[product.id] ? (
+                    <span className="font-medium text-fg-2">
+                      · contract {contractRates[product.id].contract}: {fmtMoney(n(contractRates[product.id].rate) * factorOf(line, product))}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
             </motion.div>

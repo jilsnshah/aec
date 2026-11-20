@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PackageOpen, Plus, ScanLine, Users } from 'lucide-react'
+import { PackageOpen, Plus, RotateCcw, ScanLine, Truck, Users } from 'lucide-react'
 import { AskButton, PageGuide, ScanButton } from '@/ui/smart'
 import { api } from '@/api/endpoints'
 import { useList, useOne } from '@/api/queries'
@@ -10,6 +10,7 @@ import { PurchaseBadge } from '@/lib/status'
 import { Badge, Button, Empty, SearchBox, Spinner } from '@/ui/core'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, ListSkeleton, Section, SplitView } from '@/ui/split'
 import { ReceiveSheet } from './ReceiveSheet'
+import { LandedCostSheet, PurchaseReturnSheet, ReceiptCostsAndReturns } from './ReceiptExtras'
 
 export function Receipts() {
   const route = useRecordRoute('/receipts')
@@ -88,6 +89,7 @@ export function Receipts() {
 
 function ReceiptInspector({ id }: { id: string }) {
   const receipt = useOne('goods-receipts', api.goodsReceipts.get, id)
+  const [sheet, setSheet] = useState<null | 'charges' | 'return'>(null)
   if (receipt.isPending) return <Spinner />
   if (!receipt.data) return <Empty title="This receipt could not be loaded" />
   const data = receipt.data
@@ -110,7 +112,17 @@ function ReceiptInspector({ id }: { id: string }) {
             {data.delivery_note_reference ? ` · note ${data.delivery_note_reference}` : ''}
           </>
         }
-        actions={<AskButton question={`Check goods receipt ${data.receipt_number} against purchase order ${data.po_number}: was everything received at the ordered price, which customers got the goods, and what is still due from ${data.supplier_name}?`} />}
+        actions={
+          <>
+            <Button icon={<Truck size={14} />} onClick={() => setSheet('charges')}>
+              Freight & charges
+            </Button>
+            <Button icon={<RotateCcw size={14} />} onClick={() => setSheet('return')}>
+              Return to supplier
+            </Button>
+            <AskButton question={`Check goods receipt ${data.receipt_number} against purchase order ${data.po_number}: was everything received at the ordered price, which customers got the goods, and what is still due from ${data.supplier_name}?`} />
+          </>
+        }
       />
       <FigureStrip
         items={[
@@ -171,12 +183,15 @@ function ReceiptInspector({ id }: { id: string }) {
             </div>
           ))}
         </div>
+        <ReceiptCostsAndReturns receiptId={id} purchaseOrderId={data.purchase_order_id} />
         {data.notes ? (
           <Section title="Note">
             <p className="text-[13px] text-fg-2">{data.notes}</p>
           </Section>
         ) : null}
       </div>
+      <LandedCostSheet open={sheet === 'charges'} onClose={() => setSheet(null)} receiptId={id} receiptNumber={data.receipt_number} />
+      <PurchaseReturnSheet open={sheet === 'return'} onClose={() => setSheet(null)} receiptId={id} receiptNumber={data.receipt_number} />
     </>
   )
 }

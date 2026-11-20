@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useContractRates } from '@/features/contracts/ContractBadge'
 import { Send } from 'lucide-react'
 import { errorText } from '@/api/client'
 import { api } from '@/api/endpoints'
@@ -50,6 +51,7 @@ export function PurchaseSheet({
   const products = useProducts()
   const short = useCommitments({ only_unallocated: true })
   const [supplier, setSupplier] = useState('')
+  const contractRates = useContractRates(supplier || undefined)
   const [lines, setLines] = useState<Line[]>([newLine()])
   const [expected, setExpected] = useState('')
   const [notes, setNotes] = useState('')
@@ -196,7 +198,7 @@ export function PurchaseSheet({
         </div>
         <div>
           <div className="label">Products</div>
-          <LineEditor lines={lines} onChange={setLines} mode="purchase" />
+          <LineEditor lines={lines} onChange={setLines} mode="purchase" contractRates={contractRates} />
         </div>
         {!editing
           ? needs.map((need) => (

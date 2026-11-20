@@ -80,6 +80,8 @@ export interface Transfer {
   cost_method: 'quantity' | 'value' | 'weight'
   vehicle: string | null
   transporter: string | null
+  transporter_id: string | null
+  lr_number: string | null
   notes: string | null
   goods_value: number
   extra_cost: number
@@ -103,6 +105,8 @@ export interface TransferIn {
   cost_method?: string
   vehicle?: string | null
   transporter?: string | null
+  transporter_id?: string | null
+  lr_number?: string | null
   notes?: string | null
   dispatch?: boolean
 }

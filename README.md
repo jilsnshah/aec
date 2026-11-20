@@ -1010,6 +1010,25 @@ gap analysis, roadmap and sources).
   or weight and added to the goods' cost at the destination (landed cost), and
   shortages are written off as lost in transit. With Tally on, received transfers
   post as Stock Journals between godowns.
+- **Transporters** (Buying → Transporters): full parties like suppliers (contacts,
+  numbers, addresses, GSTIN, Tally ledger, payment terms, booking channel, rating)
+  with vehicles and a rate card (per trip, km, tonne, quintal, kg, unit or hour, with
+  minimum charge and validity). Deliveries, goods receipts, transfers and returns
+  record the transporter, vehicle, LR number and freight; their statement shows
+  freight owed and payments. Bookings ask a transporter for a vehicle.
+- **Landed cost**: freight, unloading, insurance, octroi and other charges on a goods
+  receipt (with it, or later when the bill comes) are spread by quantity, value or
+  weight and added to the goods' FIFO cost; the share for goods already sold is shown.
+- **Purchase returns**: send goods back from a receipt; stock leaves at the cost it
+  came in, a debit note reduces what we owe (and goes to Tally as a Debit Note);
+  optionally the supplier replaces them and the PO is owed them again.
+- **Rate contracts** (Buying → Rate Contracts): agreed rates for a period with a
+  supplier (purchase orders take the rate) or customer (competes for best price),
+  with slabs, committed quantities and usage.
+- **Book transport automation**: a flow step (sales or purchase) that books a vehicle
+  when an order is placed, its stock is ready, or a PO is placed. TAI asks the
+  transporter on WhatsApp or PAI calls; a YES with vehicle and rate confirms it within
+  the step's limits, a NO moves to the next transporter on the rate card.
 - **Payment reminders** (Finance → Reminders): friendly, firm and final levels
   by days late, message ready for WhatsApp, each reminder logged with a
   follow-up to check payment.

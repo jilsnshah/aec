@@ -1,4 +1,5 @@
 import { QtyCell, perUnit } from '@/ui/lines'
+import { BookingSheet } from '@/features/transport/BookingSheet'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -182,6 +183,7 @@ function PurchaseInspector({ id }: { id: string }) {
   const [editing, setEditing] = useState(false)
   const [receiving, setReceiving] = useState(false)
   const [settling, setSettling] = useState<null | 'place' | 'settle'>(null)
+  const [booking, setBooking] = useState(false)
   const confirm = useConfirm()
   const cancel = useAction((reason: string | null) => api.purchaseOrders.cancel(id, reason), { success: 'Purchase order cancelled' })
 
@@ -244,6 +246,7 @@ function PurchaseInspector({ id }: { id: string }) {
               items={[
                 { label: 'Open supplier', icon: <Truck size={14} />, onSelect: () => (window.location.href = `/suppliers/${data.supplier_id}`) },
                 { label: 'Chase on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/?text=${encodeURIComponent(`Hello ${data.supplier.name}, checking on our order ${data.po_number}${data.expected_delivery_date ? ` expected on ${fmtDate(data.expected_delivery_date)}` : ''}. When can we expect delivery?`)}`, '_blank'), disabled: draft },
+                { label: 'Book a pickup vehicle', icon: <Truck size={14} />, onSelect: () => setBooking(true), disabled: draft || data.status === 'CANCELLED' || data.status === 'RECEIVED' },
                 { label: 'Settle short customers', icon: <Users size={14} />, onSelect: () => setSettling('settle'), disabled: !needsSettling },
                 { label: 'Cancel purchase order', icon: <Ban size={14} />, onSelect: askCancel, danger: true, separator: true, disabled: data.status === 'CANCELLED' || data.status === 'RECEIVED' },
               ]}
@@ -371,6 +374,7 @@ function PurchaseInspector({ id }: { id: string }) {
       <PurchaseSheet open={editing} onClose={() => setEditing(false)} editing={data} />
       <ReceiveSheet open={receiving} onClose={() => setReceiving(false)} poId={id} />
       <SettleSheet po={data} mode={settling} onClose={() => setSettling(null)} />
+      <BookingSheet open={booking} onClose={() => setBooking(false)} referenceType="purchase_order" referenceId={data.id} />
       {confirm.element}
     </>
   )

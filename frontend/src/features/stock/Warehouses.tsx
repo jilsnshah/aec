@@ -29,6 +29,7 @@ import { Picker } from '@/ui/pickers'
 import { baseQty, factorOf, productOption, unitsOf, useProducts } from '@/ui/lines'
 import { FigureStrip, InspectorHeader, ListPane, ListRow, Section, SplitView } from '@/ui/split'
 import { PageGuide } from '@/ui/smart'
+import { useTransporterOptions } from '@/features/receipts/ReceiptExtras'
 
 const KIND_ICON: Record<string, LucideIcon> = { godown: WarehouseIcon, yard: Factory, shop: Store, site: MapPin, transit: Truck }
 const STATUS: Record<Transfer['status'], { label: string; tone: 'sky' | 'steel' | 'ok' | 'muted' }> = {
@@ -561,7 +562,8 @@ const COSTS = [
 function TransferSheet({ open, editing, from, houses, onClose, onSaved }: { open: boolean; editing?: Transfer; from?: string; houses: Warehouse[]; onClose: () => void; onSaved: (id: string) => void }) {
   const products = useProducts()
   const usable = houses.filter((w) => w.kind !== 'transit' && w.is_active)
-  const [form, setForm] = useState({ from: '', to: '', method: 'quantity', vehicle: '', transporter: '', notes: '' })
+  const [form, setForm] = useState({ from: '', to: '', method: 'quantity', vehicle: '', transporter: '', transporter_id: '', lr: '', notes: '' })
+  const transporterOptions = useTransporterOptions()
   const [lines, setLines] = useState<LineRow[]>([newLine()])
   const [costs, setCosts] = useState<CostRow[]>([])
   const onRoad = editing?.status === 'in_transit'
@@ -570,8 +572,8 @@ function TransferSheet({ open, editing, from, houses, onClose, onSaved }: { open
     const fallback = from ?? usable.find((w) => w.is_default)?.id ?? ''
     setForm(
       editing
-        ? { from: editing.from_warehouse_id, to: editing.to_warehouse_id, method: editing.cost_method, vehicle: editing.vehicle ?? '', transporter: editing.transporter ?? '', notes: editing.notes ?? '' }
-        : { from: fallback, to: usable.find((w) => w.id !== fallback)?.id ?? '', method: 'quantity', vehicle: '', transporter: '', notes: '' },
+        ? { from: editing.from_warehouse_id, to: editing.to_warehouse_id, method: editing.cost_method, vehicle: editing.vehicle ?? '', transporter: editing.transporter ?? '', transporter_id: editing.transporter_id ?? '', lr: editing.lr_number ?? '', notes: editing.notes ?? '' }
+        : { from: fallback, to: usable.find((w) => w.id !== fallback)?.id ?? '', method: 'quantity', vehicle: '', transporter: '', transporter_id: '', lr: '', notes: '' },
     )
     setLines(editing ? editing.items.map((i) => ({ key: i.id, product_id: i.product_id, quantity: String(i.unit ? i.unit_quantity : i.quantity), unit: i.unit ?? '' })) : [newLine()])
     setCosts(editing ? editing.costs.map((c) => ({ kind: c.kind, amount: String(c.amount), paid_to: c.paid_to ?? '' })) : [])
@@ -605,7 +607,9 @@ function TransferSheet({ open, editing, from, houses, onClose, onSaved }: { open
     costs: costs.filter((c) => n(c.amount) > 0).map((c) => ({ kind: c.kind, amount: c.amount, paid_to: c.paid_to || null })),
     cost_method: form.method,
     vehicle: form.vehicle || null,
-    transporter: form.transporter || null,
+    transporter: form.transporter_id ? null : form.transporter || null,
+    transporter_id: form.transporter_id || null,
+    lr_number: form.lr || null,
     notes: form.notes || null,
     dispatch: dispatchNow,
   })
@@ -788,12 +792,30 @@ function TransferSheet({ open, editing, from, houses, onClose, onSaved }: { open
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+        <div className="grid grid-cols-4 gap-3 max-md:grid-cols-1">
           <Field label="Vehicle" optional>
             {(props) => <input {...props} className="field" value={form.vehicle} onChange={(e) => setForm((f) => ({ ...f, vehicle: e.target.value }))} placeholder="GJ01AB1234" />}
           </Field>
           <Field label="Transporter" optional>
-            {(props) => <input {...props} className="field" value={form.transporter} onChange={(e) => setForm((f) => ({ ...f, transporter: e.target.value }))} />}
+            {(props) => (
+              <select {...props} className="field" value={form.transporter_id} onChange={(e) => {
+                const value = e.target.value
+                setForm((f) => ({ ...f, transporter_id: value }))
+              }}>
+                <option value="">Own vehicle / none</option>
+                {(transporterOptions.data?.items ?? []).filter((t) => t.is_active).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label="LR / bilty no." optional>
+            {(props) => <input {...props} className="field" value={form.lr} onChange={(e) => {
+              const value = e.target.value
+              setForm((f) => ({ ...f, lr: value }))
+            }} />}
           </Field>
           <Field label="Notes" optional>
             {(props) => <input {...props} className="field" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />}

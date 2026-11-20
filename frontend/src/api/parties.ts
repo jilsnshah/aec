@@ -5,7 +5,7 @@ const request = (method: string, path: string) => raw<ProductNames>(method, path
 /** Customers and suppliers as full parties: contacts, phone numbers and emails,
  *  addresses and delivery sites; duplicates and merging; product names and units. */
 
-export type PartyKind = 'customer' | 'supplier'
+export type PartyKind = 'customer' | 'supplier' | 'transporter'
 export interface PartyContact {
   id: string
   name: string

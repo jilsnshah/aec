@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WarehouseSelect } from '@/features/stock/WarehouseSelect'
+import { useQuery } from '@tanstack/react-query'
+import { useTransporterOptions } from '@/features/receipts/ReceiptExtras'
 import { Truck } from 'lucide-react'
-import { errorText } from '@/api/client'
+import { errorText, http } from '@/api/client'
 import { api } from '@/api/endpoints'
 import { useAction, useOne } from '@/api/queries'
 import { fmtQty, isQty, n } from '@/lib/format'
@@ -16,6 +18,18 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
   const [reference, setReference] = useState('')
   const [notes, setNotes] = useState('')
   const [warehouse, setWarehouse] = useState('')
+  const [transport, setTransport] = useState({ transporter_id: '', vehicle_number: '', lr_number: '', driver_phone: '', freight_amount: '', freight_paid_by: 'us' })
+  const transporters = useTransporterOptions()
+  // A vehicle booked for this order (by a person, TAI or PAI) fills the trip in.
+  const booked = useQuery({
+    queryKey: ['transport-bookings', 'for', orderId],
+    queryFn: () => http.get<{ items: { status: string; transporter_id: string | null; vehicle_number: string | null; driver_phone: string | null; agreed_amount: number | null; number: string }[] }>('/api/transport-bookings', { reference_id: orderId }),
+    enabled: open,
+  })
+  const setT = (key: keyof typeof transport) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const value = e.target.value
+    setTransport((t) => ({ ...t, [key]: value }))
+  }
   const [key, setKey] = useState(() => crypto.randomUUID())
   const deliver = useAction((body: Parameters<typeof api.orders.deliver>[1]) => api.orders.deliver(orderId, body), {
     success: (result) => `${result.delivery_number} · ${fmtQty(result.total_delivered)} delivered`,
@@ -27,9 +41,22 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
     setAmounts(Object.fromEntries(lines.map((line) => [line.order_item_id, String(n(line.quantity_deliverable))])))
     setReference('')
     setNotes('')
+    setTransport({ transporter_id: '', vehicle_number: '', lr_number: '', driver_phone: '', freight_amount: '', freight_paid_by: 'us' })
     setKey(crypto.randomUUID())
     deliver.reset()
   }, [open, lines.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const booking = (booked.data?.items ?? []).find((b) => b.status === 'confirmed')
+  useEffect(() => {
+    if (!open || !booking) return
+    setTransport((t) => ({
+      ...t,
+      transporter_id: t.transporter_id || booking.transporter_id || '',
+      vehicle_number: t.vehicle_number || booking.vehicle_number || '',
+      driver_phone: t.driver_phone || booking.driver_phone || '',
+      freight_amount: t.freight_amount || (booking.agreed_amount != null ? String(booking.agreed_amount) : ''),
+    }))
+  }, [open, booking?.number]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const errors = lines.filter((line) => {
     const value = amounts[line.order_item_id] ?? ''
@@ -40,7 +67,9 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
 
   function submit() {
     deliver.mutate(
-      { lines: chosen.map((line) => ({ order_item_id: line.order_item_id, quantity: amounts[line.order_item_id] })), reference: reference || null, notes: notes || null, idempotency_key: key, warehouse_id: warehouse || null },
+      { lines: chosen.map((line) => ({ order_item_id: line.order_item_id, quantity: amounts[line.order_item_id] })), reference: reference || null, notes: notes || null, idempotency_key: key, warehouse_id: warehouse || null,
+        transporter_id: transport.transporter_id || null, vehicle_number: transport.vehicle_number || null, lr_number: transport.lr_number || null,
+        driver_phone: transport.driver_phone || null, freight_amount: transport.freight_amount || null, freight_paid_by: transport.freight_paid_by },
       { onSuccess: onClose },
     )
   }
@@ -104,6 +133,46 @@ export function DeliverSheet({ orderId, open, onClose, onlyItem }: { orderId: st
           </div>
           {errors.length > 0 ? <Notice tone="bad">You can deliver at most what is ready on each line.</Notice> : null}
           <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Deliver from" anyLabel="Oldest stock, any warehouse" hint="Goods leave this warehouse; it must hold enough." />
+          <div className="card space-y-3 p-4">
+            <div className="flex items-center gap-2 text-[13.5px] font-semibold">
+              <Truck size={14} /> Transport
+              {booking ? <span className="text-[11.5px] font-normal text-fg-3">· from booking {booking.number}</span> : null}
+            </div>
+            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+              <Field label="Transporter" optional>
+                {(props) => (
+                  <select {...props} className="field" value={transport.transporter_id} onChange={setT('transporter_id')}>
+                    <option value="">Own vehicle / customer collects</option>
+                    {(transporters.data?.items ?? []).filter((t) => t.is_active).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label="Vehicle" optional>
+                {(props) => <input {...props} className="field" placeholder="GJ01AB1234" value={transport.vehicle_number} onChange={setT('vehicle_number')} />}
+              </Field>
+              <Field label="LR / bilty no." optional>
+                {(props) => <input {...props} className="field" value={transport.lr_number} onChange={setT('lr_number')} />}
+              </Field>
+              <Field label="Driver phone" optional>
+                {(props) => <input {...props} className="field" inputMode="tel" value={transport.driver_phone} onChange={setT('driver_phone')} />}
+              </Field>
+              <Field label="Freight" optional>
+                {(props) => <input {...props} className="field field-num" inputMode="decimal" placeholder="₹" value={transport.freight_amount} onChange={setT('freight_amount')} />}
+              </Field>
+              <Field label="Freight paid by">
+                {(props) => (
+                  <select {...props} className="field" value={transport.freight_paid_by} onChange={setT('freight_paid_by')}>
+                    <option value="us">Us (owed to the transporter)</option>
+                    <option value="customer">The customer</option>
+                  </select>
+                )}
+              </Field>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Reference" optional>
               {(props) => <input {...props} className="field" placeholder="Vehicle, docket…" value={reference} onChange={(event) => setReference(event.target.value)} />}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WarehouseSelect } from '@/features/stock/WarehouseSelect'
+import { ChargeRows, MethodSwitch, chargePayload, useTransporterOptions, type ChargeRow } from './ReceiptExtras'
 import { useQuery } from '@tanstack/react-query'
 import { PackageCheck } from 'lucide-react'
 import { errorText } from '@/api/client'
@@ -27,6 +28,10 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
   const po = useOne('purchase-orders', api.purchaseOrders.get, open && poId ? poId : undefined)
   const [entries, setEntries] = useState<Record<string, Entry>>({})
   const [note, setNote] = useState('')
+  const [transport, setTransport] = useState({ transporter_id: '', vehicle_number: '', lr_number: '' })
+  const [charges, setCharges] = useState<ChargeRow[]>([])
+  const [method, setMethod] = useState<'quantity' | 'value' | 'weight'>('quantity')
+  const transporters = useTransporterOptions()
   const [deliveryNote, setDeliveryNote] = useState('')
   const [warehouse, setWarehouse] = useState('')
   const [allowOver, setAllowOver] = useState(false)
@@ -40,6 +45,9 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
     setNote('')
     setDeliveryNote('')
     setAllowOver(false)
+    setTransport({ transporter_id: '', vehicle_number: '', lr_number: '' })
+    setCharges([])
+    setMethod('quantity')
     setPlans({})
     setKey(crypto.randomUUID())
     receive.reset()
@@ -82,6 +90,11 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
         lines: requestLines.map((line) => ({ ...line, allocations: plans[line.purchase_order_item_id]?.allocations ?? null })),
         delivery_note_reference: deliveryNote || null,
         warehouse_id: warehouse || null,
+        transporter_id: transport.transporter_id || null,
+        vehicle_number: transport.vehicle_number || null,
+        lr_number: transport.lr_number || null,
+        costs: chargePayload(charges),
+        cost_method: method,
         notes: note || null,
         idempotency_key: key,
         allow_over_receipt: allowOver,
@@ -194,6 +207,45 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
             ))}
             {previewLines.length > 0 && needs.length === 0 && !preview.isFetching ? <Notice tone="sky">Nobody is waiting for these products, so everything goes into free stock.</Notice> : null}
             <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Put into" hint="Where the goods are unloaded." />
+            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+              <Field label="Transporter" optional>
+                {(props) => (
+                  <select {...props} className="field" value={transport.transporter_id} onChange={(e) => {
+                    const value = e.target.value
+                    setTransport((t) => ({ ...t, transporter_id: value }))
+                  }}>
+                    <option value="">Supplier delivered / none</option>
+                    {(transporters.data?.items ?? []).filter((t) => t.is_active).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label="Vehicle" optional>
+                {(props) => <input {...props} className="field" placeholder="GJ01AB1234" value={transport.vehicle_number} onChange={(e) => {
+                  const value = e.target.value
+                  setTransport((t) => ({ ...t, vehicle_number: value }))
+                }} />}
+              </Field>
+              <Field label="LR / bilty no." optional>
+                {(props) => <input {...props} className="field" value={transport.lr_number} onChange={(e) => {
+                  const value = e.target.value
+                  setTransport((t) => ({ ...t, lr_number: value }))
+                }} />}
+              </Field>
+            </div>
+            <div className="card space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-[200px] flex-1">
+                  <div className="text-[13.5px] font-semibold">Freight and other charges</div>
+                  <div className="text-[11.5px] text-fg-3">Added to the goods' cost (landed cost). Can also be added later when the bill comes.</div>
+                </div>
+                {charges.length ? <MethodSwitch value={method} onChange={setMethod} /> : null}
+              </div>
+              <ChargeRows rows={charges} setRows={setCharges} defaultTransporter={transport.transporter_id || undefined} />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Supplier's delivery note" optional>
                 {(props) => <input {...props} className="field" placeholder="DN-4471" value={deliveryNote} onChange={(event) => setDeliveryNote(event.target.value)} />}

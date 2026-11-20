@@ -1,4 +1,5 @@
 import { QtyCell, perUnit } from '@/ui/lines'
+import { BookingSheet } from '@/features/transport/BookingSheet'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -265,6 +266,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
   const [delivering, setDelivering] = useState(false)
   const [buying, setBuying] = useState(false)
   const [returning, setReturning] = useState(false)
+  const [booking, setBooking] = useState(false)
   const sendConfirmation = useAction(() => http.post<{ to: string }>(`/api/orders/${id}/send-confirmation`), { success: (r) => `Confirmation sent to ${r.to}` })
   const confirm = useConfirm()
   const cancel = useAction((reason: string | null) => api.orders.cancel(id, reason), { success: 'Order cancelled' })
@@ -330,6 +332,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
                 { label: 'Open invoice PDF', icon: <FileText size={14} />, onSelect: () => window.open(api.integrations.invoiceUrl(id), '_blank') },
                 { label: 'Open customer', icon: <UserRound size={14} />, onSelect: () => (window.location.href = `/customers/${data.customer_id}`) },
                 { label: 'Repeat this order', icon: <Repeat2 size={14} />, onSelect: () => onRepeat(id) },
+                { label: 'Book transport', icon: <Truck size={14} />, onSelect: () => setBooking(true), disabled: !open },
                 { label: 'Record a return', icon: <Undo2 size={14} />, onSelect: () => setReturning(true), disabled: totals.delivered === 0 },
                 { label: 'Send order confirmation (WhatsApp template)', icon: <Send size={14} />, onSelect: () => sendConfirmation.mutate(undefined) },
                 { label: 'Send update on WhatsApp', icon: <MessageCircle size={14} />, onSelect: () => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(update)}`, '_blank'), disabled: !phone },
@@ -382,6 +385,7 @@ function OrderInspector({ id, payment, onRepeat }: { id: string; payment?: Order
       </Tabs>
       <DeliverSheet orderId={id} open={delivering} onClose={() => setDelivering(false)} />
       <ReturnSheet orderId={id} orderNumber={data.order_number} open={returning} onClose={() => setReturning(false)} />
+      <BookingSheet open={booking} onClose={() => setBooking(false)} referenceType="sales_order" referenceId={id} />
       <PurchaseSheet
         open={buying}
         onClose={() => setBuying(false)}

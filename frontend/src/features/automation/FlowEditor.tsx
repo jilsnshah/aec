@@ -48,7 +48,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import { automation, type Actor, type Flow, type FlowNode, type Library, type Mode, type StepData, type StepType } from '@/api/automation'
-import { errorText } from '@/api/client'
+import { errorText, http } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { useTheme } from '@/app/theme'
 import { Badge, Button, Notice, Spinner } from '@/ui/core'
@@ -498,20 +498,32 @@ function Inspector({ node, type, library, onChange, onRemove, onClose }: { node:
         {d.timing ? (
           <Section title="Timing">
             <div className="space-y-1.5">
-              {Object.entries(d.timing).map(([k, v]) =>
-                k === 'invoice_on' ? (
-                  <select key={k} className="field field-sm" value={String(v)} onChange={(e) => onChange({ timing: { ...d.timing, [k]: e.target.value } })}>
-                    <option value="order">When the order is placed</option>
-                    <option value="delivery">On each delivery</option>
-                  </select>
-                ) : (
+              {Object.entries(d.timing).map(([k, v]) => {
+                const set = (value: unknown) => onChange({ timing: { ...d.timing, [k]: value } })
+                const choice = TIMING_CHOICES[k]
+                if (k === 'transporter_id')
+                  return d.timing?.choose === 'fixed' ? <TransporterChoice key={k} value={String(v ?? '')} onChange={set} /> : null
+                if (choice)
+                  return (
+                    <label key={k} className="block">
+                      <span className="label">{choice.label}</span>
+                      <select className="field field-sm" value={String(v ?? '')} onChange={(e) => set(e.target.value)}>
+                        {(choice.options[type.flow] ?? choice.options.any).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                return (
                   <label key={k} className="flex items-center gap-2 text-[12.5px]">
                     <AlarmClock size={13} className="text-fg-3" />
                     <span className="flex-1">{k.replace(/_/g, ' ')}</span>
-                    <input className="field field-sm w-[80px] text-right" inputMode="numeric" value={String(v)} onChange={(e) => onChange({ timing: { ...d.timing, [k]: Number(e.target.value) || 0 } })} />
+                    <input className="field field-sm w-[80px] text-right" inputMode="numeric" value={String(v)} onChange={(e) => set(Number(e.target.value) || 0)} />
                   </label>
-                ),
-              )}
+                )
+              }              )}
             </div>
           </Section>
         ) : null}
@@ -523,6 +535,42 @@ function Inspector({ node, type, library, onChange, onRemove, onClose }: { node:
         </Button>
       </div>
     </aside>
+  )
+}
+
+const VEHICLE_CHOICES: [string, string][] = [
+  ['', 'Any vehicle'], ['tempo', 'Tempo'], ['pickup', 'Pickup'], ['lcv', 'LCV (407)'], ['6_wheeler', '6-wheeler'], ['10_wheeler', '10-wheeler'],
+  ['12_wheeler', '12-wheeler'], ['14_wheeler', '14-wheeler'], ['trailer', 'Trailer'], ['tractor', 'Tractor'], ['container', 'Container'],
+]
+const TIMING_CHOICES: Record<string, { label: string; options: Record<string, [string, string][]> }> = {
+  invoice_on: { label: 'When to invoice', options: { any: [['order', 'When the order is placed'], ['delivery', 'On each delivery']] } },
+  when: {
+    label: 'When to book',
+    options: {
+      sales: [['order_placed', 'As soon as the order is placed'], ['stock_ready', 'When all its stock is ready']],
+      purchase: [['po_placed', 'When the purchase order is placed']],
+      any: [['order_placed', 'As soon as the order is placed']],
+    },
+  },
+  choose: { label: 'Which transporter', options: { any: [['cheapest', 'Cheapest on the rate card'], ['best_rated', 'Best rated that fits'], ['fixed', 'Always the same one']] } },
+  vehicle_type: { label: 'Vehicle', options: { any: VEHICLE_CHOICES } },
+}
+
+/** Pick one transporter (for "always the same one"). */
+function TransporterChoice({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const list = useQuery({ queryKey: ['transporters', 'options'], queryFn: () => http.get<{ items: { id: string; name: string; is_active: boolean }[] }>('/api/transporters') })
+  return (
+    <label className="block">
+      <span className="label">Transporter</span>
+      <select className="field field-sm" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Choose…</option>
+        {(list.data?.items ?? []).map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

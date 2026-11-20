@@ -2777,8 +2777,8 @@ export interface paths {
         };
         /**
          * Count Sheet
-         * @description Products to count, with the quantity the books expect, what is set aside
-         *     for customers, average cost and when each was last counted.
+         * @description Products to count, with the quantity the books expect (in one warehouse if
+         *     given), what is set aside for customers, average cost and when each was last counted.
          */
         get: operations["count_sheet_api_stock_adjustments_count_sheet_get"];
         put?: never;
@@ -2971,6 +2971,409 @@ export interface paths {
          * @description Drop a draft, or bring goods on the road back to the source.
          */
         post: operations["cancel_transfer_api_stock_transfers__transfer_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meta
+         * @description Kinds of transporter, vehicle types and rate bases.
+         */
+        get: operations["meta_api_transporters_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Transporters
+         * @description Transporters with vehicles, rates, trips and what we owe them.
+         */
+        get: operations["list_transporters_api_transporters_get"];
+        put?: never;
+        /**
+         * Create Transporter
+         * @description Add a transporter, optionally with vehicles and rate card lines.
+         */
+        post: operations["create_transporter_api_transporters_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimate
+         * @description Freight from every matching rate card line, cheapest first.
+         */
+        get: operations["estimate_api_transporters_estimate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Transporter
+         * @description Everything about a transporter: details, contacts, vehicles, rate card, trips, bookings and balance.
+         */
+        get: operations["get_transporter_api_transporters__transporter_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Transporter */
+        patch: operations["update_transporter_api_transporters__transporter_id__patch"];
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transporter Statement
+         * @description Freight bills and payments with a running balance.
+         */
+        get: operations["transporter_statement_api_transporters__transporter_id__statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Vehicle */
+        post: operations["add_vehicle_api_transporters__transporter_id__vehicles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}/vehicles/{vehicle_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Vehicle */
+        delete: operations["remove_vehicle_api_transporters__transporter_id__vehicles__vehicle_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Vehicle */
+        patch: operations["update_vehicle_api_transporters__transporter_id__vehicles__vehicle_id__patch"];
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Rate */
+        post: operations["add_rate_api_transporters__transporter_id__rates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transporters/{transporter_id}/rates/{rate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Rate */
+        delete: operations["remove_rate_api_transporters__transporter_id__rates__rate_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Rate */
+        patch: operations["update_rate_api_transporters__transporter_id__rates__rate_id__patch"];
+        trace?: never;
+    };
+    "/api/transport-bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Bookings
+         * @description Vehicle bookings with transporters, newest first.
+         */
+        get: operations["list_bookings_api_transport_bookings_get"];
+        put?: never;
+        /**
+         * Create Booking
+         * @description Book a vehicle. With reference_type/reference_id the route, load and weight come from that order, PO or transfer.
+         */
+        post: operations["create_booking_api_transport_bookings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transport-bookings/{booking_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Booking
+         * @description Change a booking or move it on: requested, confirmed (with vehicle and amount), declined, done, cancelled.
+         */
+        patch: operations["update_booking_api_transport_bookings__booking_id__patch"];
+        trace?: never;
+    };
+    "/api/landed-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Landed
+         * @description Freight and other charges added to goods receipts, newest first.
+         */
+        get: operations["list_landed_api_landed_costs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/goods-receipts/{receipt_id}/landed-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Receipt Landed */
+        get: operations["receipt_landed_api_goods_receipts__receipt_id__landed_costs_get"];
+        put?: never;
+        /**
+         * Add Landed
+         * @description Add freight, unloading and other charges to a receipt (now or when the bill comes); they go into the goods' cost.
+         */
+        post: operations["add_landed_api_goods_receipts__receipt_id__landed_costs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Purchase Returns
+         * @description Goods sent back to suppliers (debit notes).
+         */
+        get: operations["list_purchase_returns_api_purchase_returns_get"];
+        put?: never;
+        /**
+         * Create Purchase Return
+         * @description Send goods back to the supplier: stock out at the cost it came in, debit note raised (and sent to Tally).
+         */
+        post: operations["create_purchase_return_api_purchase_returns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/goods-receipts/{receipt_id}/returnable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returnable
+         * @description A receipt's lines with what can still go back.
+         */
+        get: operations["returnable_api_goods_receipts__receipt_id__returnable_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-returns/{return_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Purchase Return */
+        get: operations["get_purchase_return_api_purchase_returns__return_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rate-contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Contracts
+         * @description Rate contracts with status (active, expiring, expired) and quantity used against each line.
+         */
+        get: operations["list_contracts_api_rate_contracts_get"];
+        put?: never;
+        /**
+         * Create Contract
+         * @description Agree rates with a supplier or customer for a period, optionally with quantities.
+         */
+        post: operations["create_contract_api_rate_contracts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rate-contracts/supplier-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Supplier Rates
+         * @description Running contract rates from a supplier, per product (per base unit).
+         */
+        get: operations["supplier_rates_api_rate_contracts_supplier_rates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rate-contracts/{contract_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Contract */
+        get: operations["get_contract_api_rate_contracts__contract_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Contract
+         * @description Change dates, terms or lines (items replace them all).
+         */
+        patch: operations["update_contract_api_rate_contracts__contract_id__patch"];
+        trace?: never;
+    };
+    "/api/rate-contracts/{contract_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Contract */
+        post: operations["cancel_contract_api_rate_contracts__contract_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3297,6 +3700,53 @@ export interface components {
             /** Conversation Id */
             conversation_id?: string | null;
         };
+        /** BookingIn */
+        BookingIn: {
+            /** Transporter Id */
+            transporter_id?: string | null;
+            /**
+             * Reference Type
+             * @description sales_order, purchase_order or stock_transfer: fills route, load and weight.
+             */
+            reference_type?: string | null;
+            /** Reference Id */
+            reference_id?: string | null;
+            /**
+             * Purpose
+             * @description delivery, purchase, transfer, return or other.
+             */
+            purpose?: string | null;
+            /** From Place */
+            from_place?: string | null;
+            /** To Place */
+            to_place?: string | null;
+            /**
+             * Needed At
+             * @description When the vehicle is needed (ISO date-time).
+             */
+            needed_at?: string | null;
+            /** Vehicle Type */
+            vehicle_type?: string | null;
+            /** Load */
+            load?: string | null;
+            /** Weight Kg */
+            weight_kg?: string | null;
+            /** Agreed Amount */
+            agreed_amount?: string | null;
+            /** Vehicle Number */
+            vehicle_number?: string | null;
+            /** Driver Phone */
+            driver_phone?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Reply */
+            reply?: string | null;
+            /**
+             * Status
+             * @description draft, requested, confirmed, declined, done or cancelled.
+             */
+            status?: string | null;
+        };
         /** CancelRequest */
         CancelRequest: {
             /** Reason */
@@ -3307,6 +3757,26 @@ export interface components {
          * @enum {string}
          */
         CancellationKind: "FULL" | "REMAINING";
+        /** ChargeIn */
+        ChargeIn: {
+            /**
+             * Kind
+             * @description freight, unloading, loading, insurance, octroi, commission or other.
+             * @default freight
+             */
+            kind: string;
+            /** Amount */
+            amount: string;
+            /**
+             * Transporter Id
+             * @description Owed to this transporter.
+             */
+            transporter_id?: string | null;
+            /** Paid To */
+            paid_to?: string | null;
+            /** Bill Number */
+            bill_number?: string | null;
+        };
         /** CheckIn */
         CheckIn: {
             /** Customer Id */
@@ -3477,6 +3947,66 @@ export interface components {
             is_primary?: boolean | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** ContractIn */
+        ContractIn: {
+            /** Supplier Id */
+            supplier_id?: string | null;
+            /** Customer Id */
+            customer_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /**
+             * Valid From
+             * @description YYYY-MM-DD; today if omitted.
+             */
+            valid_from?: string | null;
+            /**
+             * Valid Until
+             * @description YYYY-MM-DD; a year from now if omitted.
+             */
+            valid_until?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Terms */
+            terms?: string | null;
+            /**
+             * Address Id
+             * @description Customer's project site.
+             */
+            address_id?: string | null;
+            /** Items */
+            items?: components["schemas"]["ContractLineIn"][] | null;
+        };
+        /** ContractLineIn */
+        ContractLineIn: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Rate
+             * @description Agreed price per `unit` (or base unit).
+             */
+            rate?: string | null;
+            /**
+             * Discount Percent
+             * @description Or a discount off MRP.
+             */
+            discount_percent?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Min Quantity
+             * @description Rate applies from this quantity (slab).
+             */
+            min_quantity?: string | null;
+            /**
+             * Committed Quantity
+             * @description Quantity agreed over the contract.
+             */
+            committed_quantity?: string | null;
         };
         /** ControlsIn */
         ControlsIn: {
@@ -3823,6 +4353,30 @@ export interface components {
         DeliveryRequest: {
             /** Lines */
             lines: components["schemas"]["DeliveryLineInput"][];
+            /**
+             * Transporter Id
+             * @description Who carries the goods.
+             */
+            transporter_id?: string | null;
+            /** Vehicle Number */
+            vehicle_number?: string | null;
+            /**
+             * Lr Number
+             * @description Lorry receipt (LR / bilty) number.
+             */
+            lr_number?: string | null;
+            /** Driver Phone */
+            driver_phone?: string | null;
+            /**
+             * Freight Amount
+             * @description Freight for this trip.
+             */
+            freight_amount?: number | string | null;
+            /**
+             * Freight Paid By
+             * @description us (our expense, owed to the transporter) or customer (they pay the driver).
+             */
+            freight_paid_by?: string | null;
             /**
              * Warehouse Id
              * @description Warehouse the goods leave from; omit to use the oldest stock anywhere.
@@ -4282,6 +4836,30 @@ export interface components {
              */
             purchase_order_id: string;
             /**
+             * Transporter Id
+             * @description Who carries the goods.
+             */
+            transporter_id?: string | null;
+            /** Vehicle Number */
+            vehicle_number?: string | null;
+            /**
+             * Lr Number
+             * @description Lorry receipt (LR / bilty) number.
+             */
+            lr_number?: string | null;
+            /** Driver Phone */
+            driver_phone?: string | null;
+            /**
+             * Costs
+             * @description Freight and other charges to add to the goods' cost (landed cost).
+             */
+            costs?: components["schemas"]["LandedChargeInput"][] | null;
+            /**
+             * Cost Method
+             * @description Spread costs by quantity, value or weight.
+             */
+            cost_method?: string | null;
+            /**
              * Warehouse Id
              * @description Where the goods are put; the default warehouse if omitted.
              */
@@ -4309,6 +4887,10 @@ export interface components {
             receipt_id: string;
             /** Receipt Number */
             receipt_number: string;
+            /** Landed Cost */
+            landed_cost?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Created At
              * Format: date-time
@@ -4685,6 +5267,39 @@ export interface components {
             /** Daily Sales */
             daily_sales?: components["schemas"]["DailySalesRow"][];
         };
+        /** LandedChargeInput */
+        LandedChargeInput: {
+            /**
+             * Kind
+             * @description freight, unloading, loading, insurance, octroi, commission or other.
+             * @default freight
+             */
+            kind: string;
+            /** Amount */
+            amount: number | string;
+            /**
+             * Transporter Id
+             * @description Owed to this transporter (shows on their statement).
+             */
+            transporter_id?: string | null;
+            /** Paid To */
+            paid_to?: string | null;
+            /** Bill Number */
+            bill_number?: string | null;
+        };
+        /** LandedIn */
+        LandedIn: {
+            /** Charges */
+            charges: components["schemas"]["ChargeIn"][];
+            /**
+             * Method
+             * @description Spread by quantity, value or weight.
+             * @default quantity
+             */
+            method: string;
+            /** Note */
+            note?: string | null;
+        };
         /** LinkIn */
         LinkIn: {
             /**
@@ -4739,7 +5354,7 @@ export interface components {
          * MovementType
          * @enum {string}
          */
-        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT" | "SALES_RETURN" | "TRANSFER_OUT" | "TRANSFER_IN";
+        MovementType: "OPENING_STOCK" | "STOCK_RECEIPT" | "GOODS_RECEIPT" | "CUSTOMER_DELIVERY" | "ORDER_FULFILMENT" | "ADJUSTMENT" | "SALES_RETURN" | "TRANSFER_OUT" | "TRANSFER_IN" | "PURCHASE_RETURN";
         /** NegativePositionRow */
         NegativePositionRow: {
             /**
@@ -5379,9 +5994,14 @@ export interface components {
             customer_id?: string | null;
             /**
              * Supplier Id
-             * @description For money out.
+             * @description For money out to a supplier.
              */
             supplier_id?: string | null;
+            /**
+             * Transporter Id
+             * @description For freight paid to a transporter (money out).
+             */
+            transporter_id?: string | null;
             /**
              * Method
              * @description cash, bank, upi, cheque, card or other.
@@ -6233,6 +6853,39 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /** PurchaseReturnIn */
+        PurchaseReturnIn: {
+            /** Goods Receipt Id */
+            goods_receipt_id?: string | null;
+            /** Purchase Order Id */
+            purchase_order_id?: string | null;
+            /** Supplier Id */
+            supplier_id?: string | null;
+            /**
+             * Reason
+             * @description damaged, quality, wrong_item, excess, expired or other.
+             */
+            reason: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Replace
+             * @description The supplier will send these again: the PO is owed them once more.
+             * @default false
+             */
+            replace: boolean;
+            /**
+             * Warehouse Id
+             * @description Warehouse the goods leave from; the receipt's by default.
+             */
+            warehouse_id?: string | null;
+            /** Transporter Id */
+            transporter_id?: string | null;
+            /** Vehicle Number */
+            vehicle_number?: string | null;
+            /** Lines */
+            lines: components["schemas"]["app__api__buying_extra__ReturnLineIn"][];
+        };
         /** PurchaseSettleRequest */
         PurchaseSettleRequest: {
             /** Settlements */
@@ -6250,6 +6903,43 @@ export interface components {
             product_id: string;
             /** Allocations */
             allocations?: components["schemas"]["ReceiptAllocationInput"][];
+        };
+        /** RateIn */
+        RateIn: {
+            /**
+             * From Place
+             * @description Empty for anywhere.
+             */
+            from_place?: string | null;
+            /**
+             * To Place
+             * @description Empty for anywhere.
+             */
+            to_place?: string | null;
+            /**
+             * Vehicle Type
+             * @description Empty for any vehicle.
+             */
+            vehicle_type?: string | null;
+            /**
+             * Basis
+             * @description trip, km, tonne, quintal, kg, unit or hour.
+             */
+            basis?: string | null;
+            /** Rate */
+            rate?: string | null;
+            /** Min Charge */
+            min_charge?: string | null;
+            /** Loading Included */
+            loading_included?: boolean | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /** ReceiptAllocationInput */
         ReceiptAllocationInput: {
@@ -6636,28 +7326,12 @@ export interface components {
             /** Note */
             note?: string | null;
             /** Lines */
-            lines: components["schemas"]["ReturnLineIn"][];
+            lines: components["schemas"]["app__api__orders__ReturnLineIn"][];
             /**
              * Warehouse Id
              * @description Where restocked goods go; the default warehouse if omitted.
              */
             warehouse_id?: string | null;
-        };
-        /** ReturnLineIn */
-        ReturnLineIn: {
-            /**
-             * Order Item Id
-             * Format: uuid
-             */
-            order_item_id: string;
-            /** Quantity */
-            quantity: string;
-            /**
-             * Restock
-             * @description False when the goods are damaged and cannot be sold again.
-             * @default true
-             */
-            restock: boolean;
         };
         /** Rule */
         Rule: {
@@ -7310,6 +7984,11 @@ export interface components {
             amount: string;
             /** Paid To */
             paid_to?: string | null;
+            /**
+             * Transporter Id
+             * @description Owed to this transporter; freight defaults to the transfer's transporter.
+             */
+            transporter_id?: string | null;
             /** Note */
             note?: string | null;
         };
@@ -7338,6 +8017,16 @@ export interface components {
             vehicle?: string | null;
             /** Transporter */
             transporter?: string | null;
+            /**
+             * Transporter Id
+             * @description The transporter carrying it.
+             */
+            transporter_id?: string | null;
+            /**
+             * Lr Number
+             * @description Lorry receipt number.
+             */
+            lr_number?: string | null;
             /** Notes */
             notes?: string | null;
             /**
@@ -7361,6 +8050,66 @@ export interface components {
             quantity: string;
             /** Unit */
             unit?: string | null;
+        };
+        /** TransporterIn */
+        TransporterIn: {
+            /** Name */
+            name?: string | null;
+            /**
+             * Code
+             * @description Made automatically if omitted.
+             */
+            code?: string | null;
+            /**
+             * Kind
+             * @description company, fleet_owner, broker, tempo, courier or own_fleet.
+             */
+            kind?: string | null;
+            /** Contact Person */
+            contact_person?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Pan */
+            pan?: string | null;
+            /**
+             * Tally Ledger Name
+             * @description Their ledger in Tally (freight bills post here).
+             */
+            tally_ledger_name?: string | null;
+            /**
+             * Service Areas
+             * @description Places and routes they serve.
+             */
+            service_areas?: string | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /**
+             * Booking Channel
+             * @description How TAI/PAI books them: whatsapp, call or either.
+             */
+            booking_channel?: string | null;
+            /** Rating */
+            rating?: number | null;
+            /** Notes */
+            notes?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /**
+             * Vehicles
+             * @description On create: vehicles to add.
+             */
+            vehicles?: components["schemas"]["VehicleIn"][] | null;
+            /**
+             * Rates
+             * @description On create: rate card lines to add.
+             */
+            rates?: components["schemas"]["RateIn"][] | null;
         };
         /** UnitIn */
         UnitIn: {
@@ -7405,6 +8154,29 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VehicleIn */
+        VehicleIn: {
+            /**
+             * Number
+             * @description Registration number, e.g. GJ01AB1234.
+             */
+            number?: string | null;
+            /**
+             * Vehicle Type
+             * @description tempo, pickup, lcv, 6_wheeler, 10_wheeler, 12_wheeler, 14_wheeler, trailer, tractor, container or other.
+             */
+            vehicle_type?: string | null;
+            /** Capacity Kg */
+            capacity_kg?: string | null;
+            /** Driver Name */
+            driver_name?: string | null;
+            /** Driver Phone */
+            driver_phone?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /** ViewIn */
         ViewIn: {
@@ -7463,6 +8235,42 @@ export interface components {
              * @description False closes it (only when empty).
              */
             is_active?: boolean | null;
+        };
+        /** ReturnLineIn */
+        app__api__buying_extra__ReturnLineIn: {
+            /**
+             * Goods Receipt Item Id
+             * @description The receipt line going back (preferred).
+             */
+            goods_receipt_item_id?: string | null;
+            /**
+             * Product Id
+             * @description Without a receipt line: the product.
+             */
+            product_id?: string | null;
+            /** Quantity */
+            quantity: string;
+            /**
+             * Unit Cost
+             * @description Without a receipt line: the price to debit; else the PO price.
+             */
+            unit_cost?: string | null;
+        };
+        /** ReturnLineIn */
+        app__api__orders__ReturnLineIn: {
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: string;
+            /**
+             * Restock
+             * @description False when the goods are damaged and cannot be sold again.
+             * @default true
+             */
+            restock: boolean;
         };
     };
     responses: never;
@@ -12758,6 +13566,7 @@ export interface operations {
         parameters: {
             query?: {
                 category?: string | null;
+                warehouse_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -13182,6 +13991,940 @@ export interface operations {
             header?: never;
             path: {
                 transfer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meta_api_transporters_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_transporters_api_transporters_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                include_inactive?: boolean;
+                kind?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_transporter_api_transporters_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransporterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_api_transporters_estimate_get: {
+        parameters: {
+            query?: {
+                from_place?: string | null;
+                to_place?: string | null;
+                vehicle_type?: string | null;
+                weight_kg?: number | null;
+                units?: number | null;
+                km?: number | null;
+                hours?: number | null;
+                transporter_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transporter_api_transporters__transporter_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_transporter_api_transporters__transporter_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransporterIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transporter_statement_api_transporters__transporter_id__statement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_vehicle_api_transporters__transporter_id__vehicles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehicleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_vehicle_api_transporters__transporter_id__vehicles__vehicle_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+                vehicle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_vehicle_api_transporters__transporter_id__vehicles__vehicle_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+                vehicle_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehicleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_rate_api_transporters__transporter_id__rates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_rate_api_transporters__transporter_id__rates__rate_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+                rate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rate_api_transporters__transporter_id__rates__rate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transporter_id: string;
+                rate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bookings_api_transport_bookings_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                reference_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_booking_api_transport_bookings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_booking_api_transport_bookings__booking_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                booking_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_landed_api_landed_costs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    receipt_landed_api_goods_receipts__receipt_id__landed_costs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_landed_api_goods_receipts__receipt_id__landed_costs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LandedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_purchase_returns_api_purchase_returns_get: {
+        parameters: {
+            query?: {
+                supplier_id?: string | null;
+                purchase_order_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_purchase_return_api_purchase_returns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseReturnIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    returnable_api_goods_receipts__receipt_id__returnable_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_purchase_return_api_purchase_returns__return_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                return_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contracts_api_rate_contracts_get: {
+        parameters: {
+            query?: {
+                /** @description supplier or customer */
+                party?: string | null;
+                party_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_contract_api_rate_contracts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supplier_rates_api_rate_contracts_supplier_rates_get: {
+        parameters: {
+            query: {
+                supplier_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contract_api_rate_contracts__contract_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contract_api_rate_contracts__contract_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_contract_api_rate_contracts__contract_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
             };
             cookie?: never;
         };

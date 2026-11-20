@@ -14,6 +14,8 @@ const Enquiries = lazy(() => import('@/features/enquiries/Enquiries').then((modu
 const Fulfilment = lazy(() => import('@/features/fulfilment/Fulfilment').then((module) => ({ default: module.Fulfilment })))
 const Home = lazy(() => import('@/features/home/Home').then((module) => ({ default: module.Home })))
 const Warehouses = lazy(() => import('@/features/stock/Warehouses').then((module) => ({ default: module.Warehouses })))
+const RateContracts = lazy(() => import('@/features/contracts/RateContracts').then((module) => ({ default: module.RateContracts })))
+const Transporters = lazy(() => import('@/features/transport/Transporters').then((module) => ({ default: module.Transporters })))
 const Integrations = lazy(() => import('@/features/integrations/Integrations').then((module) => ({ default: module.Integrations })))
 const Orders = lazy(() => import('@/features/orders/Orders').then((module) => ({ default: module.Orders })))
 const Products = lazy(() => import('@/features/products/Products').then((module) => ({ default: module.Products })))
@@ -48,6 +50,8 @@ export function App() {
           <Route path="stock-in" element={<StockIn />} />
           <Route path="stock-count" element={<StockCount />} />
           <Route path="warehouses" element={<Warehouses />} />
+          <Route path="rate-contracts" element={<RateContracts />} />
+          <Route path="transporters" element={<Transporters />} />
           <Route path="price-lists" element={<Navigate to="/customer-groups" replace />} />
           <Route path="customer-groups" element={<CustomerGroups />} />
           <Route path="integrations/:section?" element={<Integrations />} />
