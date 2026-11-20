@@ -6,6 +6,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -35,3 +36,29 @@ def enquiry_page(token: str, db: Session = Depends(get_db)):
 @router.post("/e/{token}", status_code=201)
 def send_enquiry(token: str, payload: PublicEnquiryIn, db: Session = Depends(get_db)):
     return portal.send(db, token, [i.model_dump() for i in payload.items], payload.notes, payload.name, payload.phone)
+
+
+@router.get("/e/{token}/orders")
+def my_orders(token: str, db: Session = Depends(get_db)):
+    return portal.orders(db, token)
+
+
+@router.get("/e/{token}/statement")
+def my_statement(token: str, db: Session = Depends(get_db)):
+    return portal.statement(db, token)
+
+
+@router.get("/e/{token}/invoices")
+def my_invoices(token: str, db: Session = Depends(get_db)):
+    return portal.invoices(db, token)
+
+
+@router.get("/e/{token}/invoices/{sync_id}.pdf")
+def my_invoice_pdf(token: str, sync_id: uuid.UUID, db: Session = Depends(get_db)):
+    filename, content = portal.invoice_pdf(db, token, sync_id)
+    return Response(content=content, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="{}"'.format(filename)})
+
+
+@router.post("/e/{token}/reorder/{order_id}", status_code=201)
+def order_again(token: str, order_id: uuid.UUID, db: Session = Depends(get_db)):
+    return portal.reorder(db, token, order_id)

@@ -36,6 +36,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -47,11 +48,12 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
-import { automation, type Actor, type Flow, type FlowNode, type Library, type Mode, type StepData, type StepType } from '@/api/automation'
+import { automation, type ConfigField, type Actor, type Flow, type FlowNode, type Library, type Mode, type StepData, type StepType } from '@/api/automation'
 import { errorText, http } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { useTheme } from '@/app/theme'
 import { Badge, Button, Notice, Spinner } from '@/ui/core'
+import { ConfigForm } from './ConfigForm'
 
 export const ACTOR: Record<Actor, { label: string; short: string; icon: LucideIcon; hint: string }> = {
   system: { label: 'System', short: 'System', icon: Cpu, hint: 'The app does it by rule' },
@@ -228,6 +230,7 @@ function Canvas({ flowKey, library }: { flowKey: 'sales' | 'purchase'; library: 
         ai: type.ai ? { model: '', instructions: '' } : null,
         channels: [...type.channels],
         timing: type.timing ? { ...type.timing } : null,
+        config: type.config_fields?.length ? configDefaults(type.config_fields) : null,
         notes: '',
       }
       setNodes((ns) => [...ns, { id, type: 'step', position, data }])
@@ -309,7 +312,7 @@ function Canvas({ flowKey, library }: { flowKey: 'sales' | 'purchase'; library: 
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} className="!rounded-xl max-xl:!hidden" />
           </ReactFlow>
         </div>
-        {current ? <Inspector key={current.id} node={current} type={lib[current.data.step]} library={library} onChange={(patch) => update(current.id, patch)} onRemove={() => remove(current.id)} onClose={() => setSelected(null)} /> : null}
+        {current ? <Inspector key={current.id} node={current} type={lib[current.data.step]} library={library} onChange={(patch) => update(current.id, patch)} onRemove={() => remove(current.id)} onClose={() => setSelected(null)} dirty={dirty} /> : null}
       </div>
       </OrderContext.Provider>
     </LibraryContext.Provider>
@@ -353,7 +356,7 @@ function Palette({ flowKey, library }: { flowKey: string; library: Library }) {
 }
 
 /** Everything about one step. */
-function Inspector({ node, type, library, onChange, onRemove, onClose }: { node: StepNodeType; type?: StepType; library: Library; onChange: (patch: Partial<StepData>) => void; onRemove: () => void; onClose: () => void }) {
+function Inspector({ node, type, library, onChange, onRemove, onClose, dirty }: { node: StepNodeType; type?: StepType; library: Library; onChange: (patch: Partial<StepData>) => void; onRemove: () => void; onClose: () => void; dirty: boolean }) {
   const models = useQuery({ queryKey: ['integrations'], queryFn: api.integrations.get })
   if (!type) return null
   const d = node.data
@@ -495,6 +498,12 @@ function Inspector({ node, type, library, onChange, onRemove, onClose }: { node:
             </div>
           </Section>
         ) : null}
+        {type.config_fields?.length ? (
+          <Section title="Settings" hint="Saved with the flow; press Save on the canvas after changing.">
+            <ConfigForm fields={type.config_fields} value={(d.config as Record<string, unknown>) ?? configDefaults(type.config_fields)} onChange={(config) => onChange({ config })} />
+          </Section>
+        ) : null}
+        {RUNNABLE[type.key] ? <RunPanel what={RUNNABLE[type.key]} dirty={dirty} /> : null}
         {d.timing ? (
           <Section title="Timing">
             <div className="space-y-1.5">
@@ -571,6 +580,63 @@ function TransporterChoice({ value, onChange }: { value: string; onChange: (valu
         ))}
       </select>
     </label>
+  )
+}
+
+/** Defaults of a step's settings, nested as stored. */
+function configDefaults(fields: ConfigField[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const f of fields) {
+    if (f.type === 'section') out[f.key] = configDefaults(f.fields ?? [])
+    else if (f.type === 'group') out[f.key] = { enabled: Boolean(f.default), ...configDefaults(f.fields ?? []) }
+    else out[f.key] = f.default
+  }
+  return out
+}
+
+const RUNNABLE: Record<string, string> = {
+  'purchase.need_detected': 'purchase',
+  'purchase.chase_delivery': 'chase',
+  'purchase.ask_supplier': 'rfqs',
+  'sales.trigger_outreach': 'outreach',
+  'sales.after_sales': 'after_sales',
+}
+
+/** Try a trigger: see what it would pick now, or run it once. */
+function RunPanel({ what, dirty }: { what: string; dirty: boolean }) {
+  const canPreview = what === 'purchase' || what === 'outreach'
+  const preview = useQuery({ queryKey: ['automation', 'preview', what], queryFn: () => automation.preview(what as 'purchase' | 'outreach'), enabled: false })
+  const run = useAction(() => automation.run(what), { success: 'Ran once', quiet: true })
+  const rows = preview.data?.items ?? []
+  return (
+    <Section title="Try it" hint={dirty ? 'Save the flow first: these use the saved settings.' : 'Uses the saved settings. Running does it for real.'}>
+      <div className="flex flex-wrap gap-2">
+        {canPreview ? (
+          <Button small icon={<Search size={12} />} busy={preview.isFetching} disabled={dirty} onClick={() => preview.refetch()}>
+            {what === 'purchase' ? 'What would it buy?' : 'Who would it contact?'}
+          </Button>
+        ) : null}
+        <Button small kind="primary" icon={<Zap size={12} />} busy={run.isPending} disabled={dirty} onClick={() => run.mutate(undefined)}>
+          Run now
+        </Button>
+      </div>
+      {run.data ? <pre className="mt-2 rounded-lg bg-ink-700 p-2 text-[11px] whitespace-pre-wrap">{JSON.stringify(run.data, null, 1)}</pre> : null}
+      {preview.data ? (
+        <div className="mt-2 max-h-[260px] space-y-1.5 overflow-y-auto">
+          {!rows.length ? <div className="text-[12px] text-fg-3">Nothing right now.</div> : null}
+          {rows.slice(0, 30).map((r, i) => (
+            <div key={i} className="rounded-lg bg-ink-700 px-2.5 py-1.5 text-[12px]">
+              <div className="font-semibold">
+                {String(r.product ?? r.customer)}
+                {r.quantity != null ? ` · ${r.quantity} ${String(r.unit ?? '')}` : ''}
+              </div>
+              <div className="text-fg-3">{Array.isArray(r.why) ? (r.why as string[]).join(', ') : String(r.why ?? '')}</div>
+              {r.message ? <div className="mt-1 text-fg-2">{String(r.message)}</div> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Section>
   )
 }
 

@@ -93,6 +93,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/e/{token}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Orders */
+        get: operations["my_orders_api_public_e__token__orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/e/{token}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Statement */
+        get: operations["my_statement_api_public_e__token__statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/e/{token}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Invoices */
+        get: operations["my_invoices_api_public_e__token__invoices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/e/{token}/invoices/{sync_id}.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Invoice Pdf */
+        get: operations["my_invoice_pdf_api_public_e__token__invoices__sync_id__pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/e/{token}/reorder/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Order Again */
+        post: operations["order_again_api_public_e__token__reorder__order_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/parties/{kind}/{party_id}/profile": {
         parameters: {
             query?: never;
@@ -826,6 +911,26 @@ export interface paths {
          * @description Product categories in use, with product counts.
          */
         get: operations["categories_api_products_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/products/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Batch Stock
+         * @description Stock per batch and warehouse, soonest expiry first; with expiring_within_days only those near or past expiry.
+         */
+        get: operations["batch_stock_api_products_batches_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3441,6 +3546,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/automation/run/{what}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Now
+         * @description Run a trigger now, ignoring its schedule: purchase, outreach, after_sales, chase or rfqs.
+         */
+        post: operations["run_now_api_automation_run__what__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/preview/{what}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview
+         * @description Who or what a trigger would pick right now, without doing anything: purchase or outreach.
+         */
+        get: operations["preview_api_automation_preview__what__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Activity
+         * @description What the triggers and steps did, newest first.
+         */
+        get: operations["activity_api_automation_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/rfqs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rfqs
+         * @description Requests for prices sent to suppliers, newest first.
+         */
+        get: operations["list_rfqs_api_automation_rfqs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/rfqs/{rfq_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Rfq */
+        get: operations["get_rfq_api_automation_rfqs__rfq_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/rfqs/{rfq_id}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Quote
+         * @description Record a supplier's offer by hand (they phoned, or the reply was unclear).
+         */
+        post: operations["record_quote_api_automation_rfqs__rfq_id__quotes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/rfqs/{rfq_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Rfq
+         * @description Compare the offers now and raise the purchase orders.
+         */
+        post: operations["decide_rfq_api_automation_rfqs__rfq_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/rfqs/{rfq_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Rfq */
+        post: operations["cancel_rfq_api_automation_rfqs__rfq_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feedback
+         * @description Ratings and complaints customers gave after delivery.
+         */
+        get: operations["feedback_api_automation_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/controls/check": {
         parameters: {
             query?: never;
@@ -4905,6 +5184,18 @@ export interface components {
              * Format: uuid
              */
             purchase_order_item_id: string;
+            /**
+             * Batch Number
+             * @description Required for products that track batches.
+             */
+            batch_number?: string | null;
+            /** Manufactured On */
+            manufactured_on?: string | null;
+            /**
+             * Expires On
+             * @description Filled from the product's shelf life when empty.
+             */
+            expires_on?: string | null;
             /** Quantity */
             quantity: number | string;
             /** Unit Cost */
@@ -6401,6 +6692,16 @@ export interface components {
              * @description Only whole base units (no 2.5 bags).
              */
             whole_units?: boolean | null;
+            /**
+             * Track Batches
+             * @description Record batch and expiry on receipts; pick earliest expiry first.
+             */
+            track_batches?: boolean | null;
+            /**
+             * Shelf Life Days
+             * @description Days from manufacture to expiry.
+             */
+            shelf_life_days?: number | null;
         };
         /** ProductInventoryOut */
         ProductInventoryOut: {
@@ -6465,6 +6766,13 @@ export interface components {
              * @default false
              */
             whole_units: boolean;
+            /**
+             * Track Batches
+             * @default false
+             */
+            track_batches: boolean;
+            /** Shelf Life Days */
+            shelf_life_days?: number | null;
             /** Units */
             units?: {
                 [key: string]: unknown;
@@ -6582,6 +6890,13 @@ export interface components {
              * @default false
              */
             whole_units: boolean;
+            /**
+             * Track Batches
+             * @default false
+             */
+            track_batches: boolean;
+            /** Shelf Life Days */
+            shelf_life_days?: number | null;
             /** Units */
             units?: {
                 [key: string]: unknown;
@@ -6720,6 +7035,16 @@ export interface components {
              * @description Only whole base units (no 2.5 bags).
              */
             whole_units?: boolean | null;
+            /**
+             * Track Batches
+             * @description Record batch and expiry on receipts; pick earliest expiry first.
+             */
+            track_batches?: boolean | null;
+            /**
+             * Shelf Life Days
+             * @description Days from manufacture to expiry.
+             */
+            shelf_life_days?: number | null;
         };
         /** PublicEnquiryIn */
         PublicEnquiryIn: {
@@ -6989,6 +7314,25 @@ export interface components {
             product_id: string;
             /** Allocations */
             allocations?: components["schemas"]["ReceiptAllocationInput"][];
+        };
+        /** QuoteIn */
+        QuoteIn: {
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
+            /**
+             * Prices
+             * @description {product_id: price per base unit}
+             */
+            prices: {
+                [key: string]: unknown;
+            };
+            /** Delivery Days */
+            delivery_days?: number | null;
+            /** Note */
+            note?: string | null;
         };
         /** RateIn */
         RateIn: {
@@ -7472,6 +7816,15 @@ export interface components {
              * Format: uuid
              */
             product_id: string;
+            /**
+             * Batch Number
+             * @description Required for products that track batches.
+             */
+            batch_number?: string | null;
+            /** Manufactured On */
+            manufactured_on?: string | null;
+            /** Expires On */
+            expires_on?: string | null;
             /**
              * Warehouse Id
              * @description Where it is put; the default warehouse if omitted.
@@ -7975,6 +8328,33 @@ export interface components {
             supplier_id?: string | null;
             /** Purchase Order Id */
             purchase_order_id?: string | null;
+            /** Transporter Id */
+            transporter_id?: string | null;
+            /**
+             * Kind
+             * @description todo or call.
+             */
+            kind?: string | null;
+            /**
+             * Doer
+             * @description person, or pai: the sales AI agent rings at due_at and follows the instructions.
+             */
+            doer?: string | null;
+            /**
+             * Due At
+             * @description Exact date and time to do it (a call by PAI is placed then).
+             */
+            due_at?: string | null;
+            /**
+             * Instructions
+             * @description What to say or find out on the call.
+             */
+            instructions?: string | null;
+            /**
+             * Call Phone
+             * @description Number to ring; empty uses the linked party's.
+             */
+            call_phone?: string | null;
         };
         /** TaskOut */
         TaskOut: {
@@ -8031,6 +8411,35 @@ export interface components {
             created_at: string;
             /** Completed At */
             completed_at?: string | null;
+            /**
+             * Kind
+             * @default todo
+             */
+            kind: string;
+            /**
+             * Doer
+             * @default person
+             */
+            doer: string;
+            /** Due At */
+            due_at?: string | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Call Phone */
+            call_phone?: string | null;
+            /** Transporter Id */
+            transporter_id?: string | null;
+            /** Ai Status */
+            ai_status?: string | null;
+            /** Ai Result */
+            ai_result?: string | null;
+            /**
+             * Call Attempts
+             * @default 0
+             */
+            call_attempts: number;
+            /** Phone Call Id */
+            phone_call_id?: string | null;
         };
         /** TaskUpdate */
         TaskUpdate: {
@@ -8056,6 +8465,18 @@ export interface components {
             supplier_id?: string | null;
             /** Purchase Order Id */
             purchase_order_id?: string | null;
+            /** Transporter Id */
+            transporter_id?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Doer */
+            doer?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Call Phone */
+            call_phone?: string | null;
         };
         /** TemplateStatusOut */
         TemplateStatusOut: {
@@ -8527,6 +8948,163 @@ export interface operations {
                 "application/json": components["schemas"]["PublicEnquiryIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_orders_api_public_e__token__orders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_statement_api_public_e__token__statement_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_invoices_api_public_e__token__invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_invoice_pdf_api_public_e__token__invoices__sync_id__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_again_api_public_e__token__reorder__order_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             201: {
@@ -9949,6 +10527,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    batch_stock_api_products_batches_get: {
+        parameters: {
+            query?: {
+                product_id?: string | null;
+                expiring_within_days?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -15140,6 +15750,280 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_now_api_automation_run__what__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                what: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_automation_preview__what__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                what: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activity_api_automation_activity_get: {
+        parameters: {
+            query?: {
+                step?: string | null;
+                party_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rfqs_api_automation_rfqs_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rfq_api_automation_rfqs__rfq_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rfq_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_quote_api_automation_rfqs__rfq_id__quotes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rfq_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_rfq_api_automation_rfqs__rfq_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rfq_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_rfq_api_automation_rfqs__rfq_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rfq_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_api_automation_feedback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

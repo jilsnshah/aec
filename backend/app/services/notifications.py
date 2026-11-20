@@ -120,10 +120,15 @@ def stock_arrived(order_ids) -> None:
 
 
 def po_placed(po_id) -> None:
-    from . import inbound, transport_automation
+    from . import inbound, transport_automation, triggers
 
     session = inbound.session_factory()
     try:
+        try:
+            triggers.send_po(session, po_id)
+        except Exception:
+            session.rollback()
+            logger.exception("Sending purchase order %s failed", po_id)
         transport_automation.trigger(session, "purchase", "po_placed", "purchase_order", po_id)
     except Exception:
         session.rollback()

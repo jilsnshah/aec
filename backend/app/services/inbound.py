@@ -88,6 +88,15 @@ def process(message_id: uuid.UUID) -> None:
                     summary="Reply to booking {}: {}".format(booking["number"], booking["status"]) if booking else
                     "Message from transporter {}; no booking was waiting for an answer.".format(party.name))
             return
+        if kind in ("supplier", "customer") and party is not None and message.channel in ("whatsapp", "email"):
+            from . import triggers
+
+            handled = (triggers.on_supplier_message if kind == "supplier" else triggers.on_customer_message)(session, party, message.body)
+            if handled:
+                _finish(session, message, handled, summary={"rfq_reply": "Supplier's reply to a price request, recorded.",
+                                                            "chase_reply": "Supplier's reply about a delivery date, recorded.",
+                                                            "feedback": "Customer's feedback after delivery, recorded."}[handled])
+                return
         steps = {key: automation.step(session, key) for key in ("sales.trigger_incoming", "sales.understand", "sales.price", "sales.send_quote", "sales.confirm_order")}
         if not automation.allowed(steps["sales.trigger_incoming"], "tai") or message.channel not in (steps["sales.trigger_incoming"].get("channels") or []):
             _finish(session, message, "skipped", summary="TAI is not set to read {} messages (Settings -> Automation).".format(message.channel))

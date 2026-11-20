@@ -14,11 +14,15 @@ import { AllocationEditor, useAllocation, type Claimant } from '@/ui/allocate'
 import { Button, Facts, Field, Notice, Spinner, Toggle } from '@/ui/core'
 import { Sheet } from '@/ui/overlays'
 import { Picker } from '@/ui/pickers'
+import { useProducts } from '@/ui/lines'
 
 interface Entry {
   quantity: string
   cost: string
   reason: string
+  batch?: string
+  made?: string
+  expires?: string
 }
 
 /** Book in a supplier's delivery against a purchase order. */
@@ -27,6 +31,8 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
   const [poId, setPoId] = useState('')
   const po = useOne('purchase-orders', api.purchaseOrders.get, open && poId ? poId : undefined)
   const [entries, setEntries] = useState<Record<string, Entry>>({})
+  const productList = useProducts()
+  const tracked = new Set(productList.items.filter((p) => p.track_batches).map((p) => p.id))
   const [note, setNote] = useState('')
   const [transport, setTransport] = useState({ transporter_id: '', vehicle_number: '', lr_number: '' })
   const [charges, setCharges] = useState<ChargeRow[]>([])
@@ -69,6 +75,9 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
     quantity: entries[item.id].quantity,
     unit_cost: entries[item.id].cost || null,
     over_receipt_reason: entries[item.id].reason || null,
+    batch_number: entries[item.id].batch || null,
+    manufactured_on: entries[item.id].made || null,
+    expires_on: entries[item.id].expires || null,
     allocations: null,
   }))
   const debounced = useDebounced(JSON.stringify(requestLines), 300)
@@ -178,6 +187,25 @@ export function ReceiveSheet({ open, onClose, poId: initialPo, focusItem, onDone
                           <div className="text-[11.5px] text-fg-3">
                             {item.product.sku} · {item.product.unit_of_measure}
                           </div>
+                          {tracked.has(item.product_id) ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              <input className="field field-sm w-[120px]" placeholder="Batch no." aria-label={`Batch of ${item.product.name}`} value={entry.batch ?? ''}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setEntries((all) => ({ ...all, [item.id]: { ...(all[item.id] ?? entry), batch: value } }))
+                                }} />
+                              <input type="date" className="field field-sm w-[140px]" title="Made on" aria-label="Made on" value={entry.made ?? ''}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setEntries((all) => ({ ...all, [item.id]: { ...(all[item.id] ?? entry), made: value } }))
+                                }} />
+                              <input type="date" className="field field-sm w-[140px]" title="Expires on (from shelf life if empty)" aria-label="Expires on" value={entry.expires ?? ''}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setEntries((all) => ({ ...all, [item.id]: { ...(all[item.id] ?? entry), expires: value } }))
+                                }} />
+                            </div>
+                          ) : null}
                           {over && allowOver ? (
                             <input className="field field-sm mt-1.5" placeholder="Why more than ordered? (required)" value={entry.reason} onChange={(event) => setEntries({ ...entries, [item.id]: { ...entry, reason: event.target.value } })} />
                           ) : null}

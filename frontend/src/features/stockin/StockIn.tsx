@@ -66,6 +66,7 @@ function Entry({ productId }: { productId: string }) {
   const [quantity, setQuantity] = useState('')
   const [cost, setCost] = useState('')
   const [reference, setReference] = useState('')
+  const [batch, setBatch] = useState({ number: '', made: '', expires: '' })
   const [warehouse, setWarehouse] = useState('')
   const [note, setNote] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
@@ -90,7 +91,7 @@ function Entry({ productId }: { productId: string }) {
 
   function submit() {
     record.mutate(
-      { product_id: productId, quantity, unit_cost: cost, warehouse_id: warehouse || null, supplier_reference: reference || null, note: note || null, allocations: required > 0 ? plan.allocations : null, idempotency_key: key },
+      { product_id: productId, quantity, unit_cost: cost, warehouse_id: warehouse || null, batch_number: batch.number || null, manufactured_on: batch.made || null, expires_on: batch.expires || null, supplier_reference: reference || null, note: note || null, allocations: required > 0 ? plan.allocations : null, idempotency_key: key },
       { onSuccess: setResult },
     )
   }
@@ -157,6 +158,28 @@ function Entry({ productId }: { productId: string }) {
               {(props) => <input {...props} className="field field-num h-12 text-[20px] font-semibold" inputMode="decimal" placeholder="0.00" value={cost} onChange={(event) => setCost(event.target.value)} />}
             </Field>
             <WarehouseSelect value={warehouse} onChange={setWarehouse} label="Put into" />
+            {product?.track_batches ? (
+              <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+                <Field label="Batch no.">
+                  {(props) => <input {...props} className="field" value={batch.number} onChange={(e) => {
+                    const value = e.target.value
+                    setBatch((b) => ({ ...b, number: value }))
+                  }} />}
+                </Field>
+                <Field label="Made on" optional>
+                  {(props) => <input {...props} type="date" className="field" value={batch.made} onChange={(e) => {
+                    const value = e.target.value
+                    setBatch((b) => ({ ...b, made: value }))
+                  }} />}
+                </Field>
+                <Field label="Expires on" optional hint={product.shelf_life_days ? `Else ${product.shelf_life_days} days from making` : undefined}>
+                  {(props) => <input {...props} type="date" className="field" value={batch.expires} onChange={(e) => {
+                    const value = e.target.value
+                    setBatch((b) => ({ ...b, expires: value }))
+                  }} />}
+                </Field>
+              </div>
+            ) : null}
             <Field label="Supplier / invoice" optional>
               {(props) => <input {...props} className="field" placeholder="Northgate Mills · INV-9912" value={reference} onChange={(event) => setReference(event.target.value)} />}
             </Field>

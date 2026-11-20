@@ -66,9 +66,18 @@ def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db)
         preferred_supplier_id=payload.preferred_supplier_id,
         lead_time_days=payload.lead_time_days,
         warehouse_id=payload.warehouse_id,
-        **payload.model_dump(include={"brand", "hsn_code", "gst_rate", "weight_kg", "specs", "sales_unit", "purchase_unit", "whole_units"}, exclude_none=True),
+        **payload.model_dump(include={"brand", "hsn_code", "gst_rate", "weight_kg", "specs", "sales_unit", "purchase_unit", "whole_units", "track_batches", "shelf_life_days"}, exclude_none=True),
     )
     return product_service.product_view(db, product)
+
+
+@router.get("/batches", include_in_schema=True)
+def batch_stock(product_id: Optional[uuid.UUID] = Query(default=None), expiring_within_days: Optional[int] = Query(default=None, ge=0, le=3650),
+                db: Session = Depends(get_db)):
+    """Stock per batch and warehouse, soonest expiry first; with expiring_within_days only those near or past expiry."""
+    from ..services import batches
+
+    return {"items": batches.stock(db, product_id, expiring_within_days)}
 
 
 @router.get("/{product_id}", response_model=schemas.ProductOut)

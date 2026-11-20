@@ -231,6 +231,7 @@ def receive_stock(
     purchase_unit_cost: Any = 0,
     supplier_reference: Optional[str] = None,
     warehouse_id: Optional[uuid.UUID] = None,
+    batch: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Record an ad-hoc stock receipt and compulsorily reserve waiting orders.
 
@@ -284,6 +285,10 @@ def receive_stock(
         from . import warehouses as warehouse_service
 
         into = warehouse_service.resolve(session, warehouse_id)
+        from . import batches as batch_service
+
+        batch = batch or {}
+        found_batch = batch_service.resolve(session, product, batch.get("batch_number"), batch.get("manufactured_on"), batch.get("expires_on"))
         receipt = StockReceipt(
             warehouse_id=into,
             receipt_number=next_document_number(session, RECEIPT_COUNTER, "GRN"),
@@ -319,6 +324,7 @@ def receive_stock(
             receipt.id,
             note,
             into,
+            found_batch.id if found_batch else None,
         )
 
         reservations.reserve(

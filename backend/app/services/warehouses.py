@@ -252,14 +252,16 @@ def _take(session: Session, product: Product, warehouse_id: uuid.UUID, amount: D
         stmt = stmt.where(StockCostLayer.source_id == source_id)
     pieces: List[StockCostLayer] = []
     remaining = amount
-    for layer in session.execute(stmt.order_by(StockCostLayer.created_at, StockCostLayer.id).with_for_update()).scalars():
+    from .batches import fefo
+
+    for layer in session.execute(fefo(stmt, product.id, session).with_for_update(of=StockCostLayer)).scalars():
         if remaining <= ZERO:
             break
         take = min(layer.quantity_remaining, remaining)
         layer.quantity_remaining = layer.quantity_remaining - take
         remaining = remaining - take
         pieces.append(StockCostLayer(product_id=product.id, source=layer.source, source_id=layer.source_id, unit_cost=layer.unit_cost,
-                                     quantity=take, quantity_remaining=take, note=layer.note, created_at=layer.created_at))
+                                     quantity=take, quantity_remaining=take, note=layer.note, created_at=layer.created_at, batch_id=layer.batch_id))
     if remaining > ZERO:
         raise ValidationError("Only {} {} of {} is in that warehouse.".format(amount - remaining, product.unit_of_measure, product.name))
     return pieces

@@ -148,6 +148,8 @@ def to_view(
         "sales_unit": product.sales_unit,
         "purchase_unit": product.purchase_unit,
         "whole_units": product.whole_units,
+        "track_batches": product.track_batches,
+        "shelf_life_days": product.shelf_life_days,
         "units": product.units,
         "physical_stock": physical,
         "reserved_stock": reserved,
@@ -285,6 +287,11 @@ def _apply_settings(session: Session, product: Product, values: Dict[str, Any]) 
         product.specs = clean
     if "whole_units" in values and values["whole_units"] is not None:
         product.whole_units = bool(values["whole_units"])
+    if "track_batches" in values and values["track_batches"] is not None:
+        product.track_batches = bool(values["track_batches"])
+    if "shelf_life_days" in values:
+        days = values["shelf_life_days"]
+        product.shelf_life_days = int(days) if days not in (None, "") else None
     for key, purpose in (("sales_unit", "sales"), ("purchase_unit", "purchase")):
         if key in values:
             name = (values[key] or "").strip()

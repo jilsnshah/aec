@@ -7,10 +7,11 @@ import { fmtAgo, fmtMoney } from '@/lib/format'
 import { Badge, Button, Empty, Spinner } from '@/ui/core'
 import { Segmented } from '@/ui/overlays'
 import { FlowEditor } from './FlowEditor'
+import { ActivityView } from './Activity'
 
 /** Settings -> Automation: the sales and purchase pipelines, step by step. */
 export function AutomationPane() {
-  const [flow, setFlow] = useState<'sales' | 'purchase'>('sales')
+  const [flow, setFlow] = useState<'sales' | 'purchase' | 'activity'>('sales')
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/7 px-5 py-4">
@@ -22,16 +23,17 @@ export function AutomationPane() {
           <p className="text-[12px] text-fg-3">Drag steps in, connect them, and click a step to choose who does it (System, Person, TAI, PAI), how much on its own, its limits and its AI model.</p>
         </div>
         <Segmented
-          className="w-[260px]"
+          className="w-[380px] max-w-full"
           value={flow}
           onChange={setFlow}
           options={[
             { value: 'sales', label: 'Sales flow' },
             { value: 'purchase', label: 'Purchase flow' },
+            { value: 'activity', label: 'Activity' },
           ]}
         />
       </header>
-      <FlowEditor flowKey={flow} />
+      {flow === 'activity' ? <ActivityView /> : <FlowEditor flowKey={flow} />}
     </div>
   )
 }

@@ -62,6 +62,7 @@ def create_stock_receipt(payload: schemas.StockReceiptCreate, db: Session = Depe
         purchase_unit_cost=payload.unit_cost,
         supplier_reference=payload.supplier_reference,
         warehouse_id=payload.warehouse_id,
+        batch=payload.model_dump(include={"batch_number", "manufactured_on", "expires_on"}),
     )
 
 

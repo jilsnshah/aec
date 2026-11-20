@@ -37,7 +37,64 @@ LINKS = {
     "sales_order_id": SalesOrder,
     "supplier_id": Supplier,
     "purchase_order_id": PurchaseOrder,
+    "transporter_id": None,  # filled below (import order)
 }
+
+
+def _call_fields(session: Session, task: Task, data: Dict[str, Any]) -> None:
+    """Type, doer, exact time, instructions and number of a follow-up; a call
+    by PAI is scheduled for its time."""
+    from datetime import datetime as _dt
+
+    for key in ("instructions", "call_phone"):
+        if key in data:
+            setattr(task, key, (data[key] or "").strip() or None)
+    if data.get("kind"):
+        if data["kind"] not in ("todo", "call"):
+            raise ValidationError("A follow-up is a to-do or a call.")
+        task.kind = data["kind"]
+    if data.get("doer"):
+        if data["doer"] not in ("person", "pai"):
+            raise ValidationError("A follow-up is done by a person or by PAI.")
+        task.doer = data["doer"]
+    if "due_at" in data:
+        value = data["due_at"]
+        if isinstance(value, str) and value:
+            value = _dt.fromisoformat(value.replace("Z", "+00:00"))
+        if isinstance(value, _dt) and value.tzinfo is None:
+            value = value.replace(tzinfo=_zone())
+        task.due_at = value or None
+        if task.due_at is not None:
+            task.due_date = task.due_at
+    if task.doer == "pai":
+        task.kind = "call"
+        if not (task.call_phone or (task.customer and task.customer.phone) or (task.supplier and task.supplier.phone) or _transporter_phone(session, task)):
+            raise ValidationError("PAI needs a number to ring: link the customer, supplier or transporter, or enter the number.")
+        if task.due_at is None:
+            task.due_at = utcnow()
+        if task.status == TaskStatus.OPEN and task.ai_status in (None, "scheduled", "failed", "no_answer") and (
+                "due_at" in data or "doer" in data or task.ai_status is None):
+            task.ai_status, task.call_attempts = "scheduled", 0
+    elif "doer" in data:
+        task.ai_status = None
+
+
+def _transporter_phone(session: Session, task: Task) -> Optional[str]:
+    if not task.transporter_id:
+        return None
+    from ..models import Transporter
+
+    row = session.get(Transporter, task.transporter_id)
+    return row.phone if row else None
+
+
+def phone_for(session: Session, task: Task) -> Optional[str]:
+    return task.call_phone or (task.customer.phone if task.customer else None) or (task.supplier.phone if task.supplier else None) or _transporter_phone(session, task)
+
+
+from ..models import Transporter as _Transporter  # noqa: E402
+
+LINKS["transporter_id"] = _Transporter
 
 
 def _zone() -> ZoneInfo:
@@ -53,6 +110,9 @@ def due_at(day: Optional[date]) -> Optional[datetime]:
     if day is None:
         return None
     return datetime.combine(day, time.min, tzinfo=_zone())
+
+
+_day_start = due_at  # create_task takes a ``due_at`` argument of its own
 
 
 def due_day(value: Optional[datetime]) -> Optional[date]:
@@ -139,8 +199,14 @@ def create_task(
     assignee_id: Optional[uuid.UUID] = None,
     created_by_id: Optional[uuid.UUID] = None,
     source: str = "manual",
+    kind: Optional[str] = None,
+    doer: Optional[str] = None,
+    due_at: Any = None,
+    instructions: Optional[str] = None,
+    call_phone: Optional[str] = None,
     **links: Optional[uuid.UUID],
 ) -> Task:
+    call = {k: v for k, v in (("kind", kind), ("doer", doer), ("due_at", due_at), ("instructions", instructions), ("call_phone", call_phone)) if v not in (None, "")}
     title = (title or "").strip()
     if not title:
         raise ValidationError("A follow-up needs a title.")
@@ -151,7 +217,7 @@ def create_task(
     task = Task(
         title=title[:255],
         notes=(notes or "").strip() or None,
-        due_date=due_at(due_date),
+        due_date=_day_start(due_date),
         priority=TaskPriority(priority.upper()),
         assignee_id=assignee_id,
         created_by_id=created_by_id,
@@ -159,6 +225,8 @@ def create_task(
         **{name: value for name, value in values.items() if name in LINKS},
     )
     session.add(task)
+    session.flush()
+    _call_fields(session, task, call)
     session.commit()
     return get_task(session, task.id)
 
@@ -181,6 +249,8 @@ def update_task(session: Session, task_id: uuid.UUID, changes: Dict[str, Any]) -
     _check_links(session, link_changes)
     for name, value in link_changes.items():
         setattr(task, name, value)
+    session.flush()
+    _call_fields(session, task, changes)
     if "status" in changes and changes["status"]:
         status = TaskStatus(str(changes["status"]).upper())
         if status != task.status:
@@ -216,6 +286,16 @@ def to_view(task: Task) -> Dict[str, Any]:
         "po_number": task.purchase_order.po_number if task.purchase_order else None,
         "created_at": task.created_at,
         "completed_at": task.completed_at,
+        "kind": task.kind,
+        "doer": task.doer,
+        "due_at": task.due_at,
+        "instructions": task.instructions,
+        "call_phone": task.call_phone,
+        "transporter_id": task.transporter_id,
+        "ai_status": task.ai_status,
+        "ai_result": task.ai_result,
+        "call_attempts": task.call_attempts,
+        "phone_call_id": task.phone_call_id,
     }
 
 

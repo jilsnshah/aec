@@ -14,6 +14,7 @@ import { api } from '@/api/endpoints'
 import { useAction, useList, useOne } from '@/api/queries'
 import type { ProductInventoryOut } from '@/api/types'
 import { warehouses } from '@/api/warehouses'
+import { http } from '@/api/client'
 import { cn } from '@/lib/cn'
 import { fmtAmount, fmtDate, fmtDateTime, fmtMoney, fmtQty, n } from '@/lib/format'
 import { useDebounced, useRecordRoute } from '@/lib/route'
@@ -395,6 +396,7 @@ function ProductInspector({ id }: { id: string }) {
         <TabPanel value="overview">
           <ProductAbout data={data} />
           <ProductWarehouses id={id} unit={data.unit_of_measure} />
+          {data.track_batches ? <ProductBatches id={id} /> : null}
           {intel ? <Intelligence row={intel} onBuy={() => navigate(buyLink([intel]))} onAsk={() => ask(`Analyse product ${data.name} (id ${id}): demand trend, stock position, ageing, profitability and enquiries. Should we buy, hold or clear it, and how much?`)} /> : null}
           <Section title="Warehouse over time" hint="Physical quantity after each movement">
             <StockHistory data={data} />
@@ -793,6 +795,49 @@ function ProductWarehouses({ id, unit }: { id: string; unit: string }) {
           </div>
         ))}
       </div>
+    </Section>
+  )
+}
+
+/** Stock per batch, soonest expiry first. */
+function ProductBatches({ id }: { id: string }) {
+  const rows = useQuery({ queryKey: ['batches', id], queryFn: () => http.get<{ items: { batch_id: string; number: string; manufactured_on: string | null; expires_on: string | null; days_left: number | null; state: string; warehouse: string; quantity: number; unit: string }[] }>('/api/products/batches', { product_id: id }) })
+  const items = rows.data?.items ?? []
+  return (
+    <Section title="Batches" hint="Earliest expiry goes out first">
+      {!items.length ? (
+        <p className="text-[12.5px] text-fg-3">No stock in any batch.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="grid-table min-w-[560px]">
+            <thead>
+              <tr>
+                <th>Batch</th>
+                <th>Warehouse</th>
+                <th>Made</th>
+                <th>Expires</th>
+                <th className="r">Quantity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((b) => (
+                <tr key={b.batch_id + b.warehouse}>
+                  <td className="font-semibold">{b.number}</td>
+                  <td>{b.warehouse}</td>
+                  <td>{b.manufactured_on ? fmtDate(b.manufactured_on) : '—'}</td>
+                  <td>
+                    {b.expires_on ? fmtDate(b.expires_on) : '—'}
+                    {b.state !== 'ok' ? <Badge tone={b.state === 'expired' ? 'bad' : 'warn'}>{b.state === 'expired' ? 'Expired' : `${b.days_left} days left`}</Badge> : null}
+                  </td>
+                  <td className="r num">
+                    {fmtQty(b.quantity)} <span className="text-[11px] text-fg-3">{b.unit}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Section>
   )
 }

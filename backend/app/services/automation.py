@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..database import begin_write
 from ..errors import NotFoundError, ValidationError
 from ..models import AutomationFlow, User
+from .automation_config import clean, defaults
 
 ACTORS = ("system", "person", "tai", "pai")
 MODES = ("auto", "limits", "approval", "off")
@@ -43,16 +44,18 @@ LIMIT_FIELDS = {
 
 
 def _step(key, flow, label, category, actors, default_actor, live, description, limits=(), ai=False, channels=(), timing=None, modes=MODES):
+    from .automation_config import CONFIG
+
     return {"key": key, "flow": flow, "label": label, "category": category, "actors": list(actors), "default_actor": default_actor,
             "live": live, "description": description, "limit_fields": list(limits), "ai": ai, "channels": list(channels),
-            "timing": timing, "modes": list(modes)}
+            "timing": timing, "modes": list(modes), "config_fields": CONFIG.get(key, [])}
 
 
 LIBRARY: List[Dict[str, Any]] = [
     # --- Sales ------------------------------------------------------------------------
     _step("sales.trigger_incoming", "sales", "Enquiry comes in", "trigger", ["tai", "pai", "person"], "tai", True,
           "A WhatsApp message, email, phone call or the customer's own link starts the flow.", channels=("whatsapp", "email", "call", "link")),
-    _step("sales.trigger_outreach", "sales", "Reach out to customers", "trigger", ["tai", "pai", "person"], "tai", False,
+    _step("sales.trigger_outreach", "sales", "Reach out to customers", "trigger", ["tai", "pai", "person"], "tai", True,
           "Contact customers who are late for their usual order, or dormant ones worth winning back.", limits=("segment",), ai=True,
           channels=("whatsapp", "call"), timing={"every_days": 1}),
     _step("sales.identify", "sales", "Identify the customer", "record", ["system"], "system", True,
@@ -84,8 +87,8 @@ LIBRARY: List[Dict[str, Any]] = [
           channels=("whatsapp", "call"), timing={"every_days": 3}),
     _step("sales.payment_received", "sales", "Payment received", "person", ["person", "system"], "person", True,
           "Recorded by a person today; automatic with payment links or a bank feed.", modes=("approval", "auto")),
-    _step("sales.after_sales", "sales", "After-sales follow-up", "communicate", ["tai", "person"], "tai", False,
-          "A few days after delivery: was everything right, anything else needed.", ai=True, channels=("whatsapp",), timing={"after_days": 3}),
+    _step("sales.after_sales", "sales", "After-sales follow-up", "communicate", ["tai", "pai", "person"], "tai", True,
+          "After delivery: was everything right? A rating, and any complaint becomes a task for the team.", ai=True, channels=("whatsapp", "call")),
     # --- Purchase ---------------------------------------------------------------------
     _step("sales.book_transport", "sales", "Book transport", "communicate", ["system", "person", "tai", "pai"], "tai", True,
           "Ask a transporter for a vehicle: when the order is placed or its stock is ready. TAI asks on WhatsApp, PAI calls; "
@@ -93,23 +96,25 @@ LIBRARY: List[Dict[str, Any]] = [
           limits=("freight_amount", "over_estimate_percent"), ai=True, channels=("whatsapp", "call"),
           timing={"when": "order_placed", "choose": "cheapest", "transporter_id": "", "vehicle_type": ""}),
     _step("purchase.need_detected", "purchase", "Need detected", "trigger", ["system", "person"], "system", True,
-          "Stock below reorder point, customers waiting on short stock, or the scheduled buying run.", timing={"every_days": 1}),
+          "Watches stock on a schedule: customers short, below the reorder point, low days of cover, or a weekly review. "
+          "Then asks suppliers for prices, drafts a PO or makes a task.", modes=("auto", "off")),
     _step("purchase.choose_supplier", "purchase", "Choose supplier and quantity", "decide", ["system", "person"], "system", True,
           "Cheapest reliable supplier, quantity from lead time and sales, target price from the last paid.", limits=("supplier_score",)),
-    _step("purchase.ask_supplier", "purchase", "Ask the supplier", "communicate", ["tai", "pai", "person"], "tai", False,
+    _step("purchase.ask_supplier", "purchase", "Ask the supplier", "communicate", ["tai", "pai", "person"], "tai", True,
           "Ask availability, price and delivery date; to two or three suppliers at once.", ai=True, channels=("whatsapp", "call", "email")),
-    _step("purchase.read_reply", "purchase", "Read the reply", "communicate", ["tai", "pai", "person"], "tai", False,
+    _step("purchase.read_reply", "purchase", "Read the reply", "communicate", ["tai", "pai", "person"], "tai", True,
           "Record the supplier's price, quantity and date; unclear replies go to a person.", ai=True),
-    _step("purchase.compare_quotes", "purchase", "Compare and pick", "decide", ["system", "person"], "system", False,
+    _step("purchase.compare_quotes", "purchase", "Compare and pick", "decide", ["system", "person"], "system", True,
           "Lowest price weighed with reliability and delivery date.", limits=("supplier_score",)),
     _step("purchase.approve_po", "purchase", "Approve", "decide", ["system", "person"], "person", True,
           "Automatic within limits, otherwise one tap in the approvals inbox.", limits=("po_value", "price_change_percent")),
     _step("purchase.place_po", "purchase", "Create and place the PO", "record", ["system", "person"], "person", True,
           "The purchase order is placed and sent to Tally."),
-    _step("purchase.send_po", "purchase", "Send the PO to the supplier", "communicate", ["system"], "system", False,
+    _step("purchase.send_po", "purchase", "Send the PO to the supplier", "communicate", ["system"], "system", True,
           "WhatsApp message with the PO PDF (approved template).", channels=("whatsapp",), modes=("auto", "off")),
-    _step("purchase.chase_delivery", "purchase", "Chase the delivery", "communicate", ["tai", "pai", "person"], "tai", False,
-          "Reminder before the due date; a call when late.", ai=True, channels=("whatsapp", "call"), timing={"before_days": 1}),
+    _step("purchase.chase_delivery", "purchase", "Chase the delivery", "communicate", ["tai", "pai", "person"], "tai", True,
+          "Confirm before the due date, ask again when late, update the expected date from the reply, then a task for the buyer.",
+          ai=True, channels=("whatsapp", "call")),
     _step("purchase.receive_goods", "purchase", "Receive goods", "person", ["person"], "person", True,
           "Count and receive; 'scan bill' fills it in from a photo of the delivery note.", modes=("approval",)),
     _step("purchase.allocate", "purchase", "Give stock to waiting customers", "record", ["system"], "system", True,
@@ -154,6 +159,7 @@ def default_node(step_key: str, index: int, node_id: Optional[str] = None) -> Di
         "ai": {"model": "", "instructions": ""} if step["ai"] else None,
         "channels": list(step["channels"]),
         "timing": copy.deepcopy(step["timing"]),
+        "config": defaults(step["config_fields"]) if step["config_fields"] else None,
         "notes": "",
     }
     data.update(copy.deepcopy(DEFAULT_OVERRIDES.get(step_key, {})))
@@ -209,6 +215,7 @@ def _validate(key: str, flow: Dict[str, Any]) -> Dict[str, Any]:
             "data": {"step": step["key"], "title": str(data.get("title") or step["label"])[:80], "actors": actors, "mode": mode,
                      "limits": limits, "ai": ai, "channels": [c for c in (data.get("channels") or []) if c in step["channels"]],
                      "timing": data.get("timing") if isinstance(data.get("timing"), dict) else step["timing"],
+                     "config": clean(step["config_fields"], data.get("config")) if step["config_fields"] else None,
                      "notes": str(data.get("notes") or "")[:2000]},
         })
     clean_edges = []
@@ -301,9 +308,13 @@ def step(session: Session, step_key: str) -> Dict[str, Any]:
     the step is not in the flow -- then it counts as off)."""
     flow_key = step_key.split(".")[0]
     flow = get(session, flow_key)
+    fields = LIBRARY_BY_KEY[step_key]["config_fields"]
     for node in flow["nodes"]:
         if node["data"]["step"] == step_key:
-            return node["data"]
+            data = dict(node["data"])
+            if fields:
+                data["config"] = clean(fields, data.get("config"))
+            return data
     data = default_node(step_key, 0)["data"]
     data["mode"] = "off"
     return data

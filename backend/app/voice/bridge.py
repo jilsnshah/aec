@@ -25,7 +25,7 @@ from ..config import get_settings
 from ..database import SessionLocal
 from ..models import PhoneCall
 from ..services import integration_settings as settings_service
-from .tools import BOOKING_DECLARATIONS, DECLARATIONS, CallTools
+from .tools import BOOKING_DECLARATIONS, DECLARATIONS, FINISH_TASK, CallTools
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,12 @@ for a clear yes; only then place_order and say exactly what it returned. If orde
 - If they want a person, say someone will call them back soon (note it in the enquiry notes if there is one).
 - When they are done, say a short goodbye and call end_call.
 {brief}"""
+
+
+FOLLOW_UP = """
+
+THIS IS A FOLLOW-UP CALL YOU PLACED for the team. Greet them by name if you know it, say who you are and which business, then do exactly this: {brief}
+You can use your usual tools (prices, stock, their orders and balance, take an enquiry, prepare and place an order if they confirm). Before saying goodbye ALWAYS call finish_followup with the outcome and a short summary of what was said and agreed."""
 
 
 BOOK = """
@@ -145,20 +151,27 @@ class Call:
                 self.caller, self.to = params.get("from"), params.get("to")
                 self.mode = params.get("mode", "answer")
                 self.booking = params.get("booking")
+                self.task = params.get("task")
         self.tools = CallTools(SessionLocal, self.caller)
         if self.mode == "book" and getattr(self, "booking", None):
             import uuid as _uuid
 
             self.tools.booking_id = _uuid.UUID(self.booking)
         brief = await asyncio.to_thread(self.tools.identify)
+        if self.mode == "task" and getattr(self, "task", None):
+            import uuid as _uuid
+
+            self.tools.task_id = _uuid.UUID(self.task)
         extra = PITCH if self.mode == "pitch" else ""
+        if self.mode == "task":
+            extra = FOLLOW_UP.format(brief=await asyncio.to_thread(self.tools.task_brief))
         if self.mode == "book":
             extra = BOOK.format(request=await asyncio.to_thread(self.tools.booking_brief))
         self._open_record()
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             system_instruction=instructions(await asyncio.to_thread(_seller), brief) + extra,
-            tools=[types.Tool(function_declarations=BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS)],
+            tools=[types.Tool(function_declarations=BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + ([FINISH_TASK] if self.mode == "task" else []))],
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=VOICE_NAME))),
@@ -184,7 +197,9 @@ class Call:
                         "(You placed this call and the person just picked up. Introduce yourself and the business, then start the pitch.)"
                         if self.mode == "pitch" else
                         "(You placed this call to the transporter and they just picked up. Greet them and ask for the vehicle.)"
-                        if self.mode == "book" else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
+                        if self.mode == "book" else
+                        "(You placed this follow-up call and they just picked up. Greet them and do the follow-up.)"
+                        if self.mode == "task" else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
                     turn_complete=True,
                 )
                 await asyncio.gather(self._from_twilio(session), self._from_gemini(session))
@@ -291,6 +306,20 @@ class Call:
             call.enquiry_id = self.tools.enquiry_id if self.tools else None
             call.summary = _summary(self.transcript, self.tools)
             session.commit()
+            if self.tools and self.tools.task_id:
+                from ..services import triggers
+
+                if self.tools.task_finished:
+                    from ..models import Task
+
+                    task = session.get(Task, self.tools.task_id)
+                    if task is not None:
+                        task.phone_call_id = call.id
+                        session.commit()
+                else:
+                    # The call ended without PAI's report: keep what was said for a person.
+                    triggers.finish_call(session, self.tools.task_id, "needs_person",
+                                         "Call ended without a clear outcome. " + (call.summary or ""), call.id)
         finally:
             session.close()
 

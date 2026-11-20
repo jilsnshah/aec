@@ -638,6 +638,9 @@ def _clean_receipt_lines(
                 "quantity": qty,
                 "unit_cost": actual_cost,
                 "over_receipt_reason": (line.get("over_receipt_reason") or None),
+                "batch_number": line.get("batch_number"),
+                "manufactured_on": line.get("manufactured_on"),
+                "expires_on": line.get("expires_on"),
                 "allocations": line.get("allocations"),
             }
         )
@@ -973,6 +976,9 @@ def create_goods_receipt(
             )
             receipt_item.stock_movement_id = movement.id
 
+            from . import batches
+
+            batch = batches.resolve(session, product, line.get("batch_number"), line.get("manufactured_on"), line.get("expires_on"), order.supplier_id)
             costing.open_cost_layer(
                 session,
                 product,
@@ -980,8 +986,9 @@ def create_goods_receipt(
                 line["unit_cost"],
                 MovementType.GOODS_RECEIPT,
                 receipt_item.id,
-                "Goods receipt {}".format(receipt.receipt_number),
+                "Goods receipt {}".format(receipt.receipt_number) + (" · batch {}".format(batch.number) if batch else ""),
                 into,
+                batch.id if batch else None,
             )
 
             # The compulsory bit: the customers this purchase was covering, and

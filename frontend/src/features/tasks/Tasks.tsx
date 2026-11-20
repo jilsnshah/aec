@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'motion/react'
-import { CalendarClock, Check, ListChecks, MoreHorizontal, Plus, RotateCcw, Sparkles } from 'lucide-react'
+import { Bot, CalendarClock, Check, ListChecks, MoreHorizontal, Phone, PhoneCall, Plus, RotateCcw, Sparkles } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import type { TaskOut } from '@/api/types'
@@ -25,12 +25,26 @@ const FILTERS: Record<Filter, { status?: string; due?: string }> = {
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
 
 function dueText(task: TaskOut) {
+  if (task.due_at) {
+    const at = new Date(task.due_at)
+    const sameDay = at.toISOString().slice(0, 10) === day(0)
+    return (sameDay ? 'Today ' : at.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) + ' ') + at.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+  }
   if (!task.due_date) return 'No date'
   const today = day(0)
   if (task.due_date === today) return 'Today'
   if (task.due_date === day(1)) return 'Tomorrow'
   const date = new Date(task.due_date + 'T00:00:00')
   return date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+const AI_STATUS: Record<string, string> = {
+  scheduled: 'PAI will call',
+  calling: 'PAI is calling',
+  done: 'PAI called · done',
+  no_answer: 'No answer',
+  failed: 'PAI could not call',
+  needs_person: 'PAI called · needs you',
 }
 
 /** Follow-ups: calls to make, quotes to chase, suppliers to push. */
@@ -102,7 +116,16 @@ export function Tasks() {
                 {task.status === 'DONE' ? <Check size={13} strokeWidth={3} /> : null}
               </button>
               <div className="min-w-0 flex-1">
-                <div className={cn('truncate text-[13.5px] font-medium', task.status !== 'OPEN' && 'text-fg-3 line-through')}>{task.title}</div>
+                <div className={cn('flex items-center gap-1.5 truncate text-[13.5px] font-medium', task.status !== 'OPEN' && 'text-fg-3 line-through')}>
+                  {task.kind === 'call' ? <Phone size={12} className="shrink-0" /> : null}
+                  <span className="truncate">{task.title}</span>
+                  {task.doer === 'pai' || task.ai_status ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue/20 px-2 py-px text-[10.5px] font-semibold no-underline">
+                      <Bot size={10} /> {AI_STATUS[task.ai_status ?? 'scheduled'] ?? task.ai_status}
+                    </span>
+                  ) : null}
+                </div>
+                {task.ai_result ? <div className="truncate text-[12px] text-fg-2">{task.ai_result}</div> : null}
                 <div className="flex flex-wrap items-center gap-x-2 text-[12px] text-fg-3">
                   {task.customer_id ? <Link className="hover:text-fg" to={`/customers/${task.customer_id}`}>{task.customer_name}</Link> : null}
                   {task.enquiry_id ? <Link className="hover:text-fg" to={`/enquiries/${task.enquiry_id}`}>{task.enquiry_number}</Link> : null}
@@ -117,7 +140,7 @@ export function Tasks() {
               <span className={cn('flex w-[110px] items-center justify-end gap-1 text-right text-[12px]', task.overdue ? 'font-semibold text-fg' : 'text-fg-3')}>
                 <CalendarClock size={12} /> {task.overdue ? `Overdue · ${dueText(task)}` : dueText(task)}
               </span>
-              <span className="w-[70px] truncate text-right text-[12px] text-fg-3">{task.assignee ?? '—'}</span>
+              <span className="w-[70px] truncate text-right text-[12px] text-fg-3">{task.doer === 'pai' ? 'PAI' : task.assignee ?? '—'}</span>
               <Menu
                 trigger={
                   <Button kind="ghost" small iconOnly aria-label="More">
@@ -159,7 +182,12 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [supplier, setSupplier] = useState('')
   const [assignee, setAssignee] = useState('')
   const [notes, setNotes] = useState('')
-  const create = useAction(api.tasks.create, { success: 'Follow-up planned' })
+  const [kind, setKind] = useState<'todo' | 'call'>('todo')
+  const [at, setAt] = useState(() => new Date(Date.now() + 3600_000).toISOString().slice(0, 16))
+  const [instructions, setInstructions] = useState('')
+  const [phone, setPhone] = useState('')
+  const create = useAction(api.tasks.create, { success: (t) => (t.doer === 'pai' ? 'PAI will make the call at that time' : 'Follow-up planned') })
+  const pai = assignee === 'pai'
 
   function reset() {
     setTitle('')
@@ -168,6 +196,10 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
     setSupplier('')
     setPriority('NORMAL')
     setDue(day(1))
+    setKind('todo')
+    setInstructions('')
+    setPhone('')
+    setAssignee('')
   }
 
   return (
@@ -186,7 +218,20 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
             disabled={!title.trim()}
             onClick={() =>
               create.mutate(
-                { title: title.trim(), due_date: due || null, priority, notes: notes || null, customer_id: customer || null, supplier_id: supplier || null, assignee_id: assignee || null },
+                {
+                  title: title.trim(),
+                  due_date: kind === 'call' ? null : due || null,
+                  due_at: kind === 'call' && at ? new Date(at).toISOString() : null,
+                  priority,
+                  notes: notes || null,
+                  customer_id: customer || null,
+                  supplier_id: supplier || null,
+                  assignee_id: pai ? null : assignee || null,
+                  kind: pai ? 'call' : kind,
+                  doer: pai ? 'pai' : 'person',
+                  instructions: instructions || null,
+                  call_phone: phone || null,
+                },
                 { onSuccess: () => { reset(); onClose() } },
               )
             }
@@ -200,9 +245,27 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
         <Field label="What has to be done" className="col-span-2 max-md:col-span-1">
           {(props) => <input {...props} className="field" autoFocus placeholder="Call Mixwell about the steel quote" value={title} onChange={(e) => setTitle(e.target.value)} />}
         </Field>
-        <Field label="Due">
-          {(props) => <input {...props} type="date" className="field" value={due} onChange={(e) => setDue(e.target.value)} />}
+        <Field label="Type">
+          {() => (
+            <Segmented
+              value={pai ? 'call' : kind}
+              onChange={(v) => setKind(v)}
+              options={[
+                { value: 'todo', label: 'To-do' },
+                { value: 'call', label: (<><PhoneCall size={12} /> Call</>) },
+              ]}
+            />
+          )}
         </Field>
+        {kind === 'call' || pai ? (
+          <Field label="When" hint={pai ? 'PAI rings at exactly this time.' : undefined}>
+            {(props) => <input {...props} type="datetime-local" className="field" value={at} onChange={(e) => setAt(e.target.value)} />}
+          </Field>
+        ) : (
+          <Field label="Due">
+            {(props) => <input {...props} type="date" className="field" value={due} onChange={(e) => setDue(e.target.value)} />}
+          </Field>
+        )}
         <Field label="Priority">
           {() => (
             <Segmented
@@ -222,9 +285,29 @@ function TaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
         <Field label="Supplier" optional>
           {() => <Picker value={supplier} onChange={setSupplier} placeholder="Choose a supplier…" options={suppliers.map((s) => ({ value: s.id, label: s.name, detail: s.code }))} />}
         </Field>
-        <Field label="Who does it" optional>
-          {() => <Picker value={assignee} onChange={setAssignee} placeholder="Anyone" options={(users.data ?? []).map((u) => ({ value: u.id, label: u.username }))} />}
+        <Field label="Who does it" optional hint={pai ? 'PAI, the sales AI agent, makes the call and reports back here.' : undefined}>
+          {() => (
+            <Picker
+              value={assignee}
+              onChange={(v) => (setAssignee(v), v === 'pai' && setKind('call'))}
+              placeholder="Anyone"
+              options={[{ value: 'pai', label: 'PAI · sales AI agent', detail: 'calls at the set time' }, ...(users.data ?? []).map((u) => ({ value: u.id, label: u.username }))]}
+            />
+          )}
         </Field>
+        {kind === 'call' || pai ? (
+          <>
+            <Field label={pai ? 'Instructions for PAI' : 'What to say'} className="col-span-2 max-md:col-span-1" hint={pai ? 'What to say or find out. PAI also knows prices, stock and their orders, and can take an order.' : undefined}>
+              {(props) => (
+                <textarea {...props} className="field" rows={3} placeholder="Ask when the cheque for SO-2026-000012 will be ready. If they want more cement, quote today’s price." value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)} />
+              )}
+            </Field>
+            <Field label="Number" optional hint="Empty uses the customer’s or supplier’s number.">
+              {(props) => <input {...props} className="field" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />}
+            </Field>
+          </>
+        ) : null}
         <Field label="Notes" optional className="col-span-2 max-md:col-span-1">
           {(props) => <textarea {...props} className="field" value={notes} onChange={(e) => setNotes(e.target.value)} />}
         </Field>

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -23,6 +23,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Enum as SAEnum,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -212,6 +213,11 @@ class Product(Base, TimestampMixin):
     purchase_unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     #: Counted in whole base units only (bags, pieces); no 2.5 bags.
     whole_units: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: Track batches (manufacture week, lot) and expiry; stock leaves earliest
+    #: expiry first.
+    track_batches: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    #: Days from manufacture to expiry, to fill the expiry date in.
+    shelf_life_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     #: The HSN/GST last sent to this product's stock item in Tally ("hsn|rate").
     tally_gst_sig: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
@@ -577,6 +583,10 @@ class StockCostLayer(Base):
     #: The godown or yard this happened in.
     warehouse_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    #: The batch these units belong to (products that track batches).
+    batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("batches.id", ondelete="RESTRICT", name="fk_cost_layers_batch"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
@@ -1358,6 +1368,22 @@ class Task(Base, TimestampMixin):
     #: manual, assistant, or automatic
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: todo, or call: a phone call to make.
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="todo", server_default="todo")
+    #: Who does it: a person (assignee), or PAI, the sales AI agent, who rings
+    #: at ``due_at`` and follows ``instructions``.
+    doer: Mapped[str] = mapped_column(String(8), nullable=False, default="person", server_default="person")
+    due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: The number to ring; empty uses the linked customer's, supplier's or transporter's.
+    call_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True)
+    #: PAI's progress: scheduled, calling, done, no_answer, failed; and what came of it.
+    ai_status: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    ai_result: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    call_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_call_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    phone_call_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("phone_calls.id", ondelete="SET NULL"), nullable=True)
 
     assignee: Mapped[Optional["User"]] = relationship(foreign_keys=[assignee_id])
     customer: Mapped[Optional["Customer"]] = relationship()
@@ -2382,3 +2408,153 @@ class TransportBooking(Base, TimestampMixin):
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     transporter: Mapped[Optional["Transporter"]] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Trigger engine: runs, events, supplier quote requests, feedback
+# ---------------------------------------------------------------------------
+
+
+class AutomationState(Base):
+    """When a scheduled trigger last ran, and anything it must remember."""
+
+    __tablename__ = "automation_state"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class AutomationEvent(Base):
+    """One thing a trigger or step did, for whom: the activity log, and what
+    frequency caps and cool-downs are counted from."""
+
+    __tablename__ = "automation_events"
+    __table_args__ = (Index("ix_automation_events_party", "party_type", "party_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    step: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    #: The rule that fired (reorder_point, dormant, ...) or the action.
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    party_type: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    party_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    subject_type: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    subject_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True, index=True)
+    #: done, sent, held, skipped, failed, awaiting_reply, replied
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="done")
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    detail: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+
+class SupplierQuoteRequest(Base, TimestampMixin):
+    """A request for prices sent to several suppliers (RFQ): what is needed,
+    who was asked, what they replied, and which offer was chosen."""
+
+    __tablename__ = "supplier_quote_requests"
+    __table_args__ = (CheckConstraint("status IN ('open', 'decided', 'ordered', 'cancelled')", name="ck_rfq_status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="open", index=True)
+    #: Why it was raised: the trigger rule, or "manual".
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    needed_by: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reply_by: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    chosen_quote_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True)
+    decision: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(8), nullable=False, default="system")
+
+    lines: Mapped[List["SupplierQuoteRequestLine"]] = relationship(back_populates="request", cascade="all, delete-orphan")
+    quotes: Mapped[List["SupplierQuote"]] = relationship(back_populates="request", cascade="all, delete-orphan")
+
+
+class SupplierQuoteRequestLine(UnitLineMixin, Base):
+    __tablename__ = "supplier_quote_request_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    request_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("supplier_quote_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    #: Base units wanted.
+    quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False)
+    #: What it is for: short customers, reorder level, cover.
+    why: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+
+    request: Mapped["SupplierQuoteRequest"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+
+
+class SupplierQuote(Base, TimestampMixin):
+    """One supplier's answer to a request."""
+
+    __tablename__ = "supplier_quotes"
+    __table_args__ = (CheckConstraint("status IN ('to_ask', 'asked', 'replied', 'declined', 'no_reply')", name="ck_supplier_quotes_status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    request_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("supplier_quote_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="to_ask")
+    channel: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    asked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reply: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    delivery_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    #: Why this supplier was asked (preferred, contract, past supplier).
+    source: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    score: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
+
+    request: Mapped["SupplierQuoteRequest"] = relationship(back_populates="quotes")
+    supplier: Mapped["Supplier"] = relationship()
+    lines: Mapped[List["SupplierQuoteLine"]] = relationship(back_populates="quote", cascade="all, delete-orphan")
+
+
+class SupplierQuoteLine(Base):
+    __tablename__ = "supplier_quote_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    quote_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("supplier_quotes.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    #: Price per base unit, before tax.
+    price: Mapped[Decimal] = mapped_column(UnitCost, nullable=False)
+    quantity_available: Mapped[Optional[Decimal]] = mapped_column(Quantity, nullable=True)
+
+    quote: Mapped["SupplierQuote"] = relationship(back_populates="lines")
+    product: Mapped["Product"] = relationship()
+
+
+class CustomerFeedback(Base):
+    """What a customer said when asked after delivery: a rating and any complaint."""
+
+    __tablename__ = "customer_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    sales_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("sales_orders.id", ondelete="SET NULL"), nullable=True)
+    delivery_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("customer_deliveries.id", ondelete="SET NULL"), nullable=True, index=True)
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    complaint: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    task_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+
+class Batch(Base):
+    """A batch (lot) of a product: cement of one manufacture week, a paint lot.
+    Units carry their batch through receipts, transfers and deliveries."""
+
+    __tablename__ = "batches"
+    __table_args__ = (UniqueConstraint("product_id", "number", name="uq_batches_product_number"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    number: Mapped[str] = mapped_column(String(64), nullable=False)
+    manufactured_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    expires_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    supplier_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    product: Mapped["Product"] = relationship()

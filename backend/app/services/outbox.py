@@ -28,6 +28,12 @@ def _send_whatsapp(session: Session, to: str, body: str) -> str:
     if not (row.enabled and token and row.config.get("phone_number_id")):
         raise whatsapp.SendError("WhatsApp sending is not set up (phone number id and access token).")
     number = whatsapp.recipient(to, row.config.get("country_code") or "91")
+    template = (row.config.get("message_template") or "").strip()
+    if template and not _in_window(session, to):
+        # WhatsApp only allows free text within 24 hours of their last
+        # message; outside it, a business-started message must be an approved
+        # template. A one-variable template ({{1}}) carries the text.
+        return whatsapp.send_template(row.config, token, number, template, [body[:1000]])
     base = "{}/{}/{}".format(whatsapp.GRAPH, row.config.get("graph_version") or "v23.0", row.config["phone_number_id"])
     try:
         with whatsapp.http_factory() as client:
@@ -38,6 +44,22 @@ def _send_whatsapp(session: Session, to: str, body: str) -> str:
     if response.status_code >= 400:
         raise whatsapp.SendError("WhatsApp refused the message: " + whatsapp._graph_error(response))
     return ((response.json().get("messages") or [{}])[0]).get("id") or ""
+
+
+def _in_window(session: Session, to: str) -> bool:
+    """Did this number write to us in the last 24 hours (WhatsApp's free-text window)?"""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func, select
+
+    from ..models import InboundMessage
+
+    digits = "".join(ch for ch in to if ch.isdigit())[-10:]
+    if not digits:
+        return False
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    return bool(session.execute(select(func.count(InboundMessage.id)).where(
+        InboundMessage.channel == "whatsapp", InboundMessage.sender.like("%" + digits), InboundMessage.created_at >= since)).scalar_one())
 
 
 #: Swappable in tests.

@@ -1029,6 +1029,33 @@ gap analysis, roadmap and sources).
   when an order is placed, its stock is ready, or a PO is placed. TAI asks the
   transporter on WhatsApp or PAI calls; a YES with vehicle and rate confirms it within
   the step's limits, a NO moves to the next transporter on the rate card.
+- **Triggers** (Settings → Automation, click a step): each step has its own settings.
+  *Need detected* watches stock on a schedule (every N hours or a weekly review,
+  chosen days and hours): customers short, below reorder point, low days of cover,
+  with minimum value and supplier filters; it then asks suppliers for prices (RFQ),
+  drafts a PO, or makes a task. *Ask the supplier*, *Read the reply*, *Compare and
+  pick* (cheapest, fastest, best value or preferred, with deadline and minimum
+  replies), *Send the PO* and *Chase the delivery* (days before/after due, repeats)
+  run on their own within each step's mode and limits. On the sales side,
+  *Reach out* finds customers to contact (stopped ordering, due to reorder, quotes
+  not turned into orders, products they buy back in stock, chosen groups, slow
+  stock to clear) and skips those with overdue bills or in excluded groups;
+  *After-sales follow-up* asks for feedback a set time after delivery, with quiet
+  hours and per-customer caps. **Try it** previews
+  who would be picked or runs a step now; **Activity** shows what happened, the
+  supplier quotes per request and customer feedback.
+- **Follow-up calls by PAI**: a follow-up can be a call with instructions, a time
+  and who does it. Choose *PAI · sales AI agent* and PAI rings the customer or
+  supplier at exactly that time, follows the instructions (it also knows prices,
+  stock and their orders, and can take an order), retries if nobody answers, and
+  writes the outcome back on the follow-up.
+- **Batches and expiry**: switch on *Track batches* on a product (with a shelf life
+  to fill expiry from the date made). Every stock-in and goods receipt then needs a
+  batch number; stock goes out earliest expiry first. The product page lists stock
+  per batch with expired and expiring-soon marks.
+- **Customer page** (the customer's private link): order from the catalogue, their
+  orders and deliveries, invoices as PDF, account balance and statement, and
+  reorder in one tap. Works on a phone.
 - **Payment reminders** (Finance → Reminders): friendly, firm and final levels
   by days late, message ready for WhatsApp, each reminder logged with a
   follow-up to check payment.

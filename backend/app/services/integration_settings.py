@@ -130,6 +130,10 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "invoice_template": "",
             # An approved text template sent when an order is placed: body
             # variables are customer name, order number, total, items.
+            # A utility template with one variable ({{1}}): carries messages we
+            # start (supplier requests, reminders, follow-ups) outside the
+            # 24-hour window.
+            "message_template": "",
             "send_order_confirmations": False,
             "order_template": "",
             "template_language": "en",

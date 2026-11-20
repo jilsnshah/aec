@@ -39,12 +39,14 @@ def open_cost_layer(
     source_id: Optional[uuid.UUID] = None,
     note: Optional[str] = None,
     warehouse_id: Optional[uuid.UUID] = None,
+    batch_id: Optional[uuid.UUID] = None,
 ) -> StockCostLayer:
     """Record a batch of stock bought at one price, in a warehouse (the default one if none)."""
     from . import warehouses
 
     layer = StockCostLayer(
         warehouse_id=warehouse_id or warehouses.default_id(session),
+        batch_id=batch_id,
         product_id=product.id,
         source=source,
         source_id=source_id,
@@ -70,14 +72,9 @@ def _open_layers(session: Session, product_id: uuid.UUID, warehouse_id: Optional
         stmt = stmt.where(StockCostLayer.warehouse_id == warehouse_id)
     else:
         stmt = stmt.where((StockCostLayer.warehouse_id.is_(None)) | (StockCostLayer.warehouse_id != transit_id(session)))
-    return list(
-        session.execute(
-            stmt
-            .order_by(StockCostLayer.created_at.asc(), StockCostLayer.id.asc())
-        )
-        .scalars()
-        .all()
-    )
+    from .batches import fefo
+
+    return list(session.execute(fefo(stmt, product_id, session)).scalars().all())
 
 
 def consume_cost_layers(

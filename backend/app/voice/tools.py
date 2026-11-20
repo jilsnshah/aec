@@ -99,6 +99,15 @@ DECLARATIONS = [
 ]
 
 
+FINISH_TASK = types.FunctionDeclaration(
+    name="finish_followup",
+    description="At the end of a follow-up call: record what came of it. outcome: done (the instructions were carried out), call_back (they asked to be called later) or needs_person (a person must take over).",
+    parameters=types.Schema(type="OBJECT", properties={
+        "outcome": types.Schema(type="STRING", enum=["done", "call_back", "needs_person"]),
+        "summary": types.Schema(type="STRING", description="Two or three sentences: what was said, agreed and promised.")}, required=["outcome", "summary"]),
+)
+
+
 BOOKING_DECLARATIONS = [
     types.FunctionDeclaration(
         name="confirm_booking",
@@ -129,6 +138,8 @@ class CallTools:
         self.actions: List[Dict[str, Any]] = []
         self.hangup = False
         self.booking_id: Optional[uuid.UUID] = None
+        self.task_id: Optional[uuid.UUID] = None
+        self.task_finished = False
 
     def identify(self) -> str:
         session = self.factory()
@@ -317,6 +328,24 @@ class CallTools:
 
     def _decline_booking(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         return self._settle(session, "no", args)
+
+    def task_brief(self) -> str:
+        from ..services import triggers
+
+        session = self.factory()
+        try:
+            return triggers.call_brief(session, self.task_id) if self.task_id else ""
+        finally:
+            session.close()
+
+    def _finish_followup(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import triggers
+
+        if not self.task_id:
+            return {"error": "No follow-up on this call."}
+        triggers.finish_call(session, self.task_id, str(args.get("outcome") or "needs_person"), str(args.get("summary") or ""))
+        self.task_finished = True
+        return {"ok": True, "say": "Thank them and say goodbye, then end the call."}
 
     def _end_call(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         self.hangup = True

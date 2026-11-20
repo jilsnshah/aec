@@ -86,6 +86,8 @@ class ProductCreate(BaseModel):
     sales_unit: Optional[str] = Field(default=None, max_length=32, description="Unit sales lines start in; empty for the base unit.")
     purchase_unit: Optional[str] = Field(default=None, max_length=32, description="Unit purchase lines start in; empty for the base unit.")
     whole_units: Optional[bool] = Field(default=None, description="Only whole base units (no 2.5 bags).")
+    track_batches: Optional[bool] = Field(default=None, description="Record batch and expiry on receipts; pick earliest expiry first.")
+    shelf_life_days: Optional[int] = Field(default=None, ge=0, le=3650, description="Days from manufacture to expiry.")
 
 
 class ProductUpdate(BaseModel):
@@ -109,6 +111,8 @@ class ProductUpdate(BaseModel):
     sales_unit: Optional[str] = Field(default=None, max_length=32, description="Unit sales lines start in; empty for the base unit.")
     purchase_unit: Optional[str] = Field(default=None, max_length=32, description="Unit purchase lines start in; empty for the base unit.")
     whole_units: Optional[bool] = Field(default=None, description="Only whole base units (no 2.5 bags).")
+    track_batches: Optional[bool] = Field(default=None, description="Record batch and expiry on receipts; pick earliest expiry first.")
+    shelf_life_days: Optional[int] = Field(default=None, ge=0, le=3650, description="Days from manufacture to expiry.")
 
 
 class ProductOut(ORMModel):
@@ -134,6 +138,8 @@ class ProductOut(ORMModel):
     sales_unit: Optional[str] = None
     purchase_unit: Optional[str] = None
     whole_units: bool = False
+    track_batches: bool = False
+    shelf_life_days: Optional[int] = None
     #: Every unit it is counted in, base first: [{name, factor, base, for_sales, for_purchase}].
     units: List[Dict[str, Any]] = Field(default_factory=list)
     physical_stock: Decimal
@@ -559,6 +565,9 @@ class AllocationInput(BaseModel):
 
 class StockReceiptCreate(BaseModel):
     product_id: uuid.UUID
+    batch_number: Optional[str] = Field(default=None, max_length=64, description="Required for products that track batches.")
+    manufactured_on: Optional[date_type] = None
+    expires_on: Optional[date_type] = None
     warehouse_id: Optional[uuid.UUID] = Field(default=None, description="Where it is put; the default warehouse if omitted.")
     quantity: Decimal = Field(gt=0)
     unit_cost: Decimal = Field(
@@ -911,6 +920,9 @@ class ReceiptAllocationInput(BaseModel):
 
 class GoodsReceiptLineInput(BaseModel):
     purchase_order_item_id: uuid.UUID
+    batch_number: Optional[str] = Field(default=None, max_length=64, description="Required for products that track batches.")
+    manufactured_on: Optional[date_type] = None
+    expires_on: Optional[date_type] = Field(default=None, description="Filled from the product's shelf life when empty.")
     quantity: Decimal = Field(ge=0)
     #: Defaults to the price agreed on the purchase order.
     unit_cost: Optional[Decimal] = Field(default=None, ge=0)
@@ -1440,6 +1452,12 @@ class TaskCreate(BaseModel):
     sales_order_id: Optional[uuid.UUID] = None
     supplier_id: Optional[uuid.UUID] = None
     purchase_order_id: Optional[uuid.UUID] = None
+    transporter_id: Optional[uuid.UUID] = None
+    kind: Optional[str] = Field(default=None, description="todo or call.")
+    doer: Optional[str] = Field(default=None, description="person, or pai: the sales AI agent rings at due_at and follows the instructions.")
+    due_at: Optional[datetime] = Field(default=None, description="Exact date and time to do it (a call by PAI is placed then).")
+    instructions: Optional[str] = Field(default=None, description="What to say or find out on the call.")
+    call_phone: Optional[str] = Field(default=None, description="Number to ring; empty uses the linked party's.")
 
 
 class TaskUpdate(BaseModel):
@@ -1454,6 +1472,12 @@ class TaskUpdate(BaseModel):
     sales_order_id: Optional[uuid.UUID] = None
     supplier_id: Optional[uuid.UUID] = None
     purchase_order_id: Optional[uuid.UUID] = None
+    transporter_id: Optional[uuid.UUID] = None
+    kind: Optional[str] = None
+    doer: Optional[str] = None
+    due_at: Optional[datetime] = None
+    instructions: Optional[str] = None
+    call_phone: Optional[str] = None
 
 
 class TaskOut(BaseModel):
@@ -1479,6 +1503,16 @@ class TaskOut(BaseModel):
     po_number: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
+    kind: str = "todo"
+    doer: str = "person"
+    due_at: Optional[datetime] = None
+    instructions: Optional[str] = None
+    call_phone: Optional[str] = None
+    transporter_id: Optional[uuid.UUID] = None
+    ai_status: Optional[str] = None
+    ai_result: Optional[str] = None
+    call_attempts: int = 0
+    phone_call_id: Optional[uuid.UUID] = None
 
 
 class TaskCounts(BaseModel):
