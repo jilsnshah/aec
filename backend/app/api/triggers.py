@@ -17,7 +17,13 @@ from ..services import triggers
 
 router = APIRouter(prefix="/api/automation", tags=["automation"])
 
-RUN = {"purchase": triggers.run_purchase, "outreach": triggers.run_outreach, "after_sales": triggers.run_after_sales,
+def _collections(session, force=True):
+    from ..services import customer_agents
+
+    return customer_agents.run_collections(session, force=force)
+
+
+RUN = {"purchase": triggers.run_purchase, "outreach": triggers.run_outreach, "after_sales": triggers.run_after_sales, "collections": _collections,
        "chase": lambda session, force=True: {"sent": triggers.tick_chase(session)}, "rfqs": lambda session, force=True: {"decided": triggers.tick_rfqs(session)}}
 
 

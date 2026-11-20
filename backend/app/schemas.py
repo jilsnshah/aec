@@ -1505,6 +1505,7 @@ class TaskOut(BaseModel):
     completed_at: Optional[datetime] = None
     kind: str = "todo"
     doer: str = "person"
+    agent: Optional[str] = None
     due_at: Optional[datetime] = None
     instructions: Optional[str] = None
     call_phone: Optional[str] = None

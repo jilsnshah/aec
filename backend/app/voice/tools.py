@@ -186,6 +186,33 @@ SUPPLIER_ORDER_DECLARATIONS = [
 ]
 
 
+#: The Collections agent on a payment call.
+COLLECTIONS_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="record_payment_promise",
+        description="The customer said when they will pay (and how much). Record it; the team checks again on that date.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "date": types.Schema(type="STRING", description="YYYY-MM-DD"), "amount": types.Schema(type="NUMBER"), "note": types.Schema(type="STRING")}),
+    ),
+    types.FunctionDeclaration(
+        name="record_dispute",
+        description="The customer disagrees with a bill (wrong amount, goods short or damaged, already paid). Record why; accounts will call them.",
+        parameters=types.Schema(type="OBJECT", properties={"reason": types.Schema(type="STRING")}, required=["reason"]),
+    ),
+]
+
+#: The Customer care agent on an after-sales call.
+CARE_DECLARATIONS = [
+    types.FunctionDeclaration(
+        name="record_feedback",
+        description="Record how the delivery went: a rating 1-5 if given, their words, and whether anything was wrong.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "rating": types.Schema(type="INTEGER"), "comment": types.Schema(type="STRING"), "complaint": types.Schema(type="BOOLEAN")},
+            required=["comment", "complaint"]),
+    ),
+]
+
+
 class CallTools:
     def __init__(self, factory: Callable[[], Session], caller_number: Optional[str]):
         self.factory = factory
@@ -198,6 +225,7 @@ class CallTools:
         self.booking_id: Optional[uuid.UUID] = None
         self.task_id: Optional[uuid.UUID] = None
         self.task_finished = False
+        self.task_agent = "followup"
         self.quote_id: Optional[uuid.UUID] = None
         self.po_id: Optional[uuid.UUID] = None
         self.call_record_id: Optional[uuid.UUID] = None
@@ -391,13 +419,31 @@ class CallTools:
         return self._settle(session, "no", args)
 
     def task_brief(self) -> str:
+        from ..models import Task
         from ..services import triggers
 
         session = self.factory()
         try:
+            task = session.get(Task, self.task_id) if self.task_id else None
+            self.task_agent = (task.agent if task is not None else None) or "followup"
             return triggers.call_brief(session, self.task_id) if self.task_id else ""
         finally:
             session.close()
+
+    def _record_payment_promise(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import customer_agents
+
+        return customer_agents.record_payment_promise(session, self.task_id, args) if self.task_id else {"error": "No call task."}
+
+    def _record_dispute(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import customer_agents
+
+        return customer_agents.record_dispute(session, self.task_id, str(args.get("reason") or "")) if self.task_id else {"error": "No call task."}
+
+    def _record_feedback(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
+        from ..services import customer_agents
+
+        return customer_agents.record_feedback(session, self.task_id, args) if self.task_id else {"error": "No call task."}
 
     def _finish_followup(self, session: Session, args: Dict[str, Any]) -> Dict[str, Any]:
         from ..services import triggers

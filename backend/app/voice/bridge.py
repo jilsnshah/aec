@@ -25,7 +25,8 @@ from ..config import get_settings
 from ..database import SessionLocal
 from ..models import PhoneCall
 from ..services import integration_settings as settings_service
-from .tools import BOOKING_DECLARATIONS, DECLARATIONS, FINISH_TASK, SUPPLIER_ORDER_DECLARATIONS, SUPPLIER_QUOTE_DECLARATIONS, CallTools
+from .tools import (BOOKING_DECLARATIONS, CARE_DECLARATIONS, COLLECTIONS_DECLARATIONS, DECLARATIONS, FINISH_TASK, SUPPLIER_ORDER_DECLARATIONS,
+                    SUPPLIER_QUOTE_DECLARATIONS, CallTools)
 
 logger = logging.getLogger(__name__)
 
@@ -110,14 +111,26 @@ MODE_AGENT = {"answer": "sales", "pitch": "outreach", "task": "followup", "book"
               "supplier_quote": "purchasing", "supplier_order": "purchasing"}
 
 
-def _profile(mode: str) -> Dict[str, Any]:
+def _profile(mode: str, agent: Optional[str] = None) -> Dict[str, Any]:
     from ..services import agents
 
     session = SessionLocal()
     try:
-        return agents.profile(session, MODE_AGENT.get(mode, "sales"))
+        return agents.profile(session, agent or MODE_AGENT.get(mode, "sales"))
     finally:
         session.close()
+
+
+#: What each calling agent adds on a follow-up call it makes.
+AGENT_TASK = {
+    "collections": """
+
+YOU ARE THE COLLECTIONS AGENT on this call: a polite accounts person, never rude or threatening. Confirm you are speaking to the right person, state the overdue amount and invoices, and ask when it will be paid. If they promise a date, call record_payment_promise. If they say it was paid already or the bill is wrong, call record_dispute. Do not discuss new orders or discounts on this call.""",
+    "care": """
+
+YOU ARE THE CUSTOMER CARE AGENT on this call: warm and brief. Ask how the delivery went and listen. Call record_feedback with what they said (complaint true if anything was wrong). Apologise sincerely for any problem; never promise a refund or replacement yourself.""",
+}
+AGENT_TOOLS = {"collections": COLLECTIONS_DECLARATIONS, "care": CARE_DECLARATIONS}
 
 
 def purchasing_instructions(seller: str, name: str, extra: str, brief: str, mode: str, today: str) -> str:
@@ -221,7 +234,9 @@ class Call:
             self.tools.quote_id = _uuid.UUID(self.quote)
         if self.mode == "supplier_order" and getattr(self, "po", None):
             self.tools.po_id = _uuid.UUID(self.po)
-        profile = await asyncio.to_thread(_profile, self.mode)
+        task_brief = await asyncio.to_thread(self.tools.task_brief) if self.mode == "task" else ""
+        task_agent = self.tools.task_agent if self.mode == "task" else None
+        profile = await asyncio.to_thread(_profile, self.mode, task_agent)
         seller = await asyncio.to_thread(_seller)
         own = ("\nExtra instructions from the owner: " + profile["instructions"]) if profile["instructions"] else ""
         self._open_record()
@@ -233,11 +248,12 @@ class Call:
         else:
             extra = PITCH if self.mode == "pitch" else ""
             if self.mode == "task":
-                extra = FOLLOW_UP.format(brief=await asyncio.to_thread(self.tools.task_brief))
+                extra = FOLLOW_UP.format(brief=task_brief) + AGENT_TASK.get(task_agent or "", "")
             if self.mode == "book":
                 extra = BOOK.format(request=await asyncio.to_thread(self.tools.booking_brief))
             system = _instructions(seller, brief, profile["name"], await asyncio.to_thread(_knowledge)) + extra + own
-            declarations = BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + ([FINISH_TASK] if self.mode == "task" else [])
+            declarations = BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + (
+                [FINISH_TASK] + AGENT_TOOLS.get(task_agent or "", []) if self.mode == "task" else [])
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             system_instruction=system,

@@ -1383,6 +1383,8 @@ class Task(Base, TimestampMixin):
     #: Who does it: a person (assignee), or PAI, the sales AI agent, who rings
     #: at ``due_at`` and follows ``instructions``.
     doer: Mapped[str] = mapped_column(String(8), nullable=False, default="person", server_default="person")
+    #: Which AI agent makes the call when doer is "pai": followup (default), collections or care.
+    agent: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     #: The number to ring; empty uses the linked customer's, supplier's or transporter's.

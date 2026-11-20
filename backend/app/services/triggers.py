@@ -361,12 +361,18 @@ def _lines_for(session: Session, rfq: SupplierQuoteRequest, supplier: Supplier) 
 
 
 def request_text(session: Session, rfq: SupplierQuoteRequest, supplier: Supplier) -> str:
+    from . import agent_text
+
     items = []
-    for line in _lines_for(session, rfq, supplier):
+    for n, line in enumerate(_lines_for(session, rfq, supplier) or list(rfq.lines), start=1):
         qty, unit, _ = _in_unit(session, line.product, line.quantity)
-        items.append("{} {} {}".format(_qty(qty), unit, line.product.name))
-    return ("Namaste {}, {} here. Request {}: please send your best rate (per unit, before GST) and how many days to deliver for: {}. "
-            "You can reply here, e.g. \"340, 2 days\".".format(supplier.contact_person or supplier.name, _business(session), rfq.number, "; ".join(items)))
+        items.append("{}. {} {} {}".format(n, _qty(qty), unit, line.product.name))
+    fallback = ("Namaste {}, {} here. Request {}: please send your best rate (per unit, before GST) and how many days to deliver for: {}. "
+                "You can reply here, e.g. \"340, 2 days\".".format(supplier.contact_person or supplier.name, _business(session), rfq.number, "; ".join(items)))
+    return agent_text.write(session, "purchasing", "ask a supplier for their best rate per unit (before GST), GST, freight and delivery days for these items",
+                            {"supplier": supplier.contact_person or supplier.name, "request_number": rfq.number, "items": items,
+                             "needed_by": rfq.needed_by.astimezone(_zone()).strftime("%d %b") if rfq.needed_by else None},
+                            fallback, must_keep=[rfq.number])
 
 
 def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
@@ -464,6 +470,65 @@ def parse_supplier_reply(text: str, products: List[Product]) -> Dict[str, Any]:
     return {"prices": prices, "days": days}
 
 
+def _ai_supplier_reply(session: Session, quote: SupplierQuote, text: str) -> Optional[str]:
+    """The purchasing agent reads the reply with AI: records the quote, asks
+    back for what is missing, orders straight away when allowed. None when
+    AI is not available (the word-matching reader is used instead)."""
+    from . import agent_text, supplier_calls
+
+    rfq = quote.request
+    supplier = quote.supplier
+    items = []
+    for n, line in enumerate(_lines_for(session, rfq, supplier) or list(rfq.lines), start=1):
+        qty, unit, factor = _in_unit(session, line.product, line.quantity)
+        last = _last_paid(session, line.product_id)
+        items.append({"item": n, "product": line.product.name, "quantity": float(qty), "unit": unit,
+                      "last_price": float(last * factor) if last else None})
+    known = {"delivery_days": quote.delivery_days, "gst_included": quote.gst_included, "freight": float(quote.freight) if quote.freight is not None else None,
+             "prices": [{"product": ql.product.name, "price_per_base_unit": float(ql.price)} for ql in quote.lines]} if quote.status == "replied" else {}
+    read = agent_text.read_supplier_reply(session, items, text, known)
+    if read is None:
+        return None
+    data = automation.step(session, "purchase.ask_supplier")
+    quote.reply = ((quote.reply + "\n") if quote.reply else "") + text
+    session.commit()
+    if read["kind"] == "decline":
+        supplier_calls.cannot_quote(session, quote.id, text[:300])
+        return "rfq_reply"
+    if read["lines"]:
+        result = supplier_calls.record_quote(session, quote.id, {**read, "notes": "; ".join(read.get("missing") or [])}, channel="whatsapp")
+        if result.get("can_order"):
+            supplier_calls.order_now(session, quote.id, {}, channel="whatsapp")
+            return "rfq_reply"
+    elif quote.status == "replied":
+        # Only new terms for a quote we have: keep the prices, update the rest.
+        if read.get("delivery_days") is not None:
+            quote.delivery_days = int(read["delivery_days"])
+        if read.get("gst_included") is not None:
+            quote.gst_included = bool(read["gst_included"])
+        if read.get("freight") is not None:
+            quote.freight = Decimal(str(read["freight"]))
+        session.commit()
+    ask_back = str(read.get("ask_back") or "").strip()
+    waiting = False
+    if ask_back and (read["kind"] in ("question", "other") or read.get("missing")):
+        status, _ = _send(session, data, supplier.phone, supplier.email, ask_back)
+        waiting = status in ("sent", "held")
+        event(session, "purchase.read_reply", "asked_back", status, "Asked {}: {}".format(supplier.name, ask_back[:200]),
+              party=("supplier", supplier.id), subject=("rfq", rfq.id))
+    elif not read["lines"] and quote.status != "replied":
+        event(session, "purchase.read_reply", "unclear", "held", "{} replied on {} but no price was given; a person should read it.".format(supplier.name, rfq.number),
+              party=("supplier", supplier.id), subject=("rfq", rfq.id), detail={"reply": text[:500]})
+    session.commit()
+    compare_cfg = automation.step(session, "purchase.compare_quotes")["config"]
+    session.refresh(rfq)
+    if rfq.status == "open" and not waiting:  # when we asked back, wait for the answer (or the deadline)
+        open_quotes = [q for q in rfq.quotes if q.status in ("asked", "to_ask", "calling")]
+        if not open_quotes or (compare_cfg.get("decide_when") == "first_good" and quote.status == "replied"):
+            decide(session, rfq.id)
+    return "rfq_reply"
+
+
 def on_supplier_message(session: Session, supplier: Supplier, text: str) -> Optional[str]:
     """A message from a supplier: the answer to a price request, or to a chase."""
     quote = session.execute(
@@ -471,6 +536,20 @@ def on_supplier_message(session: Session, supplier: Supplier, text: str) -> Opti
         .where(SupplierQuote.supplier_id == supplier.id, SupplierQuote.status == "asked", SupplierQuoteRequest.status == "open")
         .order_by(SupplierQuote.asked_at.desc())
     ).scalars().first()
+    if quote is None:
+        # A later message about a quote already given (e.g. "GST extra"): update its terms.
+        quote = session.execute(
+            select(SupplierQuote).join(SupplierQuoteRequest, SupplierQuote.request_id == SupplierQuoteRequest.id)
+            .where(SupplierQuote.supplier_id == supplier.id, SupplierQuote.status == "replied", SupplierQuoteRequest.status == "open",
+                   SupplierQuote.replied_at >= _now() - timedelta(days=2))
+            .order_by(SupplierQuote.replied_at.desc())
+        ).scalars().first()
+    if quote is not None:
+        handled = _ai_supplier_reply(session, quote, text)
+        if handled:
+            return handled
+    if quote is not None and quote.status == "replied":
+        return "rfq_reply"
     if quote is not None:
         rfq = quote.request
         lines = _lines_for(session, rfq, supplier) or list(rfq.lines)
@@ -761,7 +840,23 @@ def on_chase_reply(session: Session, supplier: Supplier, text: str) -> Optional[
     if asked is None:
         return None
     po = session.get(PurchaseOrder, asked.subject_id)
-    found = parse_date_reply(text, _now().astimezone(_zone()).date())
+    from . import agent_text
+
+    today = _now().astimezone(_zone()).date()
+    read = agent_text.read_date_reply(session, text, today.strftime("%A %d %B %Y"))
+    found = None
+    if read is not None:
+        try:
+            found = date.fromisoformat(str(read.get("date"))) if read.get("date") not in (None, "", "null") else None
+        except ValueError:
+            found = None
+        if read.get("problem") and po is not None:
+            from . import tasks
+
+            tasks.create_task(session, "{}: {} says {}".format(po.po_number, supplier.name, str(read["problem"])[:120]), notes=text[:1000],
+                              priority="HIGH", source="automation", supplier_id=supplier.id, purchase_order_id=po.id)
+    else:
+        found = parse_date_reply(text, today)
     asked.status = "replied"
     asked.detail = dict(asked.detail or {}, reply=text[:500])
     if found and cfg.get("update_date") and po is not None:
@@ -862,8 +957,12 @@ def outreach_text(session: Session, customer: Customer, why: List[str], cfg: Dic
     quote = next((w.split(":", 1)[1] for w in why if w.startswith("quote_followup:")), None)
     name = customer.name.split()[0] if customer.name else ""
     if quote:
-        return "Namaste {}, {} here. Did you have a chance to look at our quotation {}? Prices are held for now and stock is available. Reply to confirm or ask anything.".format(
+        from . import agent_text
+
+        fallback = "Namaste {}, {} here. Did you have a chance to look at our quotation {}? Prices are held for now and stock is available. Reply to confirm or ask anything.".format(
             name, _business(session), quote)
+        return agent_text.write(session, "outreach", "follow up on a quotation the customer has not answered", {"customer": name, "quotation": quote},
+                                fallback, must_keep=[quote])
     if offer["pitch"] == "their_products":
         rows = session.execute(select(SalesOrderItem.product_id, func.sum(SalesOrderItem.quantity_ordered)).join(SalesOrder, SalesOrderItem.order_id == SalesOrder.id)
                                .where(SalesOrder.customer_id == customer.id).group_by(SalesOrderItem.product_id)
@@ -885,7 +984,12 @@ def outreach_text(session: Session, customer: Customer, why: List[str], cfg: Dic
                 pieces.append(p.name)
     opener = "it has been a while" if "dormant" in why else "you may be due for your next order" if "reorder_due" in why else "good news"
     stock = (" In stock now: " + ", ".join(pieces) + ".") if pieces else ""
-    return "Namaste {}, {} here -- {}.{} Reply with what you need and we will send it.".format(name, _business(session), opener, stock)
+    fallback = "Namaste {}, {} here -- {}.{} Reply with what you need and we will send it.".format(name, _business(session), opener, stock)
+    from . import agent_text
+
+    reason = {"dormant": "they have not ordered for a while", "reorder_due": "they are usually due to reorder about now"}
+    return agent_text.write(session, "outreach", "invite a customer to order again: {}".format("; ".join(reason.get(w, w) for w in why if not w.startswith("quote_followup")) or "share what is in stock"),
+                            {"customer": name, "in_stock_with_prices": pieces}, fallback)
 
 
 def run_outreach(session: Session, force: bool = False) -> Dict[str, Any]:
@@ -965,9 +1069,24 @@ def run_after_sales(session: Session, force: bool = False) -> Dict[str, Any]:
             continue
         if not customer.phone:
             continue
+        if cfg.get("how") == "call" and automation.allowed(data, "pai"):
+            from . import customer_agents
+
+            task = customer_agents.care_call(session, delivery, cfg)
+            event(session, "sales.after_sales", "call", "awaiting_reply" if task else "skipped",
+                  "Customer care agent will call {} about {}".format(customer.name, delivery.delivery_number) if task else "{}: a call is already planned".format(customer.name),
+                  party=("customer", customer.id), subject=("delivery", delivery.id), detail={"order_id": str(order.id)})
+            asked += 1 if task else 0
+            continue
+        from . import agent_text
+
         rating = " How would you rate it, 1 (poor) to 5 (excellent)?" if cfg.get("ask_rating") else ""
-        text = "Namaste {}, {} here. Your delivery {} (order {}) should have reached you. Was everything right -- quantity, quality, on time?{} Reply here if anything was wrong and we will sort it out.".format(
+        fallback = "Namaste {}, {} here. Your delivery {} (order {}) should have reached you. Was everything right -- quantity, quality, on time?{} Reply here if anything was wrong and we will sort it out.".format(
             customer.name.split()[0], _business(session), delivery.delivery_number, order.order_number, rating)
+        text = agent_text.write(session, "care", "check that a delivery arrived right (quantity, quality, on time){}".format("; ask for a rating from 1 to 5" if cfg.get("ask_rating") else ""),
+                                {"customer": customer.name.split()[0], "delivery": delivery.delivery_number, "order": order.order_number,
+                                 "items": ["{} {}".format(_qty(l.quantity), l.order_item.product.name) for l in delivery.items[:5]]},
+                                fallback, must_keep=[delivery.delivery_number])
         status, _ = _send(session, data, customer.phone, customer.email, text, customer_id=customer.id)
         event(session, "sales.after_sales", "asked", "awaiting_reply" if status == "sent" else status, text, party=("customer", customer.id),
               subject=("delivery", delivery.id), detail={"order_id": str(order.id)})
@@ -984,31 +1103,31 @@ def on_customer_message(session: Session, customer: Customer, text: str) -> Opti
     if asked is None:
         return None
     cfg = automation.step(session, "sales.after_sales")["config"]
-    low = (text or "").lower()
-    match = re.search(r"\b([1-5])\b(?:\s*/\s*5)?", low) if len(low) < 120 else None
-    rating = int(match.group(1)) if match else None
-    words = [w.strip().lower() for w in (cfg.get("complaint_words") or "").split(",") if w.strip()]
-    complaint = any(re.search(r"\b{}\b".format(re.escape(w)), low) for w in words) or (rating is not None and rating <= int(cfg.get("low_rating") or 2))
-    positive = re.search(r"\b(ok|okay|good|fine|thanks|thank you|received|all good|perfect|badhiya|sab theek|mil gaya)\b", low)
-    if rating is None and not complaint and not positive:
-        return None  # not an answer to us: let TAI handle it
+    from . import agent_text, customer_agents
+
+    read = agent_text.read_feedback(session, text)
+    if read is not None:
+        if not read.get("answer"):
+            return None  # not an answer to us: the Sales agent handles it
+        rating = read.get("rating") if isinstance(read.get("rating"), int) and 1 <= read["rating"] <= 5 else None
+        complaint = bool(read.get("complaint")) or (rating is not None and rating <= int(cfg.get("low_rating") or 2))
+    else:
+        low = (text or "").lower()
+        match = re.search(r"\b([1-5])\b(?:\s*/\s*5)?", low) if len(low) < 120 else None
+        rating = int(match.group(1)) if match else None
+        words = [w.strip().lower() for w in (cfg.get("complaint_words") or "").split(",") if w.strip()]
+        complaint = any(re.search(r"\b{}\b".format(re.escape(w)), low) for w in words) or (rating is not None and rating <= int(cfg.get("low_rating") or 2))
+        positive = re.search(r"\b(ok|okay|good|fine|thanks|thank you|received|all good|perfect|badhiya|sab theek|mil gaya)\b", low)
+        if rating is None and not complaint and not positive:
+            return None  # not an answer to us: let TAI handle it
     delivery = session.get(CustomerDelivery, asked.subject_id)
-    feedback = CustomerFeedback(customer_id=customer.id, delivery_id=asked.subject_id, sales_order_id=delivery.sales_order_id if delivery else None,
-                                rating=rating, comment=(text or "")[:2000], complaint=bool(complaint))
-    session.add(feedback)
     asked.status = "replied"
     asked.detail = dict(asked.detail or {}, rating=rating, complaint=bool(complaint))
-    session.commit()
+    customer_agents.save_feedback(session, customer, asked.subject_id, rating, text, bool(complaint),
+                                  priority="HIGH" if cfg.get("complaint_priority") == "high" else "NORMAL")
     from . import outbox
 
     if complaint:
-        from . import tasks
-
-        task = tasks.create_task(session, "Complaint from {} about {}".format(customer.name, delivery.delivery_number if delivery else "a delivery"),
-                                 notes=text, priority="HIGH" if cfg.get("complaint_priority") == "high" else "NORMAL", source="automation",
-                                 customer_id=customer.id, sales_order_id=delivery.sales_order_id if delivery else None)
-        feedback.task_id = task.id
-        session.commit()
         outbox.queue(session, "whatsapp", customer.phone, "Sorry about that. We have noted it and someone from our team will call you shortly.", hold=False, author="tai",
                      customer_id=customer.id)
     else:
@@ -1120,9 +1239,9 @@ def tick() -> int:
     session = inbound.session_factory()
     done = 0
     try:
-        from . import supplier_calls
+        from . import customer_agents, supplier_calls
 
-        for job in (run_ai_calls, run_purchase, tick_rfqs, supplier_calls.tick, tick_chase, run_outreach, run_after_sales):
+        for job in (run_ai_calls, run_purchase, tick_rfqs, supplier_calls.tick, tick_chase, run_outreach, run_after_sales, customer_agents.run_collections):
             try:
                 result = job(session)
                 done += 1 if result else 0

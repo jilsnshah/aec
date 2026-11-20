@@ -101,9 +101,10 @@ def quote_brief(session: Session, quote_id: uuid.UUID) -> str:
         if order_now else "After record_quote, tell them the team will confirm the order shortly.")
 
 
-def record_quote(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
-    """Store what the supplier quoted on the call. Returns whether the order
-    may be placed right away."""
+def record_quote(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None,
+                 channel: str = "call") -> Dict[str, Any]:
+    """Store what the supplier quoted (on a call, or read from WhatsApp by AI).
+    Returns whether the order may be placed right away."""
     quote = session.get(SupplierQuote, quote_id)
     if quote is None:
         return {"error": "No price request on this call."}
@@ -134,13 +135,14 @@ def record_quote(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], ca
     quote.gst_included = bool(args["gst_included"]) if args.get("gst_included") is not None else None
     valid = args.get("valid_days")
     quote.valid_until = (_now().date() + timedelta(days=int(valid))) if str(valid or "").strip().isdigit() else None
-    quote.status, quote.replied_at, quote.channel = "replied", _now(), "call"
+    quote.status, quote.replied_at, quote.channel = "replied", _now(), channel
     quote.phone_call_id = call_id or quote.phone_call_id
-    quote.reply = "On the call: {}{}{}{}".format(
+    quote.reply = "{}: {}{}{}{}".format("On the call" if channel == "call" else "Read by AI from " + channel,
         "; ".join(saved), ", delivery in {} days".format(quote.delivery_days) if quote.delivery_days is not None else "",
         ", freight Rs {}".format(quote.freight) if quote.freight else "", ". " + str(args.get("notes")) if args.get("notes") else "")
     session.commit()
-    triggers.event(session, "purchase.read_reply", "quote", "done", "{} quoted {} on the phone".format(quote.supplier.name, rfq.number),
+    triggers.event(session, "purchase.read_reply", "quote", "done", "{} quoted {} {}".format(
+        quote.supplier.name, rfq.number, "on the phone" if channel == "call" else "on " + channel),
                    party=("supplier", quote.supplier_id), subject=("rfq", rfq.id))
     ok, why = can_order_now(session, quote)
     return {"recorded": saved, "can_order": ok, "why_not": why,
@@ -153,7 +155,7 @@ def can_order_now(session: Session, quote: SupplierQuote) -> Tuple[bool, Optiona
     is priced within the price rule, and the PO would be approved automatically."""
     cfg = _ask_step(session)["config"]
     if not cfg.get("order_on_call"):
-        return False, "ordering on the call is off"
+        return False, "ordering straight away is off"
     rfq = quote.request
     if rfq.status != "open":
         return False, "the request is already decided"
@@ -181,7 +183,7 @@ def can_order_now(session: Session, quote: SupplierQuote) -> Tuple[bool, Optiona
     return False, "purchase orders need a person's approval"
 
 
-def order_now(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
+def order_now(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None, channel: str = "call") -> Dict[str, Any]:
     """The supplier agreed on the call: place the purchase order with this quote."""
     from . import purchasing, tally_sync
 
@@ -205,13 +207,15 @@ def order_now(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_
         expected = _now() + timedelta(days=quote.delivery_days)
     po = purchasing.create_purchase_order(
         session, quote.supplier_id, [{"product_id": line.product_id, "quantity_ordered": str(line.quantity), "unit_cost": str(prices[line.product_id])} for line in lines],
-        expected_delivery_date=expected, notes="Ordered on the phone by the purchasing agent ({}).".format(rfq.number), confirm=True)
+        expected_delivery_date=expected, notes="Ordered {} by the purchasing agent ({}).".format("on the phone" if channel == "call" else "on " + channel, rfq.number),
+        confirm=True)
     po.confirm_status, po.confirmed_at = "confirmed", _now()
-    po.confirm_note = "Agreed on the call{}.".format(". " + str(args.get("notes")) if args.get("notes") else "")
+    po.confirm_note = "Agreed {}{}.".format("on the call" if channel == "call" else "on " + channel, ". " + str(args.get("notes")) if args.get("notes") else "")
     rfq.chosen_quote_id, rfq.purchase_order_id, rfq.status = quote.id, po.id, "ordered"
     rfq.decision = "Ordered on the call from {}.".format(quote.supplier.name)
     session.commit()
-    triggers.event(session, "purchase.place_po", "placed", "done", "{} placed on the phone with {}".format(po.po_number, quote.supplier.name),
+    triggers.event(session, "purchase.place_po", "placed", "done", "{} placed {} with {}".format(
+        po.po_number, "on the phone" if channel == "call" else "on " + channel, quote.supplier.name),
                    party=("supplier", quote.supplier_id), subject=("purchase_order", po.id))
     for sync_id in tally_sync.queue_purchase_order(session, po):
         tally_sync.process(sync_id)

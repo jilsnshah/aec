@@ -38,14 +38,17 @@ function dueText(task: TaskOut) {
   return date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
+const CALLER: Record<string, string> = { followup: 'Follow-up agent', collections: 'Collections agent', care: 'Customer care agent' }
 const AI_STATUS: Record<string, string> = {
-  scheduled: 'PAI will call',
-  calling: 'PAI is calling',
-  done: 'PAI called · done',
+  scheduled: '{who} will call',
+  calling: '{who} is calling',
+  done: '{who} called · done',
   no_answer: 'No answer',
-  failed: 'PAI could not call',
-  needs_person: 'PAI called · needs you',
+  failed: '{who} could not call',
+  needs_person: '{who} called · needs you',
 }
+const aiStatus = (status: string | null | undefined, agent: string | null | undefined) =>
+  (AI_STATUS[status ?? 'scheduled'] ?? status ?? '').replace('{who}', CALLER[agent ?? 'followup'] ?? 'AI')
 
 /** Follow-ups: calls to make, quotes to chase, suppliers to push. */
 export function Tasks() {
@@ -121,7 +124,7 @@ export function Tasks() {
                   <span className="truncate">{task.title}</span>
                   {task.doer === 'pai' || task.ai_status ? (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue/20 px-2 py-px text-[10.5px] font-semibold no-underline">
-                      <Bot size={10} /> {AI_STATUS[task.ai_status ?? 'scheduled'] ?? task.ai_status}
+                      <Bot size={10} /> {aiStatus(task.ai_status, (task as { agent?: string | null }).agent)}
                     </span>
                   ) : null}
                 </div>

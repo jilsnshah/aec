@@ -34,13 +34,13 @@ AGENTS: Dict[str, Dict[str, Any]] = {
     },
     "care": {
         "label": "Customer care agent", "default_name": "Asha",
-        "job": "Order confirmations and after-sales check-ins: asks how the delivery went, records feedback, raises complaints for a person.",
-        "steps": ["sales.order_confirmation", "sales.after_sales"], "mediums": ["text"],
+        "job": "After-sales check-ins by WhatsApp or a call: asks how the delivery went, records a rating and feedback, raises complaints for a person.",
+        "steps": ["sales.order_confirmation", "sales.after_sales"], "mediums": ["text", "phone"],
     },
     "collections": {
         "label": "Collections agent", "default_name": "Asha",
-        "job": "Reminds customers of overdue bills: friendly, then firm, then final; logs each reminder and a follow-up to check payment.",
-        "steps": ["sales.payment_reminders"], "mediums": ["text"],
+        "job": "Reminds customers of overdue bills (friendly, then firm, then final) by WhatsApp or a call; records when they promise to pay or dispute a bill, and checks again on the promised date.",
+        "steps": ["sales.payment_reminders"], "mediums": ["text", "phone"],
     },
     "purchasing": {
         "label": "Purchasing agent", "default_name": "Ravi",

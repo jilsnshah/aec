@@ -721,6 +721,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/automation/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agents List
+         * @description The AI agents, the steps each one runs and how it works (text, phone).
+         */
+        get: operations["agents_list_api_automation_agents_get"];
+        /**
+         * Agents Save
+         * @description Set each agent's name, voice and extra instructions.
+         */
+        put: operations["agents_save_api_automation_agents_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/automation/library": {
         parameters: {
             query?: never;
@@ -9573,6 +9597,8 @@ export interface components {
              * @default person
              */
             doer: string;
+            /** Agent */
+            agent?: string | null;
             /** Due At */
             due_at?: string | null;
             /** Instructions */
@@ -11339,6 +11365,61 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agents_list_api_automation_agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    agents_save_api_automation_agents_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {

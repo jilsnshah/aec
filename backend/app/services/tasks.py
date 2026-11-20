@@ -49,6 +49,10 @@ def _call_fields(session: Session, task: Task, data: Dict[str, Any]) -> None:
     for key in ("instructions", "call_phone"):
         if key in data:
             setattr(task, key, (data[key] or "").strip() or None)
+    if data.get("agent"):
+        if data["agent"] not in ("followup", "collections", "care"):
+            raise ValidationError("Unknown calling agent.")
+        task.agent = data["agent"]
     if data.get("kind"):
         if data["kind"] not in ("todo", "call"):
             raise ValidationError("A follow-up is a to-do or a call.")
@@ -204,9 +208,11 @@ def create_task(
     due_at: Any = None,
     instructions: Optional[str] = None,
     call_phone: Optional[str] = None,
+    agent: Optional[str] = None,
     **links: Optional[uuid.UUID],
 ) -> Task:
-    call = {k: v for k, v in (("kind", kind), ("doer", doer), ("due_at", due_at), ("instructions", instructions), ("call_phone", call_phone)) if v not in (None, "")}
+    call = {k: v for k, v in (("kind", kind), ("doer", doer), ("due_at", due_at), ("instructions", instructions), ("call_phone", call_phone), ("agent", agent))
+            if v not in (None, "")}
     title = (title or "").strip()
     if not title:
         raise ValidationError("A follow-up needs a title.")
@@ -288,6 +294,7 @@ def to_view(task: Task) -> Dict[str, Any]:
         "completed_at": task.completed_at,
         "kind": task.kind,
         "doer": task.doer,
+        "agent": task.agent or ("followup" if task.doer == "pai" else None),
         "due_at": task.due_at,
         "instructions": task.instructions,
         "call_phone": task.call_phone,
