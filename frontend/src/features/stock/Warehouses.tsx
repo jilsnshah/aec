@@ -469,6 +469,7 @@ function TransferView({ id, onEdit }: { id: string; onEdit: (t: Transfer) => voi
             </table>
           </div>
         </Section>
+        {t.status !== 'cancelled' ? <TransferEway transfer={t} /> : null}
         {t.costs.length ? (
           <Section title="Costs of moving the goods">
             <div className="card divide-y divide-white/6">
@@ -903,5 +904,42 @@ function WarehouseSheet({ open, editing, onClose, onSaved }: { open: boolean; ed
         </label>
       </div>
     </Sheet>
+  )
+}
+
+/** E-way bill for a transfer: needed above Rs 50,000 even between our own godowns. */
+function TransferEway({ transfer }: { transfer: Transfer }) {
+  const [value, setValue] = useState(transfer.eway_bill_number ?? '')
+  const save = useAction(() => warehouses.updateTransfer({ id: transfer.id, eway_bill_number: value || null }), { success: 'E-way bill saved', quiet: true })
+  const needed = transfer.goods_value > 50000 && !transfer.eway_bill_number
+  return (
+    <div className={cn('card flex flex-wrap items-center gap-3 p-4', needed && 'ring-1 ring-warn/40')}>
+      <Truck size={15} />
+      <div className="min-w-[200px] flex-1">
+        <div className="text-[13px] font-semibold">E-way bill</div>
+        <div className="text-[11.5px] text-fg-3">
+          {needed
+            ? 'Goods over ₹50,000 on the road need one, also between your own godowns. Generate it in Tally or enter it here.'
+            : transfer.eway_bill_number
+              ? 'Recorded for this transfer.'
+              : 'Not needed below ₹50,000 (some states set a higher limit).'}
+        </div>
+        {save.error ? <div className="mt-1 text-[12px] text-bad">{errorText(save.error)}</div> : null}
+      </div>
+      <input
+        className="field field-sm w-[160px]"
+        inputMode="numeric"
+        placeholder="12-digit number"
+        aria-label="E-way bill number"
+        value={value}
+        onChange={(e) => {
+          const next = e.target.value
+          setValue(next)
+        }}
+      />
+      <Button small busy={save.isPending} disabled={value === (transfer.eway_bill_number ?? '')} onClick={() => save.mutate(undefined)}>
+        Save
+      </Button>
+    </div>
   )
 }

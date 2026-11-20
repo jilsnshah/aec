@@ -52,6 +52,7 @@ class TransferIn(BaseModel):
     transporter: Optional[str] = Field(default=None, max_length=120)
     transporter_id: Optional[uuid.UUID] = Field(default=None, description="The transporter carrying it.")
     lr_number: Optional[str] = Field(default=None, max_length=64, description="Lorry receipt number.")
+    eway_bill_number: Optional[str] = Field(default=None, description="12-digit e-way bill number (above Rs 50,000 also for own godowns).")
     notes: Optional[str] = None
     dispatch: bool = Field(default=False, description="Create and send it straight away.")
 

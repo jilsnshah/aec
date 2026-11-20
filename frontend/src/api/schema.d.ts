@@ -1566,6 +1566,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/deliveries/{delivery_id}/eway-bill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Eway Bill
+         * @description Record a delivery's e-way bill when it was made outside Tally.
+         */
+        put: operations["set_eway_bill_api_deliveries__delivery_id__eway_bill_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/deliveries": {
         parameters: {
             query?: never;
@@ -1797,6 +1817,47 @@ export interface paths {
         get: operations["whatsapp_template_api_integrations_whatsapp_template_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/orders/{order_id}/tally-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Order Tally Documents
+         * @description An order's vouchers in Tally (order, invoice, per-delivery invoices) with
+         *     the e-invoice (IRN) and e-way bill Tally generated for them.
+         */
+        get: operations["order_tally_documents_api_integrations_orders__order_id__tally_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/tally/statutory/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Statutory
+         * @description Look in Tally now for e-invoices (IRN, QR) and e-way bills generated for our vouchers.
+         */
+        post: operations["refresh_statutory_api_integrations_tally_statutory_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4498,6 +4559,21 @@ export interface components {
             total_quantity: string;
             /** Lines */
             lines?: components["schemas"]["DeliveryRowLine"][];
+            /**
+             * Value
+             * @default 0
+             */
+            value: string;
+            /** Vehicle Number */
+            vehicle_number?: string | null;
+            /** Lr Number */
+            lr_number?: string | null;
+            /** Transporter Name */
+            transporter_name?: string | null;
+            /** Eway Bill Number */
+            eway_bill_number?: string | null;
+            /** Eway Bill Valid Until */
+            eway_bill_valid_until?: string | null;
         };
         /** DeliveryRowLine */
         DeliveryRowLine: {
@@ -4748,6 +4824,16 @@ export interface components {
              * @description The customer's delivery site.
              */
             delivery_address_id?: string | null;
+        };
+        /** EwayIn */
+        EwayIn: {
+            /**
+             * Eway Bill Number
+             * @description 12-digit e-way bill number; empty clears it.
+             */
+            eway_bill_number?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
         };
         /** FlowIn */
         FlowIn: {
@@ -7816,6 +7902,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Irn */
+            irn?: string | null;
+            /** Irn Ack No */
+            irn_ack_no?: string | null;
+            /** Eway Bill No */
+            eway_bill_no?: string | null;
         };
         /** TallyTestOut */
         TallyTestOut: {
@@ -8027,6 +8119,11 @@ export interface components {
              * @description Lorry receipt number.
              */
             lr_number?: string | null;
+            /**
+             * Eway Bill Number
+             * @description 12-digit e-way bill number (above Rs 50,000 also for own godowns).
+             */
+            eway_bill_number?: string | null;
             /** Notes */
             notes?: string | null;
             /**
@@ -11505,6 +11602,41 @@ export interface operations {
             };
         };
     };
+    set_eway_bill_api_deliveries__delivery_id__eway_bill_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EwayIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_deliveries_api_deliveries_get: {
         parameters: {
             query?: {
@@ -11848,6 +11980,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateStatusOut"];
+                };
+            };
+        };
+    };
+    order_tally_documents_api_integrations_orders__order_id__tally_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_statutory_api_integrations_tally_statutory_refresh_post: {
+        parameters: {
+            query?: {
+                sync_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

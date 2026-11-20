@@ -82,6 +82,7 @@ export interface Transfer {
   transporter: string | null
   transporter_id: string | null
   lr_number: string | null
+  eway_bill_number: string | null
   notes: string | null
   goods_value: number
   extra_cost: number
@@ -107,6 +108,7 @@ export interface TransferIn {
   transporter?: string | null
   transporter_id?: string | null
   lr_number?: string | null
+  eway_bill_number?: string | null
   notes?: string | null
   dispatch?: boolean
 }

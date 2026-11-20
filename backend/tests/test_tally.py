@@ -28,10 +28,14 @@ class FakeTally:
         self.vouchers: List[ET.Element] = []
         self.refuse: Optional[str] = None
         self.auth: List[Optional[str]] = []
+        self.items: Dict[str, ET.Element] = {}
+        #: What Tally "generated" for a voucher, by its master id (index).
+        self.statutory: Dict[int, str] = {}
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.auth.append(request.headers.get("Authorization"))
-        root = ET.fromstring(request.content)
+        # Tally writes "&#4;" for "not applicable"; plain XML parsers refuse it.
+        root = ET.fromstring(request.content.replace(b"&#4;", b"~"))
         kind = root.findtext("HEADER/TALLYREQUEST")
         report = root.findtext("HEADER/ID")
         if kind == "Export":
@@ -45,6 +49,8 @@ class FakeTally:
                 self.vouchers.append(node)
             else:
                 self.masters.setdefault(node.tag, set()).add(node.get("NAME"))
+                if node.tag == "STOCKITEM":
+                    self.items[node.get("NAME")] = node
             created += 1
         return self._reply("<IMPORTRESULT><CREATED>{}</CREATED><ALTERED>0</ALTERED><ERRORS>0</ERRORS>"
                            "<LASTVCHID>{}</LASTVCHID></IMPORTRESULT>".format(created, len(self.vouchers)))
@@ -58,6 +64,9 @@ class FakeTally:
             name = formula.split('"')[1]
             hit = name in self.masters.get(object_type, set())
             return self._reply('<{0} NAME="{1}"/>'.format(object_type, name) if hit else "")
+        if report == "AECStatutory":
+            index = int(formula.split("=")[1])
+            return self._reply("<VOUCHER>{}</VOUCHER>".format(self.statutory.get(index, "")))
         if report == "AECVoucher":
             index = int(formula.split("=")[1])
             return self._reply("<VOUCHER><VOUCHERNUMBER>INV/{:04d}</VOUCHERNUMBER></VOUCHER>".format(index))
@@ -362,3 +371,45 @@ def test_received_transfer_goes_to_tally_as_stock_journal(client, fakes, make_pr
     assert out.findtext("BATCHALLOCATIONS.LIST/GODOWNNAME") == "Main Location" and out.findtext("AMOUNT") == "12000.00"
     assert into.findtext("BATCHALLOCATIONS.LIST/GODOWNNAME") == "Changodar Yard" and into.findtext("AMOUNT") == "-12400.00"
     assert into.findtext("ACTUALQTY") == "40 bags" and "Changodar Yard" in fake_tally.masters["GODOWN"]
+
+
+
+def test_gst_per_item_and_e_invoice_read_back(client, fakes, make_product, db):
+    from app.services import tally_sync
+
+    fake_tally, _ = fakes
+    connect(client, tax_mode="cgst_sgst", gst_rate=18)
+    cement = make_product("Cement 53 Grade", sku="OPC", unit_of_measure="bags", mrp="400.00", opening_stock=100)
+    steel = make_product("TMT 12mm", sku="TMT", unit_of_measure="kg", mrp="60.00", opening_stock=1000)
+    client.patch("/api/products/{}".format(cement.id), json={"hsn_code": "2523", "gst_rate": "28"})
+    client.patch("/api/products/{}".format(steel.id), json={"hsn_code": "7214"})  # Settings rate (18%)
+    customer = client.post("/api/customers", json={"name": "Ravi Builders", "phone": "98765 43210", "gstin": "24AAACR5055K1Z5"}).json()
+    order = client.post("/api/orders", json={"customer_id": customer["id"], "items": [
+        {"product_id": str(cement.id), "quantity_ordered": "10"}, {"product_id": str(steel.id), "quantity_ordered": "100"}]}).json()
+    invoice = fake_tally.voucher("Sales")
+    entries = {e.findtext("LEDGERNAME"): D(e.findtext("AMOUNT")) for e in invoice.iter("LEDGERENTRIES.LIST")}
+    # Cement 4000 at 28% (14+14) = 1120; steel 6000 at 18% (9+9) = 1080: CGST 560 + 540.
+    assert entries["Output CGST"] == D("1100.00") and entries["Output SGST"] == D("1100.00") and entries["Ravi Builders"] == D("-12200.00")
+    item = fake_tally.items["Cement 53 Grade"]
+    assert item.findtext("GSTDETAILS.LIST/HSNCODE") == "2523"
+    heads = {r.findtext("GSTRATEDUTYHEAD"): r.findtext("GSTRATE") for r in item.iter("RATEDETAILS.LIST")}
+    assert heads == {"Central Tax": "14", "State Tax": "14", "Integrated Tax": "28"}
+    # Later someone generates the e-invoice and e-way bill in Tally; we read them back.
+    row = next(r for r in client.get("/api/integrations/tally/syncs").json()["items"] if r["kind"] == "sales_invoice")
+    fake_tally.statutory[int(row["tally_master_id"]) if row.get("tally_master_id") else 2] = (
+        "<IRN>a1b2c3d4e5</IRN><IRNACKNO>112410000001</IRNACKNO><IRNACKDATE>20-Nov-2026</IRNACKDATE><IRNQRCODE>signed.qr.payload</IRNQRCODE>"
+        "<EWAYBILLDETAILS.LIST><BILLNUMBER>331000123456</BILLNUMBER><BILLDATE>20-Nov-2026</BILLDATE></EWAYBILLDETAILS.LIST>")
+    found = client.post("/api/integrations/tally/statutory/refresh", params={"sync_id": row["id"]}).json()
+    assert found["irn"] == "a1b2c3d4e5" and found["eway_bill_no"] == "331000123456"
+    docs = client.get("/api/integrations/orders/{}/tally-documents".format(order["id"])).json()["items"]
+    sales = next(d for d in docs if d["kind"] == "sales_invoice")
+    assert sales["irn_ack_no"] == "112410000001" and sales["has_qr"]
+    from app.models import TallySync
+
+    db.expire_all()
+    built = tally_sync.build_invoice(db, db.get(TallySync, sales["id"]))
+    assert built.irn == "a1b2c3d4e5" and built.customer_gstin == "24AAACR5055K1Z5"
+    assert [label for label, _ in built.taxes] == ["CGST @ 9%", "SGST @ 9%", "CGST @ 14%", "SGST @ 14%"]
+    assert {l.hsn for l in built.lines} == {"2523", "7214"}
+    pdf = client.get("/api/integrations/invoices/{}.pdf".format(order["id"]))
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")

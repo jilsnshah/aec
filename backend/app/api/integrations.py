@@ -189,6 +189,40 @@ def whatsapp_template(db: Session = Depends(get_db)):
     return {"template": row.config["invoice_template"], "status": status}
 
 
+@router.get("/orders/{order_id}/tally-documents")
+def order_tally_documents(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    """An order's vouchers in Tally (order, invoice, per-delivery invoices) with
+    the e-invoice (IRN) and e-way bill Tally generated for them."""
+    from sqlalchemy import select
+
+    from ..models import CustomerDelivery, TallySync
+
+    delivery_ids = list(db.execute(select(CustomerDelivery.id).where(CustomerDelivery.sales_order_id == order_id)).scalars())
+    rows = db.execute(select(TallySync).where((TallySync.entity_id == order_id) | (TallySync.entity_id.in_(delivery_ids or [order_id])))
+                      .order_by(TallySync.created_at)).scalars().all()
+    return {"items": [{"id": r.id, "kind": r.kind, "reference": r.reference, "status": r.status, "tally_number": r.tally_number,
+                       "error": r.error, "synced_at": r.synced_at, "irn": r.irn, "irn_ack_no": r.irn_ack_no, "irn_ack_date": r.irn_ack_date,
+                       "has_qr": bool(r.irn_qr), "eway_bill_no": r.eway_bill_no, "eway_bill_date": r.eway_bill_date,
+                       "checked_at": r.statutory_checked_at} for r in rows]}
+
+
+@router.post("/tally/statutory/refresh")
+def refresh_statutory(sync_id: Optional[uuid.UUID] = None, db: Session = Depends(get_db)):
+    """Look in Tally now for e-invoices (IRN, QR) and e-way bills generated for our vouchers."""
+    from ..models import TallySync
+
+    if sync_id:
+        row = db.get(TallySync, sync_id)
+        if row is None:
+            raise NotFoundError("Not found.")
+        try:
+            changed = tally_sync.read_statutory(db, row)
+        except tally.TallyError as exc:
+            raise ValidationError(str(exc))
+        return {"found": 1 if changed else 0, "irn": row.irn, "eway_bill_no": row.eway_bill_no}
+    return {"found": tally_sync.refresh_statutory(db)}
+
+
 @router.get("/invoices/{order_id}.pdf", include_in_schema=False)
 def invoice_download(order_id: uuid.UUID, db: Session = Depends(get_db)):
     """The invoice PDF for an order, once Tally has the invoice."""

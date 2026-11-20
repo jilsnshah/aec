@@ -90,7 +90,8 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
         { key: 'sync_sales_orders', label: 'Sales orders become Sales Order vouchers', kind: 'check' },
         { key: 'create_invoices', label: 'Create invoices in Tally (their numbers are used on the PDF)', kind: 'check' },
         { key: 'invoice_on', label: 'When to invoice', kind: 'select', options: [{ value: 'order', label: 'When the order is placed (whole order)' }, { value: 'delivery', label: 'On each delivery (what that truck carried)' }], hint: 'Invoicing on delivery bills partial deliveries correctly.' },
-        { key: 'sync_purchase_orders', label: 'Placed purchase orders become Purchase Order vouchers', kind: 'check' },
+        { key: 'sync_purchase_orders', label: 'Placed purchase orders become Purchase Order vouchers; returns become Debit Notes', kind: 'check' },
+        { key: 'sync_transfers', label: 'Received transfers between warehouses become Stock Journals', kind: 'check' },
       ],
     },
     {
@@ -105,13 +106,14 @@ const FORMS: Record<'whatsapp' | 'email' | 'tally', Group[]> = {
         { key: 'sales_order_type', label: 'Sales order voucher type' },
         { key: 'sales_invoice_type', label: 'Sales invoice voucher type' },
         { key: 'purchase_order_type', label: 'Purchase order voucher type' },
+        { key: 'debit_note_type', label: 'Debit note voucher type' },
       ],
     },
     {
       title: 'GST',
       fields: [
         { key: 'tax_mode', label: 'Tax on invoices', kind: 'select', options: [{ value: 'none', label: 'No tax' }, { value: 'cgst_sgst', label: 'CGST + SGST (within state)' }, { value: 'igst', label: 'IGST (other state)' }] },
-        { key: 'gst_rate', label: 'GST rate (%)', kind: 'number' },
+        { key: 'gst_rate', label: 'Default GST rate (%)', kind: 'number', hint: 'For products without their own GST rate. Each product’s HSN and rate go to its stock item in Tally, and each line is taxed at its own rate.' },
         { key: 'cgst_ledger', label: 'CGST ledger' },
         { key: 'sgst_ledger', label: 'SGST ledger' },
         { key: 'igst_ledger', label: 'IGST ledger' },

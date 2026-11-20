@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -48,6 +49,17 @@ def create_delivery(
     for sync_id in tally_sync.queue_delivery(db, uuid.UUID(str(result["delivery_id"]))):
         background.add_task(tally_sync.process, sync_id)
     return result
+
+
+class EwayIn(BaseModel):
+    eway_bill_number: Optional[str] = Field(default=None, description="12-digit e-way bill number; empty clears it.")
+    valid_until: Optional[datetime] = None
+
+
+@router.put("/deliveries/{delivery_id}/eway-bill")
+def set_eway_bill(delivery_id: uuid.UUID, payload: EwayIn, db: Session = Depends(get_db)):
+    """Record a delivery's e-way bill when it was made outside Tally."""
+    return delivery_service.set_eway_bill(db, delivery_id, payload.eway_bill_number, payload.valid_until)
 
 
 @router.get("/deliveries", response_model=schemas.Page[schemas.DeliveryRow])

@@ -306,7 +306,7 @@ def view(session: Session, transfer: StockTransfer) -> Dict[str, Any]:
         "from_warehouse_id": transfer.from_warehouse_id, "from_warehouse": transfer.from_warehouse.name,
         "to_warehouse_id": transfer.to_warehouse_id, "to_warehouse": transfer.to_warehouse.name,
         "cost_method": transfer.cost_method, "vehicle": transfer.vehicle, "transporter": transfer.transporter, "notes": transfer.notes,
-        "transporter_id": transfer.transporter_id, "lr_number": transfer.lr_number,
+        "transporter_id": transfer.transporter_id, "lr_number": transfer.lr_number, "eway_bill_number": transfer.eway_bill_number,
         "goods_value": float(transfer.goods_value), "extra_cost": float(transfer.extra_cost or costs), "costs_total": float(costs),
         "loss_value": float(transfer.loss_value),
         "landed_value": float(transfer.goods_value - transfer.loss_value + (transfer.extra_cost if transfer.status == "received" else 0)),
@@ -440,6 +440,17 @@ def update_transfer(session: Session, transfer_id: uuid.UUID, data: Dict[str, An
     begin_write(session)
     try:
         transfer = _load(session, transfer_id, lock=True)
+        if "eway_bill_number" in data:
+            # The e-way bill can be recorded at any stage, also after receipt.
+            import re as _re
+
+            clean = _re.sub(r"\s", "", data.pop("eway_bill_number") or "")
+            if clean and not _re.fullmatch(r"\d{12}", clean):
+                raise ValidationError("An e-way bill number has 12 digits.")
+            transfer.eway_bill_number = clean or None
+            if not data:
+                session.commit()
+                return get_transfer(session, transfer_id)
         if transfer.status == "draft":
             _apply_draft(session, transfer, data)
         elif transfer.status == "in_transit":

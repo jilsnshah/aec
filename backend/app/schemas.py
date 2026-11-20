@@ -1225,6 +1225,13 @@ class DeliveryRow(BaseModel):
     line_count: int
     total_quantity: Decimal
     lines: List[DeliveryRowLine] = Field(default_factory=list)
+    #: Value at the order's prices (an e-way bill is needed above Rs 50,000).
+    value: Decimal = Decimal("0")
+    vehicle_number: Optional[str] = None
+    lr_number: Optional[str] = None
+    transporter_name: Optional[str] = None
+    eway_bill_number: Optional[str] = None
+    eway_bill_valid_until: Optional[datetime] = None
 
 
 class CommitmentRow(BaseModel):
@@ -1401,6 +1408,10 @@ class TallySyncOut(BaseModel):
     notify_error: Optional[str] = None
     notified_at: Optional[datetime] = None
     created_at: datetime
+    irn: Optional[str] = None
+    irn_ack_no: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+
 
 
 class TallyTestOut(BaseModel):

@@ -50,6 +50,22 @@ class Line:
     quantity: Decimal
     rate: Decimal
     amount: Decimal
+    hsn: Optional[str] = None
+    #: GST % on this line; None uses the rate in Settings.
+    gst_rate: Optional[Decimal] = None
+
+
+@dataclass
+class Statutory:
+    """What Tally generated for a voucher: the e-invoice and the e-way bill."""
+
+    irn: Optional[str] = None
+    ack_no: Optional[str] = None
+    ack_date: Optional[str] = None
+    qr: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    eway_bill_date: Optional[str] = None
+    eway_valid_upto: Optional[str] = None
 
 
 @dataclass
@@ -155,6 +171,23 @@ class TallyClient:
         root = self._collection("AECExists", object_type, "Name", formula)
         return any(True for _ in root.iter(tag))
 
+    def statutory(self, master_id: str) -> Statutory:
+        """The e-invoice and e-way bill Tally holds for a voucher (empty until
+        someone generates them in Tally)."""
+        root = self._collection("AECStatutory", "Voucher", "VoucherNumber, IRN, IRNAckNo, IRNAckDate, IRNQRCode, EWayBillDetails",
+                                "$MasterId = {}".format(int(master_id)))
+
+        def first(*tags: str) -> Optional[str]:
+            for tag in tags:
+                for node in root.iter(tag):
+                    if node.text and node.text.strip():
+                        return node.text.strip()
+            return None
+
+        return Statutory(irn=first("IRN"), ack_no=first("IRNACKNO"), ack_date=first("IRNACKDATE"), qr=first("IRNQRCODE"),
+                         eway_bill_no=first("EWAYBILLNO", "BILLNUMBER"), eway_bill_date=first("EWAYBILLDATE", "BILLDATE"),
+                         eway_valid_upto=first("VALIDUPTO", "EWAYBILLVALIDUPTO"))
+
     def voucher_number(self, master_id: str) -> Optional[str]:
         """The number Tally gave a voucher, by its master id."""
         root = self._collection("AECVoucher", "Voucher", "VoucherNumber", "$MasterId = {}".format(int(master_id)))
@@ -183,14 +216,41 @@ class TallyClient:
             "<ISBILLWISEON>Yes</ISBILLWISEON>{3}</LEDGER>".format(quoteattr(name), _text(name), _text(group), extra),
         )
 
-    def ensure_stock_item(self, name: str, unit: str) -> None:
+    @staticmethod
+    def _gst_details(hsn: Optional[str], rate: Optional[Decimal]) -> str:
+        """GST classification of a stock item: HSN and the rate, split into
+        central, state and integrated tax, as Tally keeps it."""
+        if not hsn and rate is None:
+            return ""
+        heads = ""
+        if rate is not None:
+            half = (Decimal(rate) / 2).normalize()
+            heads = "".join(
+                "<RATEDETAILS.LIST><GSTRATEDUTYHEAD>{}</GSTRATEDUTYHEAD><GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>"
+                "<GSTRATE>{}</GSTRATE></RATEDETAILS.LIST>".format(head, format(value, "f"))
+                for head, value in (("Central Tax", half), ("State Tax", half), ("Integrated Tax", Decimal(rate).normalize()))
+            )
+        return (
+            "<GSTAPPLICABLE>&#4; Applicable</GSTAPPLICABLE><GSTDETAILS.LIST><APPLICABLEFROM>20170701</APPLICABLEFROM>"
+            "<CALCULATIONTYPE>On Value</CALCULATIONTYPE>{hsn}<TAXABILITY>Taxable</TAXABILITY>"
+            "<STATEWISEDETAILS.LIST><STATENAME>&#4; Any</STATENAME>{heads}</STATEWISEDETAILS.LIST></GSTDETAILS.LIST>"
+        ).format(hsn="<HSNCODE>{}</HSNCODE>".format(_text(hsn)) if hsn else "", heads=heads)
+
+    def ensure_stock_item(self, name: str, unit: str, hsn: Optional[str] = None, gst_rate: Optional[Decimal] = None,
+                          update_gst: bool = False) -> None:
+        """Create the stock item if missing (with its HSN and GST rate); with
+        ``update_gst``, also correct those on an existing item."""
+        gst = self._gst_details(hsn, gst_rate)
         if self.exists("Stock Item", name):
+            if update_gst and gst:
+                self._import("All Masters", '<STOCKITEM NAME={0} ACTION="Alter"><NAME.LIST><NAME>{1}</NAME></NAME.LIST>{2}</STOCKITEM>'.format(
+                    quoteattr(name), _text(name), gst))
             return
         self.ensure_unit(unit)
         self._import(
             "All Masters",
             '<STOCKITEM NAME={0} ACTION="Create"><NAME.LIST><NAME>{1}</NAME></NAME.LIST>'
-            "<BASEUNITS>{2}</BASEUNITS></STOCKITEM>".format(quoteattr(name), _text(name), _text(unit)),
+            "<BASEUNITS>{2}</BASEUNITS>{3}</STOCKITEM>".format(quoteattr(name), _text(name), _text(unit), gst),
         )
 
     def ensure_godown(self, name: str) -> None:

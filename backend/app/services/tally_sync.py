@@ -187,7 +187,8 @@ def _delivery(session: Session, delivery_id: uuid.UUID):
 def _delivery_lines(delivery) -> List[tally.Line]:
     return [
         tally.Line(item=line.order_item.product.name, unit=line.order_item.product.unit_of_measure, quantity=line.quantity,
-                   rate=line.order_item.unit_price_net, amount=_cents(line.order_item.unit_price_net * line.quantity))
+                   rate=line.order_item.unit_price_net, amount=_cents(line.order_item.unit_price_net * line.quantity),
+                   hsn=line.order_item.product.hsn_code, gst_rate=line.order_item.product.gst_rate)
         for line in delivery.items if line.quantity > 0
     ]
 
@@ -200,10 +201,67 @@ def _sales_lines(order: SalesOrder) -> List[tally.Line]:
             quantity=item.quantity_ordered,
             rate=item.unit_price_net,
             amount=_cents(item.unit_price_net * item.quantity_ordered),
+            hsn=item.product.hsn_code,
+            gst_rate=item.product.gst_rate,
         )
         for item in order.items
         if item.quantity_ordered > 0
     ]
+
+
+def _line_rate(config: Dict[str, Any], rate: Optional[Decimal]) -> Decimal:
+    """A line's GST %: the product's own rate, else the rate in Settings."""
+    if config["tax_mode"] == "none":
+        return Decimal("0")
+    return Decimal(str(rate)) if rate is not None else Decimal(str(config.get("gst_rate") or 0))
+
+
+def tax_breakup(config: Dict[str, Any], lines) -> List[Dict[str, Any]]:
+    """GST on an invoice, rate by rate: [{rate, taxable, parts: [(ledger, label, amount)]}].
+    Each line is taxed at its product's rate, so cement at 28% and steel at
+    18% on one invoice come out right."""
+    groups: Dict[Decimal, Decimal] = {}
+    for line in lines:
+        rate = _line_rate(config, getattr(line, "gst_rate", None))
+        if rate > 0:
+            groups[rate] = groups.get(rate, Decimal("0")) + Decimal(line.amount)
+    out = []
+    for rate, taxable in sorted(groups.items()):
+        tax = _cents(taxable * rate / 100)
+        if config["tax_mode"] == "igst":
+            parts = [(config["igst_ledger"], "IGST @ {}%".format(format(rate.normalize(), "f")), tax)]
+        else:
+            half = _cents(tax / 2)
+            label = format((rate / 2).normalize(), "f")
+            parts = [(config["cgst_ledger"], "CGST @ {}%".format(label), half), (config["sgst_ledger"], "SGST @ {}%".format(label), tax - half)]
+        out.append({"rate": rate, "taxable": taxable, "parts": parts})
+    return out
+
+
+def line_taxes(config: Dict[str, Any], lines) -> List[Tuple[str, Decimal]]:
+    """Tax ledger amounts for Tally, summed over the rates."""
+    ledgers: Dict[str, Decimal] = {}
+    for group in tax_breakup(config, lines):
+        for ledger, _, amount in group["parts"]:
+            ledgers[ledger] = ledgers.get(ledger, Decimal("0")) + amount
+    return list(ledgers.items())
+
+
+def display_taxes(config: Dict[str, Any], lines) -> List[Tuple[str, Decimal]]:
+    """Tax rows for the invoice PDF, one per rate and head."""
+    return [(label, amount) for group in tax_breakup(config, lines) for _, label, amount in group["parts"]]
+
+
+def _ensure_item(session: Session, client: tally.TallyClient, product) -> None:
+    """The product's stock item in Tally, with its HSN and GST rate; corrected
+    in Tally when either changed here."""
+    rate = Decimal(str(product.gst_rate)) if product.gst_rate is not None else None
+    sig = "{}|{}".format(product.hsn_code or "", format(rate.normalize(), "f") if rate is not None else "")
+    has_gst = bool(product.hsn_code or rate is not None)
+    client.ensure_stock_item(product.name, product.unit_of_measure, product.hsn_code, rate,
+                             update_gst=has_gst and product.tally_gst_sig != sig)
+    if has_gst:
+        product.tally_gst_sig = sig
 
 
 def sales_taxes(config: Dict[str, Any], subtotal: Decimal) -> List[Tuple[str, Decimal]]:
@@ -237,7 +295,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
         ledger = ledger_name(record.supplier)
         client.ensure_ledger(ledger, config["supplier_group"], record.supplier.phone, record.supplier.email)
         for item in record.items:
-            client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
+            _ensure_item(session, client, item.product)
         lines = [tally.Line(i.product.name, i.product.unit_of_measure, i.quantity, i.unit_cost, _cents(i.amount)) for i in record.items]
         house = session.get(Warehouse, record.warehouse_id) if record.warehouse_id else None
         result = client.create_voucher(
@@ -259,7 +317,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
         sent, received = [], []
         for item in transfer.items:
             product = item.product
-            client.ensure_stock_item(product.name, product.unit_of_measure)
+            _ensure_item(session, client, product)
             cost = (item.goods_value / item.quantity) if item.quantity else Decimal("0")
             sent.append(tally.Line(product.name, product.unit_of_measure, item.quantity, _cents(cost), _cents(item.goods_value)))
             if item.quantity_received > 0:
@@ -283,7 +341,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
         client.ensure_ledger(ledger, config["customer_group"], delivery.customer.phone, delivery.customer.email)
         lines = _delivery_lines(delivery)
         for line in delivery.items:
-            client.ensure_stock_item(line.order_item.product.name, line.order_item.product.unit_of_measure)
+            _ensure_item(session, client, line.order_item.product)
         linked = session.execute(
             select(TallySync).where(TallySync.kind == SALES_ORDER, TallySync.entity_id == order.id, TallySync.status == "synced")
         ).scalar_one_or_none()
@@ -292,7 +350,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
             config["sales_invoice_type"], _local_day(delivery.created_at), ledger, config["sales_ledger"], lines,
             party_is_debit=True, godown=godown_for(config, delivery.warehouse), reference=delivery.delivery_number,
             narration="Delivery {} against {}".format(delivery.delivery_number, order.order_number),
-            order_number=order.order_number if linked else None, taxes=sales_taxes(config, subtotal),
+            order_number=order.order_number if linked else None, taxes=line_taxes(config, lines),
         )
         number = None
         if result.master_id:
@@ -311,7 +369,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
         client.ensure_ledger(ledger, config["customer_group"], customer.phone, customer.email)
         lines = _sales_lines(order)
         for item in order.items:
-            client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
+            _ensure_item(session, client, item.product)
         on = _local_day(order.created_at)
         if row.kind == SALES_ORDER:
             result = client.create_voucher(
@@ -332,7 +390,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
                 party_is_debit=True, godown=config["godown"], reference=order.order_number,
                 narration="Against {}".format(order.order_number),
                 order_number=order.order_number if linked else None,
-                taxes=sales_taxes(config, subtotal),
+                taxes=line_taxes(config, lines),
             )
             # The invoice number is Tally's own. The voucher exists by now, so
             # failing to read the number back must not fail the sync -- a
@@ -353,7 +411,7 @@ def _push(session: Session, row: TallySync, config: Dict[str, Any], client: tall
     supplier_ledger = ledger_name(order.supplier)
     client.ensure_ledger(supplier_ledger, config["supplier_group"], order.supplier.phone, order.supplier.email)
     for item in order.items:
-        client.ensure_stock_item(item.product.name, item.product.unit_of_measure)
+        _ensure_item(session, client, item.product)
     on = _local_day(order.ordered_at or order.created_at)
     lines = [
         tally.Line(item.product.name, item.product.unit_of_measure, item.quantity_ordered,
@@ -410,10 +468,92 @@ def process(sync_id: uuid.UUID) -> None:
             row.synced_at = datetime.now(timezone.utc)
             session.commit()
             logger.info("Synced %s %s to Tally as %s", row.kind, row.reference, row.tally_number)
+            if row.kind in STATUTORY_KINDS and row.tally_master_id:
+                try:
+                    read_statutory(session, row, client)
+                except tally.TallyError:
+                    session.rollback()
         if row.kind in (SALES_INVOICE, DELIVERY_INVOICE) and row.notify_status == "pending":
             _send_invoice(session, row)
     finally:
         session.close()
+
+
+def _statutory_fields(row: TallySync) -> Dict[str, Any]:
+    return {"irn": row.irn, "irn_ack_no": row.irn_ack_no, "irn_ack_date": row.irn_ack_date, "irn_qr": row.irn_qr,
+            "eway_bill_no": row.eway_bill_no, "eway_bill_date": row.eway_bill_date}
+
+
+#: Documents whose e-invoice / e-way bill Tally may generate.
+STATUTORY_KINDS = (SALES_INVOICE, DELIVERY_INVOICE, STOCK_TRANSFER, PURCHASE_RETURN)
+
+
+def read_statutory(session: Session, row: TallySync, client: Optional[tally.TallyClient] = None) -> bool:
+    """Read the e-invoice and e-way bill Tally holds for a synced voucher and
+    keep them (and the e-way bill on the delivery, transfer or return).
+    True when something new arrived."""
+    if not row.tally_master_id or row.kind not in STATUTORY_KINDS:
+        return False
+    if client is None:
+        tally_row = settings_service.get(session, settings_service.TALLY)
+        client = tally.client_for(tally_row.config, settings_service.credentials(tally_row).get("auth_token"))
+    found = client.statutory(row.tally_master_id)
+    row.statutory_checked_at = datetime.now(timezone.utc)
+    changed = False
+    for attr, value in (("irn", found.irn), ("irn_ack_no", found.ack_no), ("irn_ack_date", found.ack_date), ("irn_qr", found.qr),
+                        ("eway_bill_no", found.eway_bill_no), ("eway_bill_date", found.eway_bill_date)):
+        if value and getattr(row, attr) != value:
+            setattr(row, attr, value[:4000] if attr == "irn_qr" else value[:80])
+            changed = True
+    if found.eway_bill_no:
+        from ..models import CustomerDelivery, PurchaseReturn, StockTransfer
+
+        model = {DELIVERY_INVOICE: CustomerDelivery, STOCK_TRANSFER: StockTransfer, PURCHASE_RETURN: PurchaseReturn}.get(row.kind)
+        document = session.get(model, row.entity_id) if model else None
+        if document is not None and not document.eway_bill_number:
+            document.eway_bill_number = found.eway_bill_no[:20]
+            if found.eway_valid_upto:
+                try:
+                    document.eway_bill_valid_until = datetime.fromisoformat(found.eway_valid_upto)
+                except ValueError:
+                    pass
+    session.commit()
+    return changed
+
+
+def refresh_statutory(session: Optional[Session] = None, limit: int = 40) -> int:
+    """Background: look in Tally for e-invoices and e-way bills generated since
+    our vouchers went in (within a week; each voucher at most every 15 min)."""
+    own = session is None
+    session = session or inbound.session_factory()
+    try:
+        tally_row = settings_service.get(session, settings_service.TALLY)
+        if not tally_row.enabled:
+            return 0
+        now = datetime.now(timezone.utc)
+        rows = session.execute(
+            select(TallySync).where(
+                TallySync.kind.in_(STATUTORY_KINDS), TallySync.status == "synced", TallySync.tally_master_id.is_not(None),
+                TallySync.synced_at >= now - timedelta(days=7),
+                or_(TallySync.irn.is_(None), TallySync.eway_bill_no.is_(None)),
+                or_(TallySync.statutory_checked_at.is_(None), TallySync.statutory_checked_at < now - timedelta(minutes=15)),
+            ).order_by(TallySync.synced_at.desc()).limit(limit)
+        ).scalars().all()
+        if not rows:
+            return 0
+        client = tally.client_for(tally_row.config, settings_service.credentials(tally_row).get("auth_token"))
+        found = 0
+        for row in rows:
+            try:
+                found += 1 if read_statutory(session, row, client) else 0
+            except tally.TallyError as exc:
+                session.rollback()
+                logger.info("Could not read e-invoice details for %s: %s", row.reference, exc)
+                break
+        return found
+    finally:
+        if own:
+            session.close()
 
 
 def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
@@ -424,7 +564,8 @@ def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
         config = settings_service.get(session, settings_service.TALLY).config
         lines = [invoice_pdf.line_in_unit(line.order_item.product.name, line.quantity, line.order_item.product.unit_of_measure,
                                           line.order_item.unit_price_net, _cents(line.order_item.unit_price_net * line.quantity),
-                                          line.order_item.unit, line.order_item.unit_factor)
+                                          line.order_item.unit, line.order_item.unit_factor, line.order_item.product.hsn_code,
+                                          line.order_item.product.gst_rate)
                  for line in delivery.items if line.quantity > 0]
         subtotal = sum((line.amount for line in lines), Decimal("0"))
         return invoice_pdf.Invoice(
@@ -432,14 +573,16 @@ def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
             order_number="{} (delivery {})".format(delivery.sales_order.order_number, delivery.delivery_number),
             seller_name=config["seller_name"], seller_address=config["seller_address"], seller_gstin=config["seller_gstin"],
             seller_phone=config["seller_phone"], customer_name=delivery.customer.name, customer_address=delivery.customer.address,
-            customer_phone=delivery.customer.phone, lines=lines, taxes=sales_taxes(config, subtotal),
+            customer_phone=delivery.customer.phone, lines=lines, taxes=display_taxes(config, lines),
+            customer_gstin=delivery.customer.gstin, **_statutory_fields(row),
         )
 
     order = get_order(session, row.entity_id)
     config = settings_service.get(session, settings_service.TALLY).config
     lines = [
         invoice_pdf.line_in_unit(item.product.name, item.quantity_ordered, item.product.unit_of_measure,
-                                 item.unit_price_net, _cents(item.unit_price_net * item.quantity_ordered), item.unit, item.unit_factor)
+                                 item.unit_price_net, _cents(item.unit_price_net * item.quantity_ordered), item.unit, item.unit_factor,
+                                 item.product.hsn_code, item.product.gst_rate)
         for item in order.items if item.quantity_ordered > 0
     ]
     subtotal = sum((line.amount for line in lines), Decimal("0"))
@@ -455,7 +598,9 @@ def build_invoice(session: Session, row: TallySync) -> invoice_pdf.Invoice:
         customer_address=order.customer.address,
         customer_phone=order.customer.phone,
         lines=lines,
-        taxes=sales_taxes(config, subtotal),
+        taxes=display_taxes(config, lines),
+        customer_gstin=order.customer.gstin,
+        **_statutory_fields(row),
     )
 
 

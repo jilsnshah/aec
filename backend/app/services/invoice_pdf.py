@@ -22,18 +22,21 @@ class InvoiceLine:
     unit: str
     rate: Decimal
     amount: Decimal
+    hsn: Optional[str] = None
+    gst_rate: Optional[Decimal] = None
 
 
 def line_in_unit(description: str, base_quantity: Decimal, base_unit: str, base_rate: Decimal, amount: Decimal,
-                 unit: Optional[str] = None, factor: Optional[Decimal] = None) -> InvoiceLine:
+                 unit: Optional[str] = None, factor: Optional[Decimal] = None, hsn: Optional[str] = None,
+                 gst_rate: Optional[Decimal] = None) -> InvoiceLine:
     """A document line in the unit it was sold in (2 tonne at 7,000), noting
     the base quantity (= 40 bags) in the description."""
     if not unit or not factor or Decimal(factor) == 1:
-        return InvoiceLine(description, base_quantity, base_unit, base_rate, amount)
+        return InvoiceLine(description, base_quantity, base_unit, base_rate, amount, hsn, gst_rate)
     factor = Decimal(factor)
     base = format(Decimal(base_quantity).normalize(), "f")
     return InvoiceLine("{} (= {} {})".format(description, base, base_unit), (Decimal(base_quantity) / factor).quantize(Decimal("0.001")).normalize(),
-                       unit, (Decimal(base_rate) * factor).quantize(Decimal("0.01")), amount)
+                       unit, (Decimal(base_rate) * factor).quantize(Decimal("0.01")), amount, hsn, gst_rate)
 
 
 @dataclass
@@ -54,6 +57,14 @@ class Invoice:
     title: Optional[str] = None
     meta: Optional[str] = None
     footer: Optional[str] = None
+    customer_gstin: Optional[str] = None
+    #: From Tally once generated: e-invoice and e-way bill.
+    irn: Optional[str] = None
+    irn_ack_no: Optional[str] = None
+    irn_ack_date: Optional[str] = None
+    irn_qr: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    eway_bill_date: Optional[str] = None
 
     @property
     def subtotal(self) -> Decimal:
@@ -71,6 +82,36 @@ def money(value: Decimal) -> str:
 def _latin(text: Optional[str]) -> str:
     """Core PDF fonts are Latin-1; replace what they cannot draw."""
     return (text or "").replace("₹", "INR ").encode("latin-1", "replace").decode("latin-1")
+
+
+def _statutory_block(pdf: FPDF, invoice: Invoice) -> None:
+    """The e-invoice (IRN, acknowledgement, signed QR code) and e-way bill, as
+    Tally generated them."""
+    top = pdf.get_y()
+    pdf.set_font("Helvetica", "", 8.5)
+    text = []
+    if invoice.irn:
+        text.append("IRN: {}".format(invoice.irn))
+        if invoice.irn_ack_no:
+            text.append("Ack no: {}{}".format(invoice.irn_ack_no, "   Ack date: " + invoice.irn_ack_date if invoice.irn_ack_date else ""))
+    if invoice.eway_bill_no:
+        text.append("E-way bill: {}{}".format(invoice.eway_bill_no, "   Date: " + invoice.eway_bill_date if invoice.eway_bill_date else ""))
+    pdf.multi_cell(140 if invoice.irn_qr else 0, 4.5, _latin("\n".join(text)), new_x="LMARGIN", new_y="NEXT")
+    bottom = pdf.get_y()
+    if invoice.irn_qr:
+        try:
+            import io
+
+            import segno
+
+            buffer = io.BytesIO()
+            segno.make(invoice.irn_qr, error="m").save(buffer, kind="png", scale=4, border=1)
+            buffer.seek(0)
+            pdf.image(buffer, x=pdf.w - 16 - 30, y=top, w=30, h=30)
+            bottom = max(bottom, top + 31)
+        except Exception:  # pragma: no cover - a bad QR payload must not stop the invoice
+            pass
+    pdf.set_y(bottom + 3)
 
 
 def render(invoice: Invoice) -> bytes:
@@ -92,10 +133,11 @@ def render(invoice: Invoice) -> bytes:
     pdf.cell(0, 8, invoice.title or ("TAX INVOICE" if invoice.taxes else "INVOICE"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     top = pdf.get_y()
-    pdf.multi_cell(95, 5, _latin("Bill to:\n{}{}{}".format(
+    pdf.multi_cell(95, 5, _latin("Bill to:\n{}{}{}{}".format(
         invoice.customer_name,
         "\n" + invoice.customer_address if invoice.customer_address else "",
         "\nPhone: " + invoice.customer_phone if invoice.customer_phone else "",
+        "\nGSTIN: " + invoice.customer_gstin if invoice.customer_gstin else "",
     )))
     left_bottom = pdf.get_y()
     pdf.set_xy(115, top)
@@ -103,19 +145,32 @@ def render(invoice: Invoice) -> bytes:
         invoice.number, invoice.on.strftime("%d %b %Y"), invoice.order_number,
     )), align="R")
     pdf.set_y(max(left_bottom, pdf.get_y()) + 5)
+    if invoice.irn or invoice.eway_bill_no:
+        _statutory_block(pdf, invoice)
 
-    widths = (84, 26, 34, 34)
+    gst = any(line.hsn or line.gst_rate is not None for line in invoice.lines)
+    if gst:
+        widths = (66, 20, 14, 26, 26, 26)
+        titles = ("Item", "HSN", "GST %", "Qty", "Rate (INR)", "Amount (INR)")
+        aligns = ("L", "L", "R", "R", "R", "R")
+    else:
+        widths = (84, 26, 34, 34)
+        titles = ("Item", "Qty", "Rate (INR)", "Amount (INR)")
+        aligns = ("L", "R", "R", "R")
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_fill_color(240, 240, 243)
-    for width, title, align in zip(widths, ("Item", "Qty", "Rate (INR)", "Amount (INR)"), ("L", "R", "R", "R")):
+    for width, title, align in zip(widths, titles, aligns):
         pdf.cell(width, 7, title, border="B", align=align, fill=True)
     pdf.ln()
     pdf.set_font("Helvetica", "", 9)
     for line in invoice.lines:
-        pdf.cell(widths[0], 7, _latin(line.description)[:60])
-        pdf.cell(widths[1], 7, "{} {}".format(format(Decimal(line.quantity).normalize(), "f"), _latin(line.unit)), align="R")
-        pdf.cell(widths[2], 7, money(line.rate), align="R")
-        pdf.cell(widths[3], 7, money(line.amount), align="R")
+        pdf.cell(widths[0], 7, _latin(line.description)[:48 if gst else 60])
+        if gst:
+            pdf.cell(widths[1], 7, _latin(line.hsn or ""))
+            pdf.cell(widths[2], 7, format(Decimal(line.gst_rate).normalize(), "f") if line.gst_rate is not None else "", align="R")
+        pdf.cell(widths[-3], 7, "{} {}".format(format(Decimal(line.quantity).normalize(), "f"), _latin(line.unit)), align="R")
+        pdf.cell(widths[-2], 7, money(line.rate), align="R")
+        pdf.cell(widths[-1], 7, money(line.amount), align="R")
         pdf.ln()
 
     pdf.ln(2)
@@ -123,8 +178,8 @@ def render(invoice: Invoice) -> bytes:
     for index, (label, amount) in enumerate(rows):
         last = index == len(rows) - 1
         pdf.set_font("Helvetica", "B" if last else "", 10 if last else 9)
-        pdf.cell(sum(widths[:3]), 7, _latin(label), align="R", border="T" if last else 0)
-        pdf.cell(widths[3], 7, money(amount), align="R", border="T" if last else 0)
+        pdf.cell(sum(widths[:-1]), 7, _latin(label), align="R", border="T" if last else 0)
+        pdf.cell(widths[-1], 7, money(amount), align="R", border="T" if last else 0)
         pdf.ln()
 
     pdf.ln(8)

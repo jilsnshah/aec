@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -498,6 +499,12 @@ def list_deliveries(
             "customer_name": delivery.customer.name,
             "line_count": len(delivery.items),
             "total_quantity": sum((line.quantity for line in delivery.items), ZERO),
+            "value": money(sum((line.quantity * line.order_item.unit_price_net for line in delivery.items), ZERO)),
+            "vehicle_number": delivery.vehicle_number,
+            "lr_number": delivery.lr_number,
+            "transporter_name": delivery.transporter.name if delivery.transporter else None,
+            "eway_bill_number": delivery.eway_bill_number,
+            "eway_bill_valid_until": delivery.eway_bill_valid_until,
             "lines": [
                 {
                     "product_id": line.product_id,
@@ -511,6 +518,21 @@ def list_deliveries(
         }
         for delivery in session.execute(windowed(stmt, limit, offset)).unique().scalars().all()
     ]
+
+
+def set_eway_bill(session: Session, delivery_id: uuid.UUID, number: Optional[str], valid_until: Optional[datetime] = None) -> Dict[str, Any]:
+    """Record the e-way bill for a delivery (typed in, when Tally did not make it)."""
+    begin_write(session)
+    delivery = session.get(CustomerDelivery, delivery_id)
+    if delivery is None:
+        raise NotFoundError("Delivery not found.")
+    clean = re.sub(r"\s", "", number or "")
+    if clean and not re.fullmatch(r"\d{12}", clean):
+        raise ValidationError("An e-way bill number has 12 digits.")
+    delivery.eway_bill_number = clean or None
+    delivery.eway_bill_valid_until = valid_until
+    session.commit()
+    return {"id": delivery.id, "eway_bill_number": delivery.eway_bill_number, "eway_bill_valid_until": delivery.eway_bill_valid_until}
 
 
 # ---------------------------------------------------------------------------

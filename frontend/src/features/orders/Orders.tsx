@@ -1,4 +1,5 @@
 import { QtyCell, perUnit } from '@/ui/lines'
+import { DeliveryEway } from './DeliveryEway'
 import { BookingSheet } from '@/features/transport/BookingSheet'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -527,6 +528,9 @@ function DeliveriesTab({ id }: { id: string }) {
                 <span className="num">{fmtQty(line.quantity)}</span>
               </div>
             ))}
+          </div>
+          <div className="pl-10">
+            <DeliveryEway orderId={id} deliveryId={delivery.id} />
           </div>
         </div>
       ))}

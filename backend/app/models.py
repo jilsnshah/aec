@@ -212,6 +212,8 @@ class Product(Base, TimestampMixin):
     purchase_unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     #: Counted in whole base units only (bags, pieces); no 2.5 bags.
     whole_units: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: The HSN/GST last sent to this product's stock item in Tally ("hsn|rate").
+    tally_gst_sig: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
     preferred_supplier: Mapped[Optional["Supplier"]] = relationship(foreign_keys=[preferred_supplier_id])
     order_items: Mapped[List["SalesOrderItem"]] = relationship(back_populates="product")
@@ -1067,6 +1069,9 @@ class CustomerDelivery(Base):
     __table_args__ = (Index("ix_deliveries_order_created", "sales_order_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: E-way bill for this movement: from Tally, or typed in.
+    eway_bill_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    eway_bill_valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Who carried the goods, in what, the lorry receipt number and the freight.
     transporter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("transporters.id", ondelete="SET NULL"), nullable=True, index=True
@@ -1253,6 +1258,15 @@ class TallySync(Base):
     next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     tally_master_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     tally_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Read back from Tally after it generates them: the e-invoice (IRN,
+    #: acknowledgement, signed QR) and the e-way bill.
+    irn: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    irn_ack_no: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    irn_ack_date: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    irn_qr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    eway_bill_no: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    eway_bill_date: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    statutory_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     #: For sales invoices: none | pending | sent | failed | skipped
@@ -2028,6 +2042,9 @@ class StockTransfer(Base, TimestampMixin):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: E-way bill for this movement: from Tally, or typed in.
+    eway_bill_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    eway_bill_valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     from_warehouse_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True)
     to_warehouse_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -2256,6 +2273,9 @@ class PurchaseReturn(Base, TimestampMixin):
     __tablename__ = "purchase_returns"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
+    #: E-way bill for this movement: from Tally, or typed in.
+    eway_bill_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    eway_bill_valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     supplier_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False, index=True)
     purchase_order_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=True, index=True)
