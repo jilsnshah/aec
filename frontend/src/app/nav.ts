@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  FileQuestion,
   BarChart3,
   Boxes,
   Building2,
@@ -63,6 +64,7 @@ export const MODULES: Module[] = [
   { to: '/marketing/channels', label: 'Instagram & WhatsApp', short: 'Channels', icon: Radio, group: 'marketing', keywords: 'instagram whatsapp comments templates connect', hint: 'Accounts, posts, comments' },
   { to: '/marketing/automations', label: 'Marketing Automations', short: 'Automations', icon: Workflow, group: 'marketing', keywords: 'trigger rule automation agent', hint: 'Triggers and agents' },
   { to: '/marketing/analytics', label: 'Marketing Analytics', short: 'Analytics', icon: ChartNoAxesCombined, group: 'marketing', keywords: 'roi results attribution performance', hint: 'What it earned' },
+  { to: '/purchase-enquiries', label: 'Purchase Enquiries', short: 'Enquiries', icon: FileQuestion, group: 'buying', keywords: 'rfq quote price request supplier offer enquiry', hint: 'Suppliers asked and their offers' },
   { to: '/purchase-orders', label: 'Purchase Orders', short: 'Purchases', icon: ClipboardList, group: 'buying', keywords: 'po buy', hint: 'What you ordered' },
   { to: '/receipts', label: 'Goods Receipts', short: 'Receipts', icon: PackageOpen, group: 'buying', keywords: 'grn arrival receive', hint: 'Goods that arrived' },
   { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', icon: Building2, group: 'buying', keywords: 'vendor', hint: 'Who you buy from' },

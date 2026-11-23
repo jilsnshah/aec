@@ -16,7 +16,28 @@ from . import triggers, email_inbox, groups, marketing_rules, tally_sync
 
 logger = logging.getLogger(__name__)
 
-JOBS: List[Callable[[], int]] = [email_inbox.poll_once, tally_sync.process_due, tally_sync.refresh_statutory, groups.recompute_if_due, triggers.tick, marketing_rules.tick]
+def _paused() -> bool:
+    """Settings -> Controls -> 'Automation paused': nothing acts on its own."""
+    from . import inbound, integration_settings
+
+    session = inbound.session_factory()
+    try:
+        return integration_settings.automation_paused(session)
+    finally:
+        session.close()
+
+
+def _unless_paused(job: Callable[[], int]) -> Callable[[], int]:
+    def run() -> int:
+        return 0 if _paused() else job()
+
+    run.__qualname__ = job.__qualname__
+    return run
+
+
+#: Bookkeeping always runs; automation (agents, triggers, marketing) only when not paused.
+JOBS: List[Callable[[], int]] = [email_inbox.poll_once, tally_sync.process_due, tally_sync.refresh_statutory, groups.recompute_if_due,
+                                 _unless_paused(triggers.tick), _unless_paused(marketing_rules.tick)]
 
 
 class Poller:

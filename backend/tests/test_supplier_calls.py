@@ -1,5 +1,5 @@
-"""The purchasing agent on the phone: asks suppliers for prices, records the
-quotes, orders on the call within limits, and confirms placed orders."""
+"""The purchasing agent on the phone: sends the purchase enquiry by calling,
+records each supplier's offer, and never orders -- the offer is picked after."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from app.models import PurchaseOrder, PurchaseOrderStatus, SupplierQuote, SupplierQuoteRequest, Task
+from app.models import PurchaseOrder, SupplierQuote, SupplierQuoteRequest
 from app.services import outbox, supplier_calls
 from app.voice.tools import CallTools
 
@@ -37,12 +37,14 @@ def _rfq(client, db, make_product, make_supplier, make_customer, order_for, last
     client.post("/api/goods-receipts", json={"purchase_order_id": po["id"], "lines": [{"purchase_order_item_id": po["items"][0]["id"], "quantity": "1"}]})
     db.expire_all()
     order_for(make_customer("Builder"), cement, 30)
-    set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY, "quantity": {"method": "up_to_reorder", "round_to_purchase_unit": False}})
+    set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY})
+    set_step(client, "purchase", "purchase.choose_supplier", {"quantity": {"method": "up_to_reorder", "round_to_purchase_unit": False},
+                                                              "suppliers": {"who": "preferred"}})
     return mill, cement
 
 
 def _ask_by(client, how, **extra):
-    set_step(client, "purchase", "purchase.ask_supplier", {**WINDOW, "wait_hours": 6, "who": "preferred", "how": how, **extra}, actors=["tai", "pai"], mode="auto")
+    set_step(client, "purchase", "purchase.ask_supplier", {**WINDOW, "wait_hours": 6, "how": how, **extra}, actors=["tai", "pai"], mode="auto")
 
 
 def _tools(session_factory, quote_id):
@@ -64,43 +66,28 @@ def test_agent_calls_instead_of_texting_and_records_the_quote(client, db, sessio
     brief = supplier_calls.quote_brief(db, quote.id)
     assert "1. Cement" in brief and "last price was Rs 330" in brief
     out = _tools(session_factory, quote.id).run("record_quote", {"lines": [{"item": 1, "price": 345}], "delivery_days": 2, "freight": 0, "gst_included": False})
-    assert out["recorded"] and out["can_order"] is False and "off" in out["why_not"]
+    assert out["recorded"] and "can_order" not in out
     db.expire_all()
     quote = db.get(SupplierQuote, quote.id)
     assert quote.status == "replied" and quote.channel == "call" and quote.lines[0].price == Decimal("345") and quote.delivery_days == 2
 
 
-def test_agent_orders_on_the_call_within_limits(client, db, session_factory, phone, make_product, make_supplier, make_customer, order_for):
+def test_agent_never_orders_on_the_call(client, db, session_factory, phone, make_product, make_supplier, make_customer, order_for):
     _rfq(client, db, make_product, make_supplier, make_customer, order_for)
-    _ask_by(client, "call", order_on_call=True)
-    set_step(client, "purchase", "purchase.approve_po", mode="auto")
+    _ask_by(client, "call")
+    set_step(client, "purchase", "purchase.compare_quotes", mode="approval", limits=[])
     client.post("/api/automation/run/purchase")
     supplier_calls.run_quote_calls(db)
     quote = db.execute(select(SupplierQuote)).scalars().one()
     tools = _tools(session_factory, quote.id)
-    assert tools.run("record_quote", {"lines": [{"item": 1, "price": 340}], "delivery_days": 3})["can_order"] is True
-    when = (datetime.now(timezone.utc) + timedelta(days=3)).date().isoformat()
-    done = tools.run("order_now", {"delivery_date": when})
-    assert done["ordered"] and done["po_number"].startswith("PO")
+    tools.run("record_quote", {"lines": [{"item": 1, "price": 345}], "delivery_days": 3})  # higher than last time: still only an offer
+    assert "order_now" not in {d.name for d in __import__("app.voice.tools", fromlist=["x"]).SUPPLIER_QUOTE_DECLARATIONS}
+    db.expire_all()
+    supplier_calls.quote_call_ended(db, quote.id, "")
     db.expire_all()
     rfq = db.execute(select(SupplierQuoteRequest)).scalars().one()
-    po = db.get(PurchaseOrder, rfq.purchase_order_id)
-    assert rfq.status == "ordered" and po.status != PurchaseOrderStatus.DRAFT and po.confirm_status == "confirmed"
-    assert po.expected_delivery_date.date().isoformat() == when and po.items[0].unit_cost == Decimal("340")
-
-
-def test_agent_does_not_order_above_the_price_rule(client, db, session_factory, phone, make_product, make_supplier, make_customer, order_for):
-    _rfq(client, db, make_product, make_supplier, make_customer, order_for)
-    _ask_by(client, "call", order_on_call=True)
-    set_step(client, "purchase", "purchase.approve_po", mode="auto")
-    client.post("/api/automation/run/purchase")
-    supplier_calls.run_quote_calls(db)
-    quote = db.execute(select(SupplierQuote)).scalars().one()
-    tools = _tools(session_factory, quote.id)
-    out = tools.run("record_quote", {"lines": [{"item": 1, "price": 400}]})  # 21% above 330
-    assert out["can_order"] is False and "above the last price" in out["why_not"]
-    assert tools.run("order_now", {})["ordered"] is False
-    assert db.execute(select(PurchaseOrder).where(PurchaseOrder.notes.like("%phone%"))).first() is None
+    assert rfq.status == "to_choose" and db.execute(select(PurchaseOrder).where(PurchaseOrder.enquiry_id == rfq.id)).first() is None
+    assert db.get(SupplierQuote, quote.id).lines[0].price == Decimal("345")
 
 
 def test_unanswered_calls_retry_then_stop(client, db, phone, make_product, make_supplier, make_customer, order_for):
@@ -136,40 +123,6 @@ def test_text_first_then_call(client, db, phone, make_product, make_supplier, ma
     db.commit()
     supplier_calls.run_quote_calls(db)
     assert len(phone) == 1
-
-
-def test_confirmation_call_for_a_placed_order(client, db, session_factory, phone, make_product, make_supplier):
-    mill = make_supplier("Mill A", phone="9000000011")
-    cement = make_product("Cement", opening_stock=0, mrp="400")
-    set_step(client, "purchase", "purchase.send_po", {"confirm_by_call": True}, actors=["system", "pai"], mode="auto")
-    set_step(client, "purchase", "purchase.ask_supplier", WINDOW, actors=["tai", "pai"], mode="auto")
-    po = client.post("/api/purchase-orders", json={"supplier_id": str(mill.id), "confirm": True,
-                                                   "items": [{"product_id": str(cement.id), "quantity_ordered": "100", "unit_cost": "340"}]}).json()
-    db.expire_all()
-    assert db.get(PurchaseOrder, po["id"]).confirm_status == "to_call"
-    supplier_calls.run_order_calls(db)
-    assert phone[-1][1] == "supplier_order"
-    assert "100" in supplier_calls.order_brief(db, db.get(PurchaseOrder, po["id"]).id)
-    tools = CallTools(session_factory, "+919000000011")
-    tools.po_id = db.get(PurchaseOrder, po["id"]).id
-    when = (datetime.now(timezone.utc) + timedelta(days=2)).date().isoformat()
-    assert tools.run("confirm_order", {"dispatch_date": when})["ok"]
-    db.expire_all()
-    row = db.get(PurchaseOrder, po["id"])
-    assert row.confirm_status == "confirmed" and row.expected_delivery_date.date().isoformat() == when
-
-
-def test_supplier_cannot_supply_creates_a_follow_up(client, db, session_factory, phone, make_product, make_supplier):
-    mill = make_supplier("Mill A", phone="9000000011")
-    cement = make_product("Cement", opening_stock=0, mrp="400")
-    po = client.post("/api/purchase-orders", json={"supplier_id": str(mill.id), "confirm": True,
-                                                   "items": [{"product_id": str(cement.id), "quantity_ordered": "100", "unit_cost": "340"}]}).json()
-    db.expire_all()
-    tools = CallTools(session_factory, "+919000000011")
-    tools.po_id = db.get(PurchaseOrder, po["id"]).id
-    tools.run("cannot_supply", {"reason": "plant shut this week"})
-    task = db.execute(select(Task)).scalars().one()
-    assert "cannot supply" in task.title and str(getattr(task.priority, "value", task.priority)) == "HIGH"
 
 
 def test_agents_catalogue_and_steps(client):

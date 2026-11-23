@@ -19,6 +19,7 @@ const Transporters = lazy(() => import('@/features/transport/Transporters').then
 const Integrations = lazy(() => import('@/features/integrations/Integrations').then((module) => ({ default: module.Integrations })))
 const Orders = lazy(() => import('@/features/orders/Orders').then((module) => ({ default: module.Orders })))
 const Products = lazy(() => import('@/features/products/Products').then((module) => ({ default: module.Products })))
+const PurchaseEnquiries = lazy(() => import('@/features/purchasing/PurchaseEnquiries').then((module) => ({ default: module.PurchaseEnquiries })))
 const PurchaseOrders = lazy(() => import('@/features/purchasing/PurchaseOrders').then((module) => ({ default: module.PurchaseOrders })))
 const Receipts = lazy(() => import('@/features/receipts/Receipts').then((module) => ({ default: module.Receipts })))
 const CustomerGroups = lazy(() => import('@/features/pricing/CustomerGroups').then((module) => ({ default: module.CustomerGroups })))
@@ -44,6 +45,7 @@ export function App() {
           <Route path="enquiries/:id?" element={<Enquiries />} />
           <Route path="orders/:id?" element={<Orders />} />
           <Route path="customers/:id?" element={<Customers />} />
+          <Route path="purchase-enquiries/:id?" element={<PurchaseEnquiries />} />
           <Route path="purchase-orders/:id?" element={<PurchaseOrders />} />
           <Route path="receipts/:id?" element={<Receipts />} />
           <Route path="suppliers/:id?" element={<Suppliers />} />

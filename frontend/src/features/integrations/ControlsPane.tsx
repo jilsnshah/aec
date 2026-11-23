@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BadgePercent, Ban, CalendarClock, History, ShieldCheck, TrendingDown, Wallet } from 'lucide-react'
+import { BadgePercent, Ban, CalendarClock, History, PauseCircle, ShieldCheck, TrendingDown, Wallet } from 'lucide-react'
 import { api } from '@/api/endpoints'
 import { useAction } from '@/api/queries'
 import { controlsApi } from '@/api/records'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn'
 import { fmtDateTime } from '@/lib/format'
 import { Badge, Button, Empty, Spinner, Toggle } from '@/ui/core'
 
-type Config = { credit_check: 'off' | 'warn' | 'block'; block_on_overdue: boolean; overdue_grace_days: number; max_discount_percent: number; min_margin_percent: number; block_below_cost: boolean }
+type Config = { credit_check: 'off' | 'warn' | 'block'; block_on_overdue: boolean; overdue_grace_days: number; max_discount_percent: number; min_margin_percent: number; block_below_cost: boolean; automation_paused: boolean }
 
 /** Business rules checked whenever an order is placed (credit, discount,
  *  margin), and who may approve exceptions. */
@@ -36,6 +36,9 @@ export function ControlsPane({ data }: { data: IntegrationsOut }) {
         </div>
       </header>
       <div className="max-w-[760px] space-y-4 p-6 pb-24">
+        <Rule icon={<PauseCircle size={16} />} title="Automation paused" body="While on, nothing acts on its own: no purchase, sales or marketing automation, no agents, no AI messages or calls. Everything is recorded by hand. Tally sync keeps running.">
+          <Toggle checked={Boolean(config.automation_paused)} onChange={(v) => set('automation_paused', v)} label="Automation paused" />
+        </Rule>
         <Rule icon={<Wallet size={16} />} title="Credit limit" body="Owed now + orders not yet delivered + this order, against the customer's credit limit (set on the customer).">
           <div className="flex gap-1.5">
             {(['off', 'warn', 'block'] as const).map((mode) => (

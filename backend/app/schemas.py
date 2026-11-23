@@ -1365,6 +1365,8 @@ class IntegrationsOut(BaseModel):
     providers: List[str] = []
     #: settings (a key saved in Settings), server (environment), or None.
     ai_credential_source: Optional[str] = None
+    #: Whether a Sarvam key is available (saved here or on the voice server). Never the key.
+    sarvam_ready: bool = False
 
 
 class IntegrationUpdate(BaseModel):

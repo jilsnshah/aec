@@ -44,8 +44,8 @@ AGENTS: Dict[str, Dict[str, Any]] = {
     },
     "purchasing": {
         "label": "Purchasing agent", "default_name": "Ravi",
-        "job": "Asks suppliers for prices, records their quotes, negotiates towards the last price paid, places the order when within limits, confirms POs and chases deliveries.",
-        "steps": ["purchase.ask_supplier", "purchase.read_reply", "purchase.send_po", "purchase.chase_delivery"],
+        "job": "Sends purchase enquiries to the chosen suppliers by WhatsApp or a call, records each offer (asking for the last price paid when it is higher), and chases deliveries. It never places orders.",
+        "steps": ["purchase.ask_supplier", "purchase.chase_delivery"],
         "mediums": ["text", "phone"],
     },
     "logistics": {

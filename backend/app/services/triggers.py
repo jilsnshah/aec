@@ -190,7 +190,8 @@ def purchase_needs(session: Session, cfg: Dict[str, Any], now: Optional[datetime
     from .common import pending_quantity_map
 
     now = now or _now()
-    rules, scope, qty_cfg = cfg["rules"], cfg["scope"], cfg["quantity"]
+    rules, scope = cfg["rules"], cfg["scope"]
+    qty_cfg = automation.step(session, "purchase.choose_supplier")["config"]["quantity"]
     stmt = select(Product).where(Product.is_active.is_(True))
     if scope.get("categories"):
         stmt = stmt.where(Product.category.in_(scope["categories"]))
@@ -296,29 +297,21 @@ def run_purchase(session: Session, force: bool = False) -> Dict[str, Any]:
         task = tasks.create_task(session, "Buy {} product{}".format(len(needs), "s" if len(needs) > 1 else ""), notes=lines, priority="HIGH",
                                  source="automation")
         return {"needs": len(needs), "task": str(task.id)}
-    if then == "draft_po":
-        from . import purchasing
-
-        by_supplier: Dict[Any, List[Dict[str, Any]]] = {}
-        for need in needs:
-            if need["supplier_id"]:
-                by_supplier.setdefault(need["supplier_id"], []).append(need)
-        session.commit()
-        made = []
-        for supplier_id, group in by_supplier.items():
-            po = purchasing.create_purchase_order(session, supplier_id, [{"product_id": n["product"].id, "quantity_ordered": str(n["quantity"]),
-                                                                          "unit_cost": str(n["product"].last_purchase_price or 0)} for n in group],
-                                                  notes="Drafted by automation: " + "; ".join(n["why"] for n in group))
-            made.append(po.po_number)
-        return {"needs": len(needs), "drafts": made}
-    rfq = SupplierQuoteRequest(number=next_document_number(session, "rfq", "RFQ"), status="open", reason=needs[0]["rule"], created_by="system",
+    rfq = SupplierQuoteRequest(number=next_document_number(session, "rfq", "PE"), status="open", reason=needs[0]["rule"], created_by="system",
                                notes="; ".join("{}: {}".format(n["product"].name, n["why"]) for n in needs))
     for need in needs:
         rfq.lines.append(SupplierQuoteRequestLine(product_id=need["product"].id, quantity=need["quantity"], why=need["why"][:120]))
     session.add(rfq)
     session.commit()
+    plan = plan_enquiry(session, rfq.id)
+    if automation.step(session, "purchase.choose_supplier").get("mode") == "approval":
+        rfq.status = "draft"
+        session.commit()
+        event(session, "purchase.choose_supplier", "draft", "held", "{}: {} supplier{} chosen; a person checks the enquiry before it goes out.".format(
+            rfq.number, plan["suppliers"], "" if plan["suppliers"] == 1 else "s"), subject=("rfq", rfq.id))
+        return {"needs": len(needs), "rfq": rfq.number, "draft": True, **plan}
     result = ask_suppliers(session, rfq.id)
-    return {"needs": len(needs), "rfq": rfq.number, **result}
+    return {"needs": len(needs), "rfq": rfq.number, **plan, **result}
 
 
 # ---------------------------------------------------------------------------
@@ -354,9 +347,12 @@ def _candidates(session: Session, product: Product, who: str, how_many: int) -> 
     return found if who == "all_category" else found[:max(1, int(how_many))]
 
 
+def _choose_cfg(session: Session) -> Dict[str, Any]:
+    return automation.step(session, "purchase.choose_supplier")["config"]["suppliers"]
+
+
 def _lines_for(session: Session, rfq: SupplierQuoteRequest, supplier: Supplier) -> List[SupplierQuoteRequestLine]:
-    data = automation.step(session, "purchase.ask_supplier")
-    cfg = data["config"]
+    cfg = _choose_cfg(session)
     return [line for line in rfq.lines if any(s.id == supplier.id for s, _ in _candidates(session, line.product, cfg["who"], cfg["how_many"]))]
 
 
@@ -375,13 +371,13 @@ def request_text(session: Session, rfq: SupplierQuoteRequest, supplier: Supplier
                             fallback, must_keep=[rfq.number])
 
 
-def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
-    """Choose whom to ask for each line, and ask them (or buy on a running contract)."""
+def plan_enquiry(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
+    """The 'Choose suppliers' step: whom to ask for each line. Lines on a running
+    rate contract get the contract's price as an offer and are not asked."""
     from . import rate_contracts
 
     rfq = session.get(SupplierQuoteRequest, rfq_id)
-    data = automation.step(session, "purchase.ask_supplier")
-    cfg = data["config"]
+    cfg = _choose_cfg(session)
     contract_lines = []
     if cfg.get("use_contract"):
         for line in list(rfq.lines):
@@ -389,9 +385,8 @@ def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
             hit = rate_contracts.supplier_rate(session, supplier.id, line.product_id, line.quantity) if supplier else None
             if hit is not None:
                 contract_lines.append((line, supplier, hit))
-    asked = 0
-    wanted: Dict[uuid.UUID, Tuple[Supplier, str]] = {}
     contract_ids = {line.id for line, _, _ in contract_lines}
+    wanted: Dict[uuid.UUID, Tuple[Supplier, str]] = {}
     for line in rfq.lines:
         if line.id in contract_ids:
             continue
@@ -403,33 +398,62 @@ def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
         quote.lines.append(SupplierQuoteLine(product_id=line.product_id, price=rate))
         if quote not in rfq.quotes:
             rfq.quotes.append(quote)
-    rfq.reply_by = _now() + timedelta(hours=float(cfg.get("wait_hours") or 6))
     for supplier, why in wanted.values():
-        quote = SupplierQuote(supplier_id=supplier.id, status="to_ask", source=why)
-        rfq.quotes.append(quote)
-    session.flush()
+        if all(q.supplier_id != supplier.id for q in rfq.quotes):
+            rfq.quotes.append(SupplierQuote(supplier_id=supplier.id, status="to_ask", source=why))
+    session.commit()
+    event(session, "purchase.choose_supplier", "chosen", "done", "{}: asking {}{}".format(
+        rfq.number, ", ".join(s.name for s, _ in wanted.values()) or "nobody",
+        "; {} line{} on a rate contract".format(len(contract_lines), "" if len(contract_lines) == 1 else "s") if contract_lines else ""),
+        subject=("rfq", rfq.id))
+    return {"suppliers": len(wanted), "contract_lines": len(contract_lines)}
+
+
+def ask_suppliers(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
+    """The 'Purchase enquiry' step: send the enquiry to every chosen supplier not yet asked."""
+    rfq = session.get(SupplierQuoteRequest, rfq_id)
+    if rfq is None or rfq.status != "open":
+        return {"asked": 0}
+    data = automation.step(session, "purchase.ask_supplier")
+    cfg = data["config"]
+    if not rfq.quotes:
+        plan_enquiry(session, rfq.id)
+        session.refresh(rfq)
+    if rfq.reply_by is None:
+        rfq.reply_by = _now() + timedelta(hours=float(cfg.get("wait_hours") or 6))
+    asked = 0
     window_ok = in_window(cfg)
     from . import supplier_calls
 
     by_phone = (cfg.get("how") == "call") and supplier_calls.calls_on(data)
     for quote in rfq.quotes:
-        if quote.status != "to_ask":
+        if quote.status != "to_ask" or data.get("mode") == "off":
             continue
         if not window_ok:
             continue  # asked on the next tick inside working hours
         if by_phone and quote.supplier.phone:
             continue  # the purchasing agent rings them (supplier_calls.run_quote_calls)
         status, channel = _send(session, data, quote.supplier.phone, quote.supplier.email, request_text(session, rfq, quote.supplier),
-                                subject="Request for quotation {}".format(rfq.number))
+                                subject="Purchase enquiry {}".format(rfq.number))
         if status in ("sent", "held"):
             quote.status, quote.channel, quote.asked_at = "asked", channel, _now()
             asked += 1
         event(session, "purchase.ask_supplier", "rfq", status, "{} asked for {}".format(quote.supplier.name, rfq.number),
               party=("supplier", quote.supplier_id), subject=("rfq", rfq.id))
     session.commit()
-    if all(q.status == "replied" for q in rfq.quotes) and rfq.quotes:
+    if rfq.quotes and all(q.status in ("replied", "declined") for q in rfq.quotes):
         decide(session, rfq.id)
-    return {"asked": asked, "contract_lines": len(contract_lines)}
+    return {"asked": asked, "contract_lines": sum(1 for q in rfq.quotes if q.source == "rate contract")}
+
+
+def release_draft(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
+    """A person checked the draft enquiry: send it."""
+    rfq = session.get(SupplierQuoteRequest, rfq_id)
+    if rfq is None or rfq.status != "draft":
+        return {"asked": 0}
+    rfq.status = "open"
+    session.commit()
+    return ask_suppliers(session, rfq.id)
 
 
 PRICE = re.compile(r"(?:rs\.?|₹|inr|@)?\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:/-|rs|rupees|per|/)?", re.I)
@@ -471,8 +495,8 @@ def parse_supplier_reply(text: str, products: List[Product]) -> Dict[str, Any]:
 
 
 def _ai_supplier_reply(session: Session, quote: SupplierQuote, text: str) -> Optional[str]:
-    """The purchasing agent reads the reply with AI: records the quote, asks
-    back for what is missing, orders straight away when allowed. None when
+    """The purchasing agent reads the reply with AI: records the offer and asks
+    back for what is missing. It never orders. None when
     AI is not available (the word-matching reader is used instead)."""
     from . import agent_text, supplier_calls
 
@@ -496,10 +520,7 @@ def _ai_supplier_reply(session: Session, quote: SupplierQuote, text: str) -> Opt
         supplier_calls.cannot_quote(session, quote.id, text[:300])
         return "rfq_reply"
     if read["lines"]:
-        result = supplier_calls.record_quote(session, quote.id, {**read, "notes": "; ".join(read.get("missing") or [])}, channel="whatsapp")
-        if result.get("can_order"):
-            supplier_calls.order_now(session, quote.id, {}, channel="whatsapp")
-            return "rfq_reply"
+        supplier_calls.record_quote(session, quote.id, {**read, "notes": "; ".join(read.get("missing") or [])}, channel="whatsapp")
     elif quote.status == "replied":
         # Only new terms for a quote we have: keep the prices, update the rest.
         if read.get("delivery_days") is not None:
@@ -514,10 +535,10 @@ def _ai_supplier_reply(session: Session, quote: SupplierQuote, text: str) -> Opt
     if ask_back and (read["kind"] in ("question", "other") or read.get("missing")):
         status, _ = _send(session, data, supplier.phone, supplier.email, ask_back)
         waiting = status in ("sent", "held")
-        event(session, "purchase.read_reply", "asked_back", status, "Asked {}: {}".format(supplier.name, ask_back[:200]),
+        event(session, "purchase.ask_supplier", "asked_back", status, "Asked {}: {}".format(supplier.name, ask_back[:200]),
               party=("supplier", supplier.id), subject=("rfq", rfq.id))
     elif not read["lines"] and quote.status != "replied":
-        event(session, "purchase.read_reply", "unclear", "held", "{} replied on {} but no price was given; a person should read it.".format(supplier.name, rfq.number),
+        event(session, "purchase.ask_supplier", "unclear", "held", "{} replied on {} but no price was given; a person should read it.".format(supplier.name, rfq.number),
               party=("supplier", supplier.id), subject=("rfq", rfq.id), detail={"reply": text[:500]})
     session.commit()
     compare_cfg = automation.step(session, "purchase.compare_quotes")["config"]
@@ -558,7 +579,7 @@ def on_supplier_message(session: Session, supplier: Supplier, text: str) -> Opti
         quote.replied_at = _now()
         if parsed.get("declined"):
             quote.status = "declined"
-            event(session, "purchase.read_reply", "declined", "replied", "{} cannot supply ({})".format(supplier.name, rfq.number),
+            event(session, "purchase.ask_supplier", "declined", "replied", "{} cannot supply ({})".format(supplier.name, rfq.number),
                   party=("supplier", supplier.id), subject=("rfq", rfq.id))
         elif parsed.get("prices"):
             for line in lines:
@@ -567,10 +588,10 @@ def on_supplier_message(session: Session, supplier: Supplier, text: str) -> Opti
                     quote.lines.append(SupplierQuoteLine(product_id=line.product_id, price=(parsed["prices"][line.product_id] / factor).quantize(Decimal("0.0001"))))
             quote.delivery_days = parsed.get("days")
             quote.status = "replied"
-            event(session, "purchase.read_reply", "quote", "replied", "{} quoted on {}".format(supplier.name, rfq.number),
+            event(session, "purchase.ask_supplier", "quote", "replied", "{} quoted on {}".format(supplier.name, rfq.number),
                   party=("supplier", supplier.id), subject=("rfq", rfq.id), detail={"reply": text[:500]})
         else:
-            event(session, "purchase.read_reply", "unclear", "held", "{} replied on {} but the price is not clear; a person should read it.".format(supplier.name, rfq.number),
+            event(session, "purchase.ask_supplier", "unclear", "held", "{} replied on {} but the price is not clear; a person should read it.".format(supplier.name, rfq.number),
                   party=("supplier", supplier.id), subject=("rfq", rfq.id), detail={"reply": text[:500]})
         session.commit()
         compare_cfg = automation.step(session, "purchase.compare_quotes")["config"]
@@ -598,16 +619,13 @@ def _supplier_score(session: Session, supplier_id: uuid.UUID) -> float:
     return float((row.get("on_time_percent") or 50) * 0.5 + (row.get("fill_rate_percent") or 50) * 0.5)
 
 
-def decide(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
-    """Pick the best offer for each line and raise purchase orders (draft or
-    placed, as the approval step allows)."""
-    from . import purchasing
+def _offer_price(session: Session, quote: SupplierQuote, line: SupplierQuoteRequestLine) -> Optional[Decimal]:
+    return next((ql.price for ql in quote.lines if ql.product_id == line.product_id), None)
 
-    rfq = session.get(SupplierQuoteRequest, rfq_id)
-    if rfq.status != "open":
-        return {"status": rfq.status}
+
+def score_offers(session: Session, rfq: SupplierQuoteRequest) -> Tuple[Dict[uuid.UUID, List[Tuple[SupplierQuoteRequestLine, Decimal]]], List[str]]:
+    """Score every offer and pick the best per line: {supplier: [(line, price)]}, notes."""
     cfg = automation.step(session, "purchase.compare_quotes")["config"]
-    approve = automation.step(session, "purchase.approve_po")
     picks: Dict[uuid.UUID, List[Tuple[SupplierQuoteRequestLine, Decimal]]] = {}
     notes = []
     for line in rfq.lines:
@@ -615,7 +633,7 @@ def decide(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
         for quote in rfq.quotes:
             if quote.status != "replied":
                 continue
-            price = next((ql.price for ql in quote.lines if ql.product_id == line.product_id), None)
+            price = _offer_price(session, quote, line)
             if price is None:
                 continue
             last = _last_paid(session, line.product_id)
@@ -643,44 +661,99 @@ def decide(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
                 best, best_score = (quote, price), score
         picks.setdefault(best[0].supplier_id, []).append((line, best[1]))
         notes.append("{}: {} at {} per {}".format(line.product.name, best[0].supplier.name, best[1], line.product.unit_of_measure))
+    return picks, notes
+
+
+def _facts(session: Session, supplier_id: uuid.UUID, lines: List[Tuple[SupplierQuoteRequestLine, Decimal]]) -> Dict[str, Any]:
+    value = sum((line.quantity * price for line, price in lines), ZERO)
+    changes = []
+    for line, price in lines:
+        last = _last_paid(session, line.product_id)
+        if last:
+            changes.append(float((price - last) / last * 100))
+    return {"po_value": float(value), "price_change_percent": max(changes) if changes else 0,
+            "supplier_score": _supplier_score(session, supplier_id)}
+
+
+def order_offers(session: Session, rfq: SupplierQuoteRequest, picks: Dict[uuid.UUID, List[Tuple[SupplierQuoteRequestLine, Decimal]]],
+                 who: str = "system") -> List[str]:
+    """Turn the chosen offers into placed purchase orders, one per supplier, and send them."""
+    from . import purchasing, tally_sync
+
+    orders = []
+    for supplier_id, lines in picks.items():
+        quote = next((q for q in rfq.quotes if q.supplier_id == supplier_id), None)
+        expected = _now() + timedelta(days=quote.delivery_days) if quote is not None and quote.delivery_days is not None else None
+        po = purchasing.create_purchase_order(session, supplier_id, [{"product_id": line.product_id, "quantity_ordered": str(line.quantity), "unit_cost": str(price)}
+                                                                     for line, price in lines],
+                                              expected_delivery_date=expected,
+                                              notes="From purchase enquiry {} ({}).".format(rfq.number, "picked automatically" if who == "system" else "picked by " + who),
+                                              confirm=True)
+        po.enquiry_id = rfq.id
+        po.confirm_status, po.confirmed_at = "confirmed", _now()
+        po.confirm_note = "Supplier's offer on {}{}.".format(rfq.number, " ({})".format(quote.reply[:200]) if quote is not None and quote.reply else "")
+        rfq.purchase_order_id = po.id
+        if quote is not None:
+            rfq.chosen_quote_id = quote.id
+        session.commit()
+        orders.append(po.po_number)
+        event(session, "purchase.compare_quotes", "ordered", "done", "{} placed with {} (Rs {:,.0f}) from {}".format(
+            po.po_number, session.get(Supplier, supplier_id).name, float(sum((l.quantity * p for l, p in lines), ZERO)), rfq.number),
+            party=("supplier", supplier_id), subject=("purchase_order", po.id))
+        for sync_id in tally_sync.queue_purchase_order(session, po):
+            tally_sync.process(sync_id)
+        send_po(session, po.id)
+    rfq.status = "ordered"
+    session.commit()
+    return orders
+
+
+def decide(session: Session, rfq_id: uuid.UUID) -> Dict[str, Any]:
+    """The 'Pick the offer' step. Within the step's limits the best offers become
+    purchase orders at once; otherwise the enquiry waits for a person to pick."""
+    rfq = session.get(SupplierQuoteRequest, rfq_id)
+    if rfq.status != "open":
+        return {"status": rfq.status}
+    step_data = automation.step(session, "purchase.compare_quotes")
+    picks, notes = score_offers(session, rfq)
     rfq.decision = "\n".join(notes)
     if not picks:
         rfq.status = "decided"
         event(session, "purchase.compare_quotes", "no_offer", "held", "{}: no acceptable offer; a person must buy.".format(rfq.number), subject=("rfq", rfq.id))
         session.commit()
         return {"orders": []}
-    rfq.status = "decided"
+    mode = step_data.get("mode")
+    broken = None
+    if mode == "limits":
+        for supplier_id, lines in picks.items():
+            broken = broken or automation.within_limits(step_data, _facts(session, supplier_id, lines))
+    if mode == "auto" or (mode == "limits" and not broken):
+        return {"orders": order_offers(session, rfq, picks)}
+    rfq.status = "to_choose"
     session.commit()
-    orders = []
-    for supplier_id, lines in picks.items():
-        value = sum((line.quantity * price for line, price in lines), ZERO)
-        changes = []
-        for line, price in lines:
-            last = _last_paid(session, line.product_id)
-            if last:
-                changes.append(float((price - last) / last * 100))
-        facts = {"po_value": float(value), "price_change_percent": max(changes) if changes else 0}
-        broken = automation.within_limits(approve, facts) if approve.get("mode") == "limits" else None
-        place = approve.get("mode") == "auto" or (approve.get("mode") == "limits" and not broken)
-        po = purchasing.create_purchase_order(session, supplier_id, [{"product_id": line.product_id, "quantity_ordered": str(line.quantity), "unit_cost": str(price)}
-                                                                     for line, price in lines],
-                                              notes="From {} ({}).".format(rfq.number, "placed automatically" if place else "needs approval: " + (broken or "approval required")),
-                                              confirm=place)
-        orders.append(po.po_number)
-        rfq.purchase_order_id = po.id
-        event(session, "purchase.approve_po", "placed" if place else "approval", "done" if place else "held",
-              "{} {} for {} (Rs {:,.0f}){}".format(po.po_number, "placed" if place else "drafted", session.get(Supplier, supplier_id).name, float(value),
-                                                  "" if place else ": " + (broken or "needs approval")),
-              party=("supplier", supplier_id), subject=("purchase_order", po.id))
-        if place:
-            from . import tally_sync
+    event(session, "purchase.compare_quotes", "to_choose", "held", "{}: offers are in; pick one to order{}.".format(
+        rfq.number, " ({})".format(broken) if broken else ""), subject=("rfq", rfq.id))
+    return {"orders": [], "to_choose": True}
 
-            for sync_id in tally_sync.queue_purchase_order(session, po):
-                tally_sync.process(sync_id)
-            send_po(session, po.id)
-    rfq.status = "ordered"
-    session.commit()
-    return {"orders": orders}
+
+def order_from(session: Session, rfq_id: uuid.UUID, supplier_id: Optional[uuid.UUID] = None, who: str = "person") -> Dict[str, Any]:
+    """A person picks: one supplier's offer for everything they priced, or the
+    recommended offers (supplier_id None). The purchase order is created now."""
+    rfq = session.get(SupplierQuoteRequest, rfq_id)
+    if rfq is None or rfq.status not in ("open", "to_choose", "decided"):
+        return {"orders": [], "error": "This enquiry is {}.".format(rfq.status if rfq else "missing")}
+    if supplier_id is None:
+        picks, notes = score_offers(session, rfq)
+        rfq.decision = "\n".join(notes)
+    else:
+        quote = next((q for q in rfq.quotes if q.supplier_id == supplier_id), None)
+        if quote is None or not quote.lines:
+            return {"orders": [], "error": "This supplier has not quoted."}
+        lines = [(line, _offer_price(session, quote, line)) for line in rfq.lines]
+        picks = {supplier_id: [(l, p) for l, p in lines if p is not None]}
+    if not any(picks.values()):
+        return {"orders": [], "error": "No offer to order from."}
+    return {"orders": order_offers(session, rfq, picks, who=who)}
 
 
 def tick_rfqs(session: Session) -> int:
@@ -724,11 +797,6 @@ def po_text(session: Session, po: PurchaseOrder, template: Optional[str] = None)
 
 def send_po(session: Session, po_id: uuid.UUID) -> Optional[str]:
     """The 'Send the PO to the supplier' step, when the PO is placed."""
-    from . import supplier_calls
-
-    placed_po = session.get(PurchaseOrder, po_id)
-    if placed_po is not None:
-        supplier_calls.queue_order_call(session, placed_po)
     data = automation.step(session, "purchase.send_po")
     if data.get("mode") != "auto" or data["config"].get("send_on") != "placed":
         return None

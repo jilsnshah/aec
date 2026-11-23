@@ -3650,100 +3650,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/automation/rfqs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Rfqs
-         * @description Requests for prices sent to suppliers, newest first.
-         */
-        get: operations["list_rfqs_api_automation_rfqs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/automation/rfqs/{rfq_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Rfq */
-        get: operations["get_rfq_api_automation_rfqs__rfq_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/automation/rfqs/{rfq_id}/quotes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Record Quote
-         * @description Record a supplier's offer by hand (they phoned, or the reply was unclear).
-         */
-        post: operations["record_quote_api_automation_rfqs__rfq_id__quotes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/automation/rfqs/{rfq_id}/decide": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Decide Rfq
-         * @description Compare the offers now and raise the purchase orders.
-         */
-        post: operations["decide_rfq_api_automation_rfqs__rfq_id__decide_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/automation/rfqs/{rfq_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel Rfq */
-        post: operations["cancel_rfq_api_automation_rfqs__rfq_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/automation/feedback": {
         parameters: {
             query?: never;
@@ -3758,6 +3664,181 @@ export interface paths {
         get: operations["feedback_api_automation_feedback_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Enquiries
+         * @description Purchase enquiries, newest first.
+         */
+        get: operations["list_enquiries_api_purchase_enquiries_get"];
+        put?: never;
+        /**
+         * Create Enquiry
+         * @description Start a purchase enquiry by hand.
+         */
+        post: operations["create_enquiry_api_purchase_enquiries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Enquiry */
+        get: operations["get_enquiry_api_purchase_enquiries__enquiry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Enquiry
+         * @description Send a draft enquiry to its suppliers.
+         */
+        post: operations["send_enquiry_api_purchase_enquiries__enquiry_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/suppliers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Supplier
+         * @description Ask one more supplier (on a draft, or an enquiry still waiting for offers).
+         */
+        post: operations["add_supplier_api_purchase_enquiries__enquiry_id__suppliers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/suppliers/{supplier_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Supplier */
+        delete: operations["remove_supplier_api_purchase_enquiries__enquiry_id__suppliers__supplier_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Offer
+         * @description Record a supplier's offer by hand (they phoned, or the reply was unclear).
+         */
+        post: operations["record_offer_api_purchase_enquiries__enquiry_id__offers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compare Now
+         * @description Stop waiting for offers and run 'Pick the offer' now.
+         */
+        post: operations["compare_now_api_purchase_enquiries__enquiry_id__compare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Order
+         * @description Pick the offer: the purchase order is created now and sent to the supplier.
+         */
+        post: operations["order_api_purchase_enquiries__enquiry_id__order_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/purchase-enquiries/{enquiry_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_purchase_enquiries__enquiry_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6041,6 +6122,20 @@ export interface components {
             customer_id?: string | null;
             new_customer?: components["schemas"]["CustomerCreate"] | null;
         };
+        /** EnquiryIn */
+        EnquiryIn: {
+            /** Lines */
+            lines: components["schemas"]["LineIn"][];
+            /** Supplier Ids */
+            supplier_ids?: string[];
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Send
+             * @default true
+             */
+            send: boolean;
+        };
         /** EnquiryItemOut */
         EnquiryItemOut: {
             /**
@@ -6711,6 +6806,11 @@ export interface components {
             providers: string[];
             /** Ai Credential Source */
             ai_credential_source?: string | null;
+            /**
+             * Sarvam Ready
+             * @default false
+             */
+            sarvam_ready: boolean;
         };
         /** InventorySummaryOut */
         InventorySummaryOut: {
@@ -6798,6 +6898,19 @@ export interface components {
             method: string;
             /** Note */
             note?: string | null;
+        };
+        /** LineIn */
+        LineIn: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /**
+             * Quantity
+             * @description In the product's base unit.
+             */
+            quantity: number | string;
         };
         /** LinkIn */
         LinkIn: {
@@ -6900,6 +7013,25 @@ export interface components {
             birthday?: string | null;
             /** Anniversary */
             anniversary?: string | null;
+        };
+        /** OfferIn */
+        OfferIn: {
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
+            /**
+             * Prices
+             * @description {product_id: price per base unit}
+             */
+            prices: {
+                [key: string]: unknown;
+            };
+            /** Delivery Days */
+            delivery_days?: number | null;
+            /** Note */
+            note?: string | null;
         };
         /** OrderAllocationOut */
         OrderAllocationOut: {
@@ -7073,6 +7205,11 @@ export interface components {
             total_deliverable: string;
             /** Deliveries */
             deliveries?: components["schemas"]["DeliveryHistoryRow"][];
+        };
+        /** OrderIn */
+        OrderIn: {
+            /** Supplier Id */
+            supplier_id?: string | null;
         };
         /** OrderItemOut */
         OrderItemOut: {
@@ -8446,25 +8583,6 @@ export interface components {
             /** Allocations */
             allocations?: components["schemas"]["ReceiptAllocationInput"][];
         };
-        /** QuoteIn */
-        QuoteIn: {
-            /**
-             * Supplier Id
-             * Format: uuid
-             */
-            supplier_id: string;
-            /**
-             * Prices
-             * @description {product_id: price per base unit}
-             */
-            prices: {
-                [key: string]: unknown;
-            };
-            /** Delivery Days */
-            delivery_days?: number | null;
-            /** Note */
-            note?: string | null;
-        };
         /** RateIn */
         RateIn: {
             /**
@@ -9175,6 +9293,14 @@ export interface components {
             purchase_orders?: components["schemas"]["SupplierPurchaseOrderRow"][];
             /** Goods Receipts */
             goods_receipts?: components["schemas"]["SupplierReceiptRow"][];
+        };
+        /** SupplierIn */
+        SupplierIn: {
+            /**
+             * Supplier Id
+             * Format: uuid
+             */
+            supplier_id: string;
         };
         /**
          * SupplierListRow
@@ -17155,7 +17281,27 @@ export interface operations {
             };
         };
     };
-    list_rfqs_api_automation_rfqs_get: {
+    feedback_api_automation_feedback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_enquiries_api_purchase_enquiries_get: {
         parameters: {
             query?: {
                 status?: string | null;
@@ -17186,141 +17332,48 @@ export interface operations {
             };
         };
     };
-    get_rfq_api_automation_rfqs__rfq_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rfq_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    record_quote_api_automation_rfqs__rfq_id__quotes_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rfq_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuoteIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    decide_rfq_api_automation_rfqs__rfq_id__decide_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rfq_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_rfq_api_automation_rfqs__rfq_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rfq_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    feedback_api_automation_feedback_get: {
+    create_enquiry_api_purchase_enquiries_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnquiryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enquiry_api_purchase_enquiries__enquiry_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
@@ -17330,6 +17383,245 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_enquiry_api_purchase_enquiries__enquiry_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_supplier_api_purchase_enquiries__enquiry_id__suppliers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_supplier_api_purchase_enquiries__enquiry_id__suppliers__supplier_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+                supplier_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_offer_api_purchase_enquiries__enquiry_id__offers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_now_api_purchase_enquiries__enquiry_id__compare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_api_purchase_enquiries__enquiry_id__order_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_purchase_enquiries__enquiry_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

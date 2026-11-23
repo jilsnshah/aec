@@ -1,4 +1,4 @@
-"""The trigger engine: purchase needs -> supplier quotes -> PO; chasing;
+"""The trigger engine: purchase need -> purchase enquiry -> offers -> PO; chasing;
 customer outreach; after-sales follow-up."""
 from __future__ import annotations
 
@@ -52,12 +52,15 @@ def test_need_to_quotes_to_purchase_order(client, db, sent, make_product, make_s
     client.post("/api/goods-receipts", json={"purchase_order_id": po["id"], "lines": [{"purchase_order_item_id": po["items"][0]["id"], "quantity": "1"}]})
     db.expire_all()
     order_for(make_customer("Builder"), cement, 30)  # 11 in stock: 19 short
-    set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY, "quantity": {"method": "up_to_reorder", "round_to_purchase_unit": False}})
+    set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY})
+    set_step(client, "purchase", "purchase.choose_supplier", {"quantity": {"method": "up_to_reorder", "round_to_purchase_unit": False}})
     set_step(client, "purchase", "purchase.ask_supplier", {**{k: v for k, v in ALL_DAY.items() if k != "days"}, "wait_hours": 6}, actors=["tai"], mode="auto")
     preview = client.get("/api/automation/preview/purchase").json()["items"]
     assert preview and preview[0]["product"] == "Cement" and "customers short" in preview[0]["why"]
     result = client.post("/api/automation/run/purchase").json()
-    assert result["rfq"].startswith("RFQ") and result["asked"] == 2
+    assert result["rfq"].startswith("PE") and result["asked"] == 2
+    db.expire_all()
+    assert db.execute(select(PurchaseOrder).where(PurchaseOrder.enquiry_id.isnot(None))).first() is None  # no PO before the offers
     assert {to for to, _ in sent} == {"9000000011", "9000000012"} and "Cement" in sent[0][1]
     db.expire_all()
     from app.models import Supplier
@@ -68,8 +71,67 @@ def test_need_to_quotes_to_purchase_order(client, db, sent, make_product, make_s
     rfq = db.execute(select(SupplierQuoteRequest)).scalars().one()
     assert rfq.status == "ordered"
     created = db.get(PurchaseOrder, rfq.purchase_order_id)
-    # The approval step needs a person by default: a draft PO to the best offer.
-    assert created.status.value == "DRAFT" and created.supplier_id == other.id and created.items[0].unit_cost == Decimal("338")
+    # Within the default limits (value and price rise): the best offer is ordered and sent at once.
+    assert created.status.value == "ORDERED" and created.supplier_id == other.id and created.items[0].unit_cost == Decimal("338")
+    assert created.enquiry_id == rfq.id and sent[-1][0] == "9000000012" and created.po_number in sent[-1][1]
+
+
+def _enquiry_setup(client, db, make_product, make_supplier, make_customer, order_for):
+    mill = make_supplier("Mill A", phone="9000000061")
+    other = make_supplier("Mill B", phone="9000000062")
+    cement = make_product("Cement", opening_stock=0, mrp="400")
+    client.patch("/api/products/{}".format(cement.id), json={"reorder_level": "0", "preferred_supplier_id": str(mill.id)})
+    order_for(make_customer("Builder"), cement, 20)
+    set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY})
+    set_step(client, "purchase", "purchase.choose_supplier", {"quantity": {"method": "shortage_only", "round_to_purchase_unit": False}})
+    set_step(client, "purchase", "purchase.ask_supplier", {"window_start": "00:00", "window_end": "23:59"}, actors=["tai"], mode="auto")
+    return mill, other, cement
+
+
+def test_person_picks_the_offer(client, db, sent, make_product, make_supplier, make_customer, order_for):
+    mill, other, cement = _enquiry_setup(client, db, make_product, make_supplier, make_customer, order_for)
+    set_step(client, "purchase", "purchase.compare_quotes", mode="approval", limits=[])
+    pe = client.post("/api/automation/run/purchase").json()["rfq"]
+    enquiry = client.get("/api/purchase-enquiries").json()["items"][0]
+    assert enquiry["number"] == pe and enquiry["status"] == "open" and [q["supplier"] for q in enquiry["quotes"]] == ["Mill A"]
+    # The buyer asks Mill B as well, then records Mill B's phoned-in offer by hand.
+    enquiry = client.post("/api/purchase-enquiries/{}/suppliers".format(enquiry["id"]), json={"supplier_id": str(other.id)}).json()
+    assert {q["supplier"]: q["status"] for q in enquiry["quotes"]} == {"Mill A": "asked", "Mill B": "asked"}
+    from app.models import Supplier
+
+    triggers.on_supplier_message(db, db.get(Supplier, mill.id), "Rs 340 per bag, 3 days")
+    enquiry = client.post("/api/purchase-enquiries/{}/offers".format(enquiry["id"]),
+                          json={"supplier_id": str(other.id), "prices": {str(cement.id): 350}, "delivery_days": 1}).json()
+    assert enquiry["status"] == "to_choose" and enquiry["orders"] == []
+    assert db.execute(select(PurchaseOrder)).first() is None  # still no PO: a person picks
+    # The buyer prefers the faster supplier.
+    enquiry = client.post("/api/purchase-enquiries/{}/order".format(enquiry["id"]), json={"supplier_id": str(other.id)}).json()
+    assert enquiry["status"] == "ordered" and enquiry["orders"][0]["supplier"] == "Mill B" and enquiry["orders"][0]["total"] == 7000
+    db.expire_all()
+    po = db.execute(select(PurchaseOrder)).scalars().one()
+    assert po.status.value == "ORDERED" and po.expected_delivery_date is not None and any(po.po_number in body for _, body in sent)
+
+
+def test_draft_enquiry_waits_for_a_person(client, db, sent, make_product, make_supplier, make_customer, order_for):
+    mill, other, cement = _enquiry_setup(client, db, make_product, make_supplier, make_customer, order_for)
+    set_step(client, "purchase", "purchase.choose_supplier", mode="approval")
+    result = client.post("/api/automation/run/purchase").json()
+    assert result["draft"] and sent == []
+    enquiry = client.get("/api/purchase-enquiries", params={"status": "draft"}).json()["items"][0]
+    enquiry = client.delete("/api/purchase-enquiries/{}/suppliers/{}".format(enquiry["id"], mill.id)).json()
+    enquiry = client.post("/api/purchase-enquiries/{}/suppliers".format(enquiry["id"]), json={"supplier_id": str(other.id)}).json()
+    assert [q["supplier"] for q in enquiry["quotes"]] == ["Mill B"] and sent == []
+    enquiry = client.post("/api/purchase-enquiries/{}/send".format(enquiry["id"])).json()
+    assert enquiry["status"] == "open" and [to for to, _ in sent] == ["9000000062"]
+
+
+def test_enquiry_by_hand(client, db, sent, make_product, make_supplier):
+    mill = make_supplier("Mill A", phone="9000000071")
+    cement = make_product("Cement", opening_stock=0, mrp="400")
+    set_step(client, "purchase", "purchase.ask_supplier", {"window_start": "00:00", "window_end": "23:59"}, actors=["tai"], mode="auto")
+    made = client.post("/api/purchase-enquiries", json={"lines": [{"product_id": str(cement.id), "quantity": "5"}], "supplier_ids": [str(mill.id)]})
+    assert made.status_code == 201, made.text
+    assert made.json()["status"] == "open" and [to for to, _ in sent] == ["9000000071"]
 
 
 def test_contract_skips_asking_and_send_po(client, db, sent, make_product, make_supplier):
@@ -78,7 +140,7 @@ def test_contract_skips_asking_and_send_po(client, db, sent, make_product, make_
     client.patch("/api/products/{}".format(sand.id), json={"reorder_level": "100", "preferred_supplier_id": str(mill.id)})
     client.post("/api/rate-contracts", json={"supplier_id": str(mill.id), "items": [{"product_id": str(sand.id), "rate": "45"}]})
     set_step(client, "purchase", "purchase.need_detected", {"schedule": ALL_DAY})
-    set_step(client, "purchase", "purchase.approve_po", mode="auto", limits=[])
+    set_step(client, "purchase", "purchase.compare_quotes", mode="auto", limits=[])
     set_step(client, "purchase", "purchase.send_po", mode="auto")
     result = client.post("/api/automation/run/purchase").json()
     assert result["contract_lines"] == 1 and result["asked"] == 0

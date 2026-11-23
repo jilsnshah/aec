@@ -38,6 +38,7 @@ def _all(db: Session) -> dict:
         # Where Gemini credentials come from, if anywhere. Never the credentials.
         "providers": [settings_service.PROVIDER_LABELS["gemini"]] if configured else [],
         "ai_credential_source": configured["source"] if configured else None,
+        "sarvam_ready": bool(settings_service.sarvam_key(db)),
     }
 
 

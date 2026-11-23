@@ -22,6 +22,7 @@ import { useTheme } from './theme'
 const CREATE = [
   { label: 'Sales order', to: '/orders?new=1', hint: 'O' },
   { label: 'Enquiry', to: '/enquiries?new=1', hint: 'E' },
+  { label: 'Purchase enquiry', to: '/purchase-enquiries?new=1' },
   { label: 'Purchase order', to: '/purchase-orders?new=1', hint: 'P' },
   { label: 'Goods receipt', to: '/receipts?new=1', hint: 'R' },
   { label: 'Customer', to: '/customers?new=1' },
@@ -126,7 +127,7 @@ function TopBar({ onSearch }: { onSearch: () => void }) {
               <span className="max-md:hidden">New</span> <ChevronDown size={13} className="-mr-1 opacity-60 max-md:hidden" />
             </Button>
           }
-          items={CREATE.map((item, index) => ({ label: item.label, onSelect: () => navigate(item.to), separator: index === 4 }))}
+          items={CREATE.map((item, index) => ({ label: item.label, onSelect: () => navigate(item.to), separator: index === 5 }))}
         />
         <AccountMenu />
       </div>

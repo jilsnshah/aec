@@ -33,3 +33,20 @@ backend/*.db-wal
 *.TSF
 /100000/
 .env.*
+brag-output/
+brag-output-*/
+
+# third-party video skills (install: see marketing-ad/research/VIDEO_PRODUCTION_ARCHITECTURE.md)
+.claude/skills/
+skills-lock.json
+
+# marketing film: large binaries stay local
+marketing-ad/renders/
+marketing-ad/assets/product-recordings/
+marketing-ad/assets/music/*.wav
+marketing-ad/assets/audio/
+marketing-ad/production/film/.hyperframes/
+marketing-ad/production/film/assets/
+marketing-ad/qa/contact-sheets/
+marketing-ad/production/db-backup/
+marketing-ad/db-backup/

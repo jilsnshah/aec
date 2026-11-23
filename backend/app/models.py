@@ -927,6 +927,8 @@ class PurchaseOrder(Base, TimestampMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     #: The supplier's confirmation of the order: none, to_call, calling,
     #: confirmed, declined or no_answer (voice agent), with when and how.
+    #: The purchase enquiry whose offer this order came from.
+    enquiry_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid(as_uuid=True), ForeignKey("supplier_quote_requests.id", ondelete="SET NULL"), nullable=True, index=True)
     confirm_status: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
     confirm_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     confirm_last_call_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -2460,11 +2462,13 @@ class AutomationEvent(Base):
 
 
 class SupplierQuoteRequest(Base, TimestampMixin):
-    """A request for prices sent to several suppliers (RFQ): what is needed,
-    who was asked, what they replied, and which offer was chosen."""
+    """A purchase enquiry: what is needed, which suppliers were asked, what each
+    offered, and which offer became the purchase order. Statuses: draft (a
+    person checks it before it goes out), open (suppliers asked), to_choose
+    (offers in; a person picks), ordered, decided (no acceptable offer), cancelled."""
 
     __tablename__ = "supplier_quote_requests"
-    __table_args__ = (CheckConstraint("status IN ('open', 'decided', 'ordered', 'cancelled')", name="ck_rfq_status"),)
+    __table_args__ = (CheckConstraint("status IN ('draft', 'open', 'to_choose', 'decided', 'ordered', 'cancelled')", name="ck_rfq_status"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=new_uuid)
     number: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)

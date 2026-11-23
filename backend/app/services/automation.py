@@ -97,23 +97,21 @@ LIBRARY: List[Dict[str, Any]] = [
           timing={"when": "order_placed", "choose": "cheapest", "transporter_id": "", "vehicle_type": ""}),
     _step("purchase.need_detected", "purchase", "Need detected", "trigger", ["system", "person"], "system", True,
           "Watches stock on a schedule: customers short, below the reorder point, low days of cover, or a weekly review. "
-          "Then asks suppliers for prices, drafts a PO or makes a task.", modes=("auto", "off")),
-    _step("purchase.choose_supplier", "purchase", "Choose supplier and quantity", "decide", ["system", "person"], "system", True,
-          "Cheapest reliable supplier, quantity from lead time and sales, target price from the last paid.", limits=("supplier_score",)),
-    _step("purchase.ask_supplier", "purchase", "Ask the supplier", "communicate", ["tai", "pai", "person"], "tai", True,
-          "Ask availability, price and delivery date; to two or three suppliers at once. By WhatsApp/email (text AI) or by phone "
-          "(purchasing voice AI), which can also place the order on the call.", ai=True, channels=("whatsapp", "call", "email")),
-    _step("purchase.read_reply", "purchase", "Read the reply", "communicate", ["tai", "pai", "person"], "tai", True,
-          "Record the supplier's price, quantity and date; unclear replies go to a person.", ai=True),
-    _step("purchase.compare_quotes", "purchase", "Compare and pick", "decide", ["system", "person"], "system", True,
-          "Lowest price weighed with reliability and delivery date.", limits=("supplier_score",)),
-    _step("purchase.approve_po", "purchase", "Approve", "decide", ["system", "person"], "person", True,
-          "Automatic within limits, otherwise one tap in the approvals inbox.", limits=("po_value", "price_change_percent")),
-    _step("purchase.place_po", "purchase", "Create and place the PO", "record", ["system", "person"], "person", True,
-          "The purchase order is placed and sent to Tally."),
-    _step("purchase.send_po", "purchase", "Send the PO to the supplier", "communicate", ["system", "pai"], "system", True,
-          "WhatsApp message with the PO; optionally the voice AI calls to confirm the order and the dispatch date.",
-          channels=("whatsapp", "call"), modes=("auto", "off")),
+          "Then starts a purchase enquiry, or only makes a task.", modes=("auto", "off")),
+    _step("purchase.choose_supplier", "purchase", "Choose suppliers and quantity", "decide", ["system", "person"], "system", True,
+          "How much to buy and which suppliers to ask: the usual supplier and the best past ones. Items on a running rate contract "
+          "skip the enquiry. 'Approval' keeps the enquiry as a draft for a person to check before anyone is asked.",
+          modes=("auto", "approval")),
+    _step("purchase.ask_supplier", "purchase", "Purchase enquiry", "communicate", ["tai", "pai", "person"], "tai", True,
+          "The purchasing agent sends the enquiry to every chosen supplier, by WhatsApp/email or by phone, and records each "
+          "supplier's offer: price, GST, freight, delivery days. It never places an order.", ai=True, channels=("whatsapp", "call", "email")),
+    _step("purchase.compare_quotes", "purchase", "Pick the offer", "decide", ["system", "person"], "person", True,
+          "Offers are scored on price, delivery and supplier record. The winning offer becomes the purchase order: automatically "
+          "within the limits, otherwise a person picks it in Purchase enquiries. Only then is a PO created.",
+          limits=("po_value", "price_change_percent", "supplier_score")),
+    _step("purchase.send_po", "purchase", "Send the PO", "communicate", ["system"], "system", True,
+          "The purchase order goes to the supplier on WhatsApp or email (and to Tally) as soon as it is created.",
+          channels=("whatsapp", "email"), modes=("auto", "off")),
     _step("purchase.chase_delivery", "purchase", "Chase the delivery", "communicate", ["tai", "pai", "person"], "tai", True,
           "Confirm before the due date, ask again when late, update the expected date from the reply, then a task for the buyer.",
           ai=True, channels=("whatsapp", "call")),
@@ -132,14 +130,21 @@ LIBRARY_BY_KEY = {s["key"]: s for s in LIBRARY}
 #: Steps switched off for now: transport is booked by hand (Buying → Transporters).
 #: They are hidden from the flow editor, dropped from saved flows and never run.
 PARKED = {"sales.book_transport", "purchase.book_transport"}
+#: Steps folded into others: a saved flow that still has them is read as the new step.
+RETIRED = {"purchase.read_reply": "purchase.ask_supplier", "purchase.approve_po": "purchase.compare_quotes",
+           "purchase.place_po": "purchase.compare_quotes"}
+#: Settings that moved to another step: (old step, old key) -> (new step, new key).
+MOVED_CONFIG = {("purchase.need_detected", "quantity"): ("purchase.choose_supplier", "quantity"),
+                ("purchase.ask_supplier", "who"): ("purchase.choose_supplier", "suppliers.who"),
+                ("purchase.ask_supplier", "how_many"): ("purchase.choose_supplier", "suppliers.how_many"),
+                ("purchase.ask_supplier", "use_contract"): ("purchase.choose_supplier", "suppliers.use_contract")}
 
 DEFAULT_SEQUENCE = {
     "sales": ["sales.trigger_incoming", "sales.identify", "sales.understand", "sales.check_stock", "sales.price", "sales.send_quote",
               "sales.confirm_order", "sales.order_confirmation", "sales.invoice", "sales.plan_dispatch", "sales.deliver",
               "sales.payment_reminders", "sales.payment_received", "sales.after_sales"],
-    "purchase": ["purchase.need_detected", "purchase.choose_supplier", "purchase.ask_supplier", "purchase.read_reply",
-                 "purchase.compare_quotes", "purchase.approve_po", "purchase.place_po", "purchase.send_po",
-                 "purchase.chase_delivery", "purchase.receive_goods", "purchase.allocate", "purchase.pay_supplier"],
+    "purchase": ["purchase.need_detected", "purchase.choose_supplier", "purchase.ask_supplier", "purchase.compare_quotes",
+                 "purchase.send_po", "purchase.chase_delivery", "purchase.receive_goods", "purchase.allocate", "purchase.pay_supplier"],
 }
 #: Default limits and modes where the step should start careful.
 DEFAULT_OVERRIDES: Dict[str, Dict[str, Any]] = {
@@ -148,8 +153,7 @@ DEFAULT_OVERRIDES: Dict[str, Dict[str, Any]] = {
     "sales.confirm_order": {"mode": "approval", "limits": [{"field": "customer", "op": "=", "value": "known"}, {"field": "order_value", "op": "<=", "value": 50000}]},
     "sales.order_confirmation": {"mode": "off"},
     "sales.payment_reminders": {"mode": "approval"},
-    "purchase.approve_po": {"mode": "approval", "limits": [{"field": "po_value", "op": "<=", "value": 100000}, {"field": "price_change_percent", "op": "<=", "value": 3}]},
-    "purchase.ask_supplier": {"mode": "approval"},
+    "purchase.compare_quotes": {"mode": "limits", "limits": [{"field": "po_value", "op": "<=", "value": 100000}, {"field": "price_change_percent", "op": "<=", "value": 3}]},
 }
 
 
@@ -233,9 +237,43 @@ def _validate(key: str, flow: Dict[str, Any]) -> Dict[str, Any]:
     return {"key": key, "name": "Sales" if key == "sales" else "Purchase", "nodes": clean_nodes, "edges": clean_edges}
 
 
+def _upgrade(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Carry a saved flow's settings over to the steps that replaced or took them."""
+    nodes = copy.deepcopy(nodes)
+    by_step = {(n.get("data") or {}).get("step"): n for n in nodes}
+    approve = by_step.get("purchase.approve_po")
+    pick = by_step.get("purchase.compare_quotes")
+    if approve is not None and pick is not None:
+        # Who decides, and within which limits, was the Approve step's job.
+        pick["data"]["mode"] = approve["data"].get("mode", pick["data"].get("mode"))
+        pick["data"]["limits"] = list(approve["data"].get("limits") or []) + [
+            l for l in pick["data"].get("limits") or [] if l.get("field") not in {x.get("field") for x in approve["data"].get("limits") or []}]
+        pick["data"]["actors"] = approve["data"].get("actors") or pick["data"].get("actors")
+    for (old_step, old_key), (new_step, new_key) in MOVED_CONFIG.items():
+        source, target = by_step.get(old_step), by_step.get(new_step)
+        config = (source or {}).get("data", {}).get("config") or {}
+        if source is None or target is None or old_key not in config:
+            continue
+        value = config.pop(old_key)
+        holder = target["data"].setdefault("config", {}) or {}
+        target["data"]["config"] = holder
+        *path, last = new_key.split(".")
+        for part in path:
+            holder = holder.setdefault(part, {})
+        holder.setdefault(last, value)
+    for node in nodes:
+        data = node.get("data") or {}
+        if data.get("step") == "purchase.choose_supplier" and data.get("mode") not in ("auto", "approval"):
+            data["mode"] = "auto"
+        if data.get("step") == "purchase.send_po":
+            data["actors"] = ["system"]
+    return nodes
+
+
 def _without_parked(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]):
-    """Drop parked steps, joining what came before each one to what came after."""
-    parked = {n.get("id") for n in nodes if (n.get("data") or {}).get("step") in PARKED}
+    """Drop parked and retired steps, joining what came before each one to what came after."""
+    nodes = _upgrade(nodes)
+    parked = {n.get("id") for n in nodes if (n.get("data") or {}).get("step") in PARKED or (n.get("data") or {}).get("step") in RETIRED}
     if not parked:
         return nodes, edges
     edges = list(edges)

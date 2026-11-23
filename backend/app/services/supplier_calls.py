@@ -1,14 +1,8 @@
 """The purchasing agent on the phone.
 
-It calls suppliers to ask for prices on a price request (RFQ), records each
-quote, and -- when the step allows and the offer is within the limits --
-places the order on the same call. It can also call a supplier to confirm a
-placed purchase order and the dispatch date.
-
-What it may do is decided here, not by the voice model: the model only
-reports what the supplier said (``record_quote``, ``order_now``,
-``confirm_order``...), and these functions check the step settings, the price
-rules and the PO approval limits before anything is ordered.
+It calls suppliers about a purchase enquiry and records each supplier's offer
+(``record_quote``), or that they cannot supply or want a call back. It never
+orders: the 'Pick the offer' step turns the chosen offer into the purchase order.
 """
 from __future__ import annotations
 
@@ -92,27 +86,28 @@ def quote_brief(session: Session, quote_id: uuid.UUID) -> str:
             text += " -- our last price was Rs {:,.2f} per {}".format(float(last * factor), unit)
         lines.append(text)
     needed = " Needed by {}.".format(rfq.needed_by.astimezone(triggers._zone()).strftime("%d %B")) if rfq.needed_by else ""
-    order_now = cfg.get("order_on_call")
-    return ("Price request {} to {} (contact: {}).{} Items:\n{}\n{}{}").format(
+    return ("Purchase enquiry {} to {} (contact: {}).{} Items:\n{}\n{}{}").format(
         rfq.number, quote.supplier.name, quote.supplier.contact_person or "the owner", needed, "\n".join(lines),
         "If a quote is above our last price, politely ask whether they can match it; never tell them any other supplier's price. "
         if cfg.get("negotiate") else "",
-        "After record_quote, if it says can_order is true, offer to place the order now and use order_now once they agree."
-        if order_now else "After record_quote, tell them the team will confirm the order shortly.")
+        "You only collect their offer. Never confirm or place an order: after record_quote, say we will send the purchase order once it is decided.")
 
 
 def record_quote(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None,
                  channel: str = "call") -> Dict[str, Any]:
-    """Store what the supplier quoted (on a call, or read from WhatsApp by AI).
-    Returns whether the order may be placed right away."""
+    """Store what the supplier offered (on a call, or read from WhatsApp by AI).
+
+    A later call adds to the earlier one: lines and terms not given again are
+    kept. The reply lists what is still missing -- delivery days, quantity they
+    can supply, GST, freight, how long the price holds -- so the agent asks for
+    exactly that and records again."""
     quote = session.get(SupplierQuote, quote_id)
     if quote is None:
-        return {"error": "No price request on this call."}
+        return {"error": "No purchase enquiry on this call."}
     rfq = quote.request
     items = {n: (line, factor, unit) for n, line, _, unit, factor in _items(session, rfq, quote)}
-    quote.lines.clear()
-    session.flush()
-    saved = []
+    existing = {ql.product_id: ql for ql in quote.lines}
+    given = 0
     for row in args.get("lines") or []:
         try:
             n = int(row.get("item"))
@@ -120,108 +115,78 @@ def record_quote(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], ca
             continue
         if n not in items:
             continue
-        price = _dec(row.get("price"))
-        if price is None or price <= 0:
-            continue
         line, factor, unit = items[n]
-        quote.lines.append(SupplierQuoteLine(product_id=line.product_id, price=(price / factor).quantize(Decimal("0.0001")),
-                                             quantity_available=(_dec(row.get("available_quantity")) or None) and _dec(row.get("available_quantity")) * factor))
-        saved.append("{} at Rs {} per {}".format(line.product.name, price, unit))
-    if not saved:
-        return {"error": "No usable price: give the item number and the price per unit for each item."}
+        price = _dec(row.get("price"))
+        available = _dec(row.get("available_quantity"))
+        held = existing.get(line.product_id)
+        if price is not None and price > 0:
+            if held is None:
+                held = SupplierQuoteLine(product_id=line.product_id, price=Decimal("0"))
+                quote.lines.append(held)
+                existing[line.product_id] = held
+            held.price = (price / factor).quantize(Decimal("0.0001"))
+        if held is not None and available is not None and available >= 0:
+            held.quantity_available = available * factor
+        given += 1 if held is not None else 0
+    if not existing:
+        return {"error": "No usable price yet: give the item number and the price per unit for each item."}
     days = args.get("delivery_days")
-    quote.delivery_days = int(days) if str(days or "").strip().isdigit() else quote.delivery_days
-    quote.freight = _dec(args.get("freight"))
-    quote.gst_included = bool(args["gst_included"]) if args.get("gst_included") is not None else None
+    if str(days if days is not None else "").strip().isdigit():
+        quote.delivery_days = int(days)
+    if args.get("freight") is not None and _dec(args.get("freight")) is not None:
+        quote.freight = _dec(args.get("freight"))
+    if args.get("gst_included") is not None:
+        quote.gst_included = bool(args["gst_included"])
     valid = args.get("valid_days")
-    quote.valid_until = (_now().date() + timedelta(days=int(valid))) if str(valid or "").strip().isdigit() else None
+    if str(valid if valid is not None else "").strip().isdigit():
+        quote.valid_until = _now().astimezone(triggers._zone()).date() + timedelta(days=int(valid))
+    saved, totals, checks, missing = [], [], [], []
+    for n, (line, factor, unit) in items.items():
+        held = existing.get(line.product_id)
+        if held is None:
+            missing.append("the price of item {} ({})".format(n, line.product.name))
+            continue
+        price = held.price * factor
+        qty = line.quantity / factor
+        saved.append("{} at Rs {} per {}{}".format(line.product.name, triggers._qty(price), unit, ", {} {} available".format(
+            triggers._qty(held.quantity_available / factor), unit) if held.quantity_available is not None else ""))
+        totals.append("{} {} x Rs {} = Rs {:,.0f}".format(triggers._qty(qty), unit, triggers._qty(price), float(qty * price)))
+        if held.quantity_available is None:
+            missing.append("whether they can supply all {} {} of item {} (or how many)".format(triggers._qty(qty), unit, n))
+        last = triggers._last_paid(session, line.product_id)
+        if last and not 0.6 <= float(price / (last * factor)) <= 1.5:
+            # Far from what we paid last time: most often a total heard as a unit price, or the reverse.
+            checks.append("Rs {} is far from our last price of Rs {:,.0f} per {}: ask whether Rs {} is per {} or for all {} {}".format(
+                triggers._qty(price), float(last * factor), unit, triggers._qty(price), unit, triggers._qty(qty), unit))
+    if quote.delivery_days is None:
+        missing.append("how many days to deliver")
+    if quote.gst_included is None:
+        missing.append("whether GST is extra or included")
+    if quote.freight is None:
+        missing.append("freight or delivery charge (0 if free)")
+    if quote.valid_until is None:
+        missing.append("how many days the price holds")
     quote.status, quote.replied_at, quote.channel = "replied", _now(), channel
     quote.phone_call_id = call_id or quote.phone_call_id
-    quote.reply = "{}: {}{}{}{}".format("On the call" if channel == "call" else "Read by AI from " + channel,
-        "; ".join(saved), ", delivery in {} days".format(quote.delivery_days) if quote.delivery_days is not None else "",
-        ", freight Rs {}".format(quote.freight) if quote.freight else "", ". " + str(args.get("notes")) if args.get("notes") else "")
+    quote.reply = "{}: {}{}{}{}{}{}".format(
+        "On the call" if channel == "call" else "Read by AI from " + channel, "; ".join(saved),
+        ", GST {}".format("included" if quote.gst_included else "extra") if quote.gst_included is not None else "",
+        ", delivery in {} days".format(quote.delivery_days) if quote.delivery_days is not None else "",
+        ", freight {}".format("free" if quote.freight == 0 else "Rs {}".format(quote.freight)) if quote.freight is not None else "",
+        ", price valid till {}".format(quote.valid_until.strftime("%d %b")) if quote.valid_until else "",
+        ". " + str(args.get("notes")) if args.get("notes") else "")
     session.commit()
-    triggers.event(session, "purchase.read_reply", "quote", "done", "{} quoted {} {}".format(
+    triggers.event(session, "purchase.ask_supplier", "quote", "done", "{} quoted {} {}".format(
         quote.supplier.name, rfq.number, "on the phone" if channel == "call" else "on " + channel),
                    party=("supplier", quote.supplier_id), subject=("rfq", rfq.id))
-    ok, why = can_order_now(session, quote)
-    return {"recorded": saved, "can_order": ok, "why_not": why,
-            "say": "Offer to place the order now: read back items, quantities, prices and ask for the delivery date." if ok else
-            "Thank them; the team will confirm the order shortly."}
-
-
-def can_order_now(session: Session, quote: SupplierQuote) -> Tuple[bool, Optional[str]]:
-    """May the agent order on this call? Only if the step allows it, every line
-    is priced within the price rule, and the PO would be approved automatically."""
-    cfg = _ask_step(session)["config"]
-    if not cfg.get("order_on_call"):
-        return False, "ordering straight away is off"
-    rfq = quote.request
-    if rfq.status != "open":
-        return False, "the request is already decided"
-    rule = automation.step(session, "purchase.compare_quotes")["config"]
-    approve = automation.step(session, "purchase.approve_po")
-    prices = {ql.product_id: ql.price for ql in quote.lines}
-    lines = [line for line in rfq.lines if line.product_id in prices]
-    if len(lines) < len(rfq.lines) and len({q.supplier_id for q in rfq.quotes}) > 1:
-        return False, "not every item was quoted; other suppliers may have the rest"
-    value, changes = Decimal("0"), []
-    for line in lines:
-        price = prices[line.product_id]
-        last = triggers._last_paid(session, line.product_id)
-        if last:
-            change = float((price - last) / last * 100)
-            changes.append(change)
-            if rule.get("max_over_last_percent") is not None and change > float(rule["max_over_last_percent"]):
-                return False, "{} is {:.0f}% above the last price".format(line.product.name, change)
-        value += line.quantity * price
-    if approve.get("mode") == "auto":
-        return True, None
-    if approve.get("mode") == "limits":
-        broken = automation.within_limits(approve, {"po_value": float(value), "price_change_percent": max(changes) if changes else 0})
-        return (False, broken) if broken else (True, None)
-    return False, "purchase orders need a person's approval"
-
-
-def order_now(session: Session, quote_id: uuid.UUID, args: Dict[str, Any], call_id: Optional[uuid.UUID] = None, channel: str = "call") -> Dict[str, Any]:
-    """The supplier agreed on the call: place the purchase order with this quote."""
-    from . import purchasing, tally_sync
-
-    quote = session.get(SupplierQuote, quote_id)
-    if quote is None:
-        return {"error": "No price request on this call."}
-    ok, why = can_order_now(session, quote)
-    if not ok:
-        return {"ordered": False, "say": "Do not confirm the order: the team will confirm it shortly ({}).".format(why)}
-    rfq = quote.request
-    prices = {ql.product_id: ql.price for ql in quote.lines}
-    lines = [line for line in rfq.lines if line.product_id in prices]
-    expected = None
-    when = str(args.get("delivery_date") or "").strip()
-    if when:
-        try:
-            expected = datetime.combine(date.fromisoformat(when), datetime.min.time(), tzinfo=timezone.utc)
-        except ValueError:
-            expected = None
-    if expected is None and quote.delivery_days is not None:
-        expected = _now() + timedelta(days=quote.delivery_days)
-    po = purchasing.create_purchase_order(
-        session, quote.supplier_id, [{"product_id": line.product_id, "quantity_ordered": str(line.quantity), "unit_cost": str(prices[line.product_id])} for line in lines],
-        expected_delivery_date=expected, notes="Ordered {} by the purchasing agent ({}).".format("on the phone" if channel == "call" else "on " + channel, rfq.number),
-        confirm=True)
-    po.confirm_status, po.confirmed_at = "confirmed", _now()
-    po.confirm_note = "Agreed {}{}.".format("on the call" if channel == "call" else "on " + channel, ". " + str(args.get("notes")) if args.get("notes") else "")
-    rfq.chosen_quote_id, rfq.purchase_order_id, rfq.status = quote.id, po.id, "ordered"
-    rfq.decision = "Ordered on the call from {}.".format(quote.supplier.name)
-    session.commit()
-    triggers.event(session, "purchase.place_po", "placed", "done", "{} placed {} with {}".format(
-        po.po_number, "on the phone" if channel == "call" else "on " + channel, quote.supplier.name),
-                   party=("supplier", quote.supplier_id), subject=("purchase_order", po.id))
-    for sync_id in tally_sync.queue_purchase_order(session, po):
-        tally_sync.process(sync_id)
-    triggers.send_po(session, po.id)  # the written copy on WhatsApp
-    return {"ordered": True, "po_number": po.po_number,
-            "say": "Confirm: order {} placed; we will send it on WhatsApp too. Thank them.".format(po.po_number)}
+    if checks:
+        say = "Saved so far. First check the unit: {}. If they correct it, call record_quote again with the per-unit price.".format("; ".join(checks))
+    elif missing:
+        say = "Saved so far. Still missing: {}. Ask for these one at a time, then call record_quote again with the answers.".format("; ".join(missing))
+    else:
+        say = ("The offer is complete. Read back the per-unit prices{}; then thank them and say we will send the purchase order once it is decided.").format(
+            " and, if you mention a total, use exactly: " + "; ".join(totals) if totals else "")
+    return {"recorded": saved, "missing": missing, "totals": totals, "complete": not missing and not checks, "say": say}
 
 
 def cannot_quote(session: Session, quote_id: uuid.UUID, reason: str) -> Dict[str, Any]:
@@ -231,7 +196,7 @@ def cannot_quote(session: Session, quote_id: uuid.UUID, reason: str) -> Dict[str
     quote.status, quote.replied_at, quote.channel = "declined", _now(), "call"
     quote.reply = "On the call: cannot supply. {}".format(reason or "")
     session.commit()
-    triggers.event(session, "purchase.read_reply", "declined", "done", "{} cannot supply {}".format(quote.supplier.name, quote.request.number),
+    triggers.event(session, "purchase.ask_supplier", "declined", "done", "{} cannot supply {}".format(quote.supplier.name, quote.request.number),
                    party=("supplier", quote.supplier_id), subject=("rfq", quote.request_id))
     _decide_if_complete(session, quote.request)
     return {"ok": True, "say": "Thank them and end the call."}
@@ -320,110 +285,5 @@ def run_quote_calls(session: Session) -> int:
     return placed
 
 
-# ---------------------------------------------------------------------------
-# Confirming a placed order by phone
-# ---------------------------------------------------------------------------
-
-
-def queue_order_call(session: Session, po: PurchaseOrder) -> bool:
-    """Mark a placed PO for a confirmation call, when the step asks for one."""
-    step = automation.step(session, "purchase.send_po")
-    if step.get("mode") == "off" or not step["config"].get("confirm_by_call") or not automation.allowed(step, "pai"):
-        return False
-    if po.status == PurchaseOrderStatus.DRAFT or po.confirm_status in ("confirmed", "to_call", "calling"):
-        return False
-    po.confirm_status = "to_call"
-    session.commit()
-    return True
-
-
-def order_brief(session: Session, po_id: uuid.UUID) -> str:
-    po = session.get(PurchaseOrder, po_id)
-    if po is None:
-        return ""
-    lines = []
-    for item in po.items:
-        qty, unit, factor = triggers._in_unit(session, item.product, item.quantity_ordered)
-        lines.append("{} {} {} at Rs {:,.2f} per {}".format(triggers._qty(qty), unit, item.product.name, float(item.unit_cost * factor), unit))
-    when = " We need it by {}.".format(po.expected_delivery_date.astimezone(triggers._zone()).strftime("%d %B")) if po.expected_delivery_date else ""
-    return "Purchase order {} to {}: {}.{}".format(po.po_number, po.supplier.name, "; ".join(lines), when)
-
-
-def confirm_order(session: Session, po_id: uuid.UUID, args: Dict[str, Any]) -> Dict[str, Any]:
-    po = session.get(PurchaseOrder, po_id)
-    if po is None:
-        return {"error": "No purchase order on this call."}
-    when = str(args.get("dispatch_date") or args.get("delivery_date") or "").strip()
-    if when:
-        try:
-            po.expected_delivery_date = datetime.combine(date.fromisoformat(when), datetime.min.time(), tzinfo=timezone.utc)
-        except ValueError:
-            pass
-    po.confirm_status, po.confirmed_at = "confirmed", _now()
-    po.confirm_note = "Confirmed on the call{}{}".format(" for {}".format(when) if when else "", ". " + str(args.get("notes")) if args.get("notes") else ".")
-    session.commit()
-    triggers.event(session, "purchase.send_po", "confirmed", "done", "{} confirmed by {} on the phone".format(po.po_number, po.supplier.name),
-                   party=("supplier", po.supplier_id), subject=("purchase_order", po.id))
-    return {"ok": True, "say": "Thank them and end the call."}
-
-
-def cannot_supply(session: Session, po_id: uuid.UUID, reason: str) -> Dict[str, Any]:
-    from . import tasks
-
-    po = session.get(PurchaseOrder, po_id)
-    if po is None:
-        return {"error": "No purchase order on this call."}
-    po.confirm_status, po.confirm_note = "declined", "Supplier cannot supply: {}".format(reason or "no reason given")
-    session.commit()
-    tasks.create_task(session, title="{} cannot supply {}".format(po.supplier.name, po.po_number), notes=po.confirm_note,
-                      priority="HIGH", source="automation", supplier_id=po.supplier_id, purchase_order_id=po.id)
-    triggers.event(session, "purchase.send_po", "declined", "held", po.confirm_note, party=("supplier", po.supplier_id), subject=("purchase_order", po.id))
-    return {"ok": True, "say": "Thank them; say the team will get back to them. End the call."}
-
-
-def order_call_ended(session: Session, po_id: uuid.UUID, summary: str) -> None:
-    po = session.get(PurchaseOrder, po_id)
-    if po is None or po.confirm_status != "calling":
-        return
-    po.confirm_status = "to_call"
-    po.confirm_note = ("Call: " + summary)[:2000] if summary else po.confirm_note
-    session.commit()
-
-
-def run_order_calls(session: Session) -> int:
-    step = automation.step(session, "purchase.send_po")
-    if step.get("mode") == "off" or not step["config"].get("confirm_by_call") or not automation.allowed(step, "pai"):
-        return 0
-    now = _now()
-    tries = int(_ask_step(session)["config"].get("call_tries") or 2)
-    for po in session.execute(select(PurchaseOrder).where(PurchaseOrder.confirm_status == "calling",
-                                                          PurchaseOrder.confirm_last_call_at <= now - NO_ANSWER_AFTER)).scalars():
-        po.confirm_status = "to_call"
-    session.commit()
-    if not triggers.in_window(_ask_step(session)["config"]):
-        return 0
-    placed = 0
-    for po in session.execute(select(PurchaseOrder).where(PurchaseOrder.confirm_status == "to_call")).scalars().all():
-        if placed >= CALLS_PER_TICK:
-            break
-        if po.confirm_last_call_at and now - po.confirm_last_call_at < RETRY_AFTER:
-            continue
-        if po.confirm_attempts >= tries or not po.supplier.phone:
-            po.confirm_status = "no_answer"
-            po.confirm_note = "No answer after {} calls; please confirm yourself.".format(po.confirm_attempts) if po.supplier.phone else "No phone number."
-            session.commit()
-            continue
-        po.confirm_attempts += 1
-        po.confirm_last_call_at = now
-        try:
-            _place(po.supplier.phone, "supplier_order", {"po": str(po.id)})
-            po.confirm_status = "calling"
-            placed += 1
-        except Exception as exc:
-            po.confirm_note = "Could not call: {}".format(exc)
-        session.commit()
-    return placed
-
-
 def tick(session: Session) -> Dict[str, int]:
-    return {"quote_calls": run_quote_calls(session), "order_calls": run_order_calls(session)}
+    return {"quote_calls": run_quote_calls(session)}

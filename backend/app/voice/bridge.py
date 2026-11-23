@@ -9,6 +9,7 @@ AI clears queued audio), and saves the call with its transcript.
 from __future__ import annotations
 
 import asyncio
+import re
 import audioop
 import base64
 import json
@@ -25,7 +26,7 @@ from ..config import get_settings
 from ..database import SessionLocal
 from ..models import PhoneCall
 from ..services import integration_settings as settings_service
-from .tools import (BOOKING_DECLARATIONS, CARE_DECLARATIONS, COLLECTIONS_DECLARATIONS, DECLARATIONS, FINISH_TASK, SUPPLIER_ORDER_DECLARATIONS,
+from .tools import (BOOKING_DECLARATIONS, CARE_DECLARATIONS, COLLECTIONS_DECLARATIONS, DECLARATIONS, FINISH_TASK,
                     SUPPLIER_QUOTE_DECLARATIONS, CallTools)
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ def _instructions(seller: str, brief: str, AGENT_NAME: str, knowledge: str) -> s
     return f"""What you know about the business (answer from this and the tools only):
 {knowledge or '(nothing written yet)'}
 
-You are {AGENT_NAME}, the virtual assistant of {seller}, a building materials and hardware trader in India \
+You are {AGENT_NAME}, the virtual assistant of {seller}, a trading business in India \
 (cement, steel, sand, packaging and more). If asked your name, say "{AGENT_NAME}, {seller}'s virtual assistant"; never say \
 Gemini or Google. If asked whether you are a person, say honestly that you are an AI assistant. You are on a phone call, so:
 - Keep every reply short: one or two sentences, natural spoken language, no lists, no markdown.
@@ -108,7 +109,7 @@ Ask whether they can send it, the vehicle number, the freight in rupees and the 
 
 #: Which agent handles each kind of call.
 MODE_AGENT = {"answer": "sales", "pitch": "outreach", "task": "followup", "book": "logistics",
-              "supplier_quote": "purchasing", "supplier_order": "purchasing"}
+              "supplier_quote": "purchasing"}
 
 
 def _profile(mode: str, agent: Optional[str] = None) -> Dict[str, Any]:
@@ -135,24 +136,28 @@ AGENT_TOOLS = {"collections": COLLECTIONS_DECLARATIONS, "care": CARE_DECLARATION
 
 def purchasing_instructions(seller: str, name: str, extra: str, brief: str, mode: str, today: str) -> str:
     """The purchasing agent: a buyer calling a supplier, not a salesperson."""
-    if mode == "supplier_order":
-        task = ("You are calling to CONFIRM A PURCHASE ORDER we have placed. Read it out clearly (items, quantities, prices), ask them to confirm "
-                "they will supply it and on which date they will dispatch or deliver. If they confirm, call confirm_order with the date. "
-                "If they cannot supply all or part of it, call cannot_supply with the reason.")
-    else:
-        task = ("You are calling to ASK FOR PRICES. For each numbered item ask: the rate per unit (the unit named in the request), whether GST is extra, "
-                "freight or delivery charges, how many days to deliver, how long the price holds, and whether they have the full quantity. "
-                "Read the prices back item by item. When they agree, call record_quote with the item numbers. "
-                "If they cannot supply, call cannot_quote. If they are busy or need to check, call call_back_later.")
-    return f"""You are {name}, the purchasing assistant of {seller}, a building materials and hardware trader in India. You are calling a SUPPLIER: you are the buyer, polite and businesslike. If asked whether you are a person, say honestly you are an AI assistant calling for {seller}; never say Gemini or Google.
+    task = """YOUR JOB ON THIS CALL: get the supplier's offer for the enquiry below and SAVE it with record_quote.
+Steps:
+1. Greet, say who you are and that you are calling with a purchase enquiry. Ask if it is a good time.
+2. For each numbered item, ask in this order, one question at a time, skipping anything they already told you:
+   rate per unit (the unit in the enquiry) -> GST extra or included -> delivery days -> freight -> full quantity available -> how many days the price holds.
+   If it is unclear whether a price is per unit or for the whole quantity, ask.
+3. Read the offer back once, briefly (per-unit price, GST, days).
+4. As soon as they say yes / theek hai / sahi hai to the read-back, CALL record_quote in that same turn -- before saying anything else.
+   A price higher than our last price is still an offer: record it. Then do what its "say" tells you.
+5. Thank them, say we will send the purchase order once the team decides, say goodbye, and call end_call.
+Other endings: they cannot supply -> cannot_quote. Busy or need to check -> call_back_later with the minutes they ask for.
+Never end the call after they gave a price without calling record_quote first."""
+    return f"""You are {name}, the purchasing assistant of {seller}, a trading business in India. You are calling a SUPPLIER: you are the buyer, polite and businesslike. If asked whether you are a person, say honestly you are an AI assistant calling for {seller}; never say Gemini or Google.
 On the phone:
 - Short replies, one or two sentences, natural speech, no lists. Speak their language: Gujarati, Hindi, English or a mix, as they do.
 - Say numbers clearly and repeat prices back ("three hundred and sixty five rupees a bag, plus GST?").
 - Today is {today}. Turn dates like "kal", "parso", "Monday" into a date (YYYY-MM-DD) for the tools.
 - Never reveal another supplier's price, our customers, or anything not in the request. Never agree to advance payment, credit terms or anything not in the request: say the team will confirm.
-- Only order with order_now, and only if record_quote said can_order is true; otherwise say the team will confirm the order shortly.
+- Never work out totals yourself; only say a total that record_quote gave you.
+- You do NOT place or confirm orders. You collect offers; the purchase order is sent later, once the team picks an offer. Say so if they ask.
+- Never say tool names, code or stage directions aloud (no "end_call", nothing in asterisks).
 {task}
-When done, thank them, say goodbye and call end_call.
 {extra}
 
 The request:
@@ -168,6 +173,17 @@ quick delivery from our yard, bulk prices on request). Ask about their current p
 lists. If they are interested, offer to take an enquiry so the team sends a quote. If they are busy, thank them and end politely."""
 
 
+def _text_client() -> genai.Client:
+    """Gemini for text (the chat model on Sarvam-voiced calls): the app's own region, not the Live one."""
+    settings = get_settings()
+    creds = settings_service.ai_credentials(None)
+    if settings.vertex_project:
+        return genai.Client(vertexai=True, project=settings.vertex_project, location=settings.vertex_location)
+    if creds and creds.get("api_key"):
+        return genai.Client(api_key=creds["api_key"])
+    raise RuntimeError("No Gemini credentials.")
+
+
 def _client() -> genai.Client:
     settings = get_settings()
     creds = settings_service.ai_credentials(None)
@@ -176,6 +192,14 @@ def _client() -> genai.Client:
     if creds and creds.get("api_key"):
         return genai.Client(api_key=creds["api_key"])
     raise RuntimeError("No Gemini credentials for voice.")
+
+
+def _voice_settings() -> Dict[str, Any]:
+    session = SessionLocal()
+    try:
+        return settings_service.voice_settings(session)
+    finally:
+        session.close()
 
 
 class Call:
@@ -198,7 +222,7 @@ class Call:
         self._partial[who] += text
 
     def _flush(self, who: str) -> None:
-        text = self._partial[who].strip()
+        text = re.sub(r"\*[^*]{0,80}\*", "", self._partial[who]).strip()
         if text:
             self.transcript.append({"who": who, "text": text, "at": datetime.now(timezone.utc).isoformat()})
         self._partial[who] = ""
@@ -217,7 +241,6 @@ class Call:
                 self.booking = params.get("booking")
                 self.task = params.get("task")
                 self.quote = params.get("quote")
-                self.po = params.get("po")
         self.tools = CallTools(SessionLocal, self.caller)
         if self.mode == "book" and getattr(self, "booking", None):
             import uuid as _uuid
@@ -232,8 +255,6 @@ class Call:
 
         if self.mode == "supplier_quote" and getattr(self, "quote", None):
             self.tools.quote_id = _uuid.UUID(self.quote)
-        if self.mode == "supplier_order" and getattr(self, "po", None):
-            self.tools.po_id = _uuid.UUID(self.po)
         task_brief = await asyncio.to_thread(self.tools.task_brief) if self.mode == "task" else ""
         task_agent = self.tools.task_agent if self.mode == "task" else None
         profile = await asyncio.to_thread(_profile, self.mode, task_agent)
@@ -241,10 +262,10 @@ class Call:
         own = ("\nExtra instructions from the owner: " + profile["instructions"]) if profile["instructions"] else ""
         self._open_record()
         self.tools.call_record_id = self.record_id
-        if self.mode in ("supplier_quote", "supplier_order"):
+        if self.mode == "supplier_quote":
             system = purchasing_instructions(seller, profile["name"], own, await asyncio.to_thread(self.tools.supplier_brief), self.mode,
                                              datetime.now(timezone.utc).strftime("%A %d %B %Y"))
-            declarations = SUPPLIER_QUOTE_DECLARATIONS if self.mode == "supplier_quote" else SUPPLIER_ORDER_DECLARATIONS
+            declarations = SUPPLIER_QUOTE_DECLARATIONS
         else:
             extra = PITCH if self.mode == "pitch" else ""
             if self.mode == "task":
@@ -254,6 +275,32 @@ class Call:
             system = _instructions(seller, brief, profile["name"], await asyncio.to_thread(_knowledge)) + extra + own
             declarations = BOOKING_DECLARATIONS if self.mode == "book" else DECLARATIONS + (
                 [FINISH_TASK] + AGENT_TOOLS.get(task_agent or "", []) if self.mode == "task" else [])
+        greeting = ("(You placed this call and the person just picked up. Introduce yourself and the business, then start the pitch.)"
+                        if self.mode == "pitch" else
+                        "(You placed this call to the transporter and they just picked up. Greet them and ask for the vehicle.)"
+                        if self.mode == "book" else
+                        "(You placed this follow-up call and they just picked up. Greet them and do the follow-up.)"
+                        if self.mode == "task" else
+                        "(You placed this call to the supplier and they just picked up. Greet them, say who you are and why you are calling.)"
+                        if self.mode == "supplier_quote" else "(The phone call has just connected. Greet the caller and ask how you can help.)")
+        voice = await asyncio.to_thread(_voice_settings)
+        if voice["provider"] == "sarvam" and not voice["sarvam_ready"]:
+            logger.warning("Calls are set to Sarvam but no Sarvam key is saved; using Gemini for call %s", self.call_sid)
+        if voice["provider"] == "sarvam" and voice["sarvam_ready"]:
+            from .sarvam import SarvamEngine
+
+            try:
+                await SarvamEngine(self, system, declarations, greeting, voice, profile).run()
+            except WebSocketDisconnect:
+                pass
+            except Exception as exc:
+                if "WebSocket is not connected" in str(exc) or "ConnectionClosed" in type(exc).__name__:
+                    logger.info("Voice call %s ended", self.call_sid)
+                else:
+                    logger.exception("Voice call %s failed (Sarvam)", self.call_sid)
+            finally:
+                await asyncio.to_thread(self._close_record)
+            return
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             system_instruction=system,
@@ -279,15 +326,7 @@ class Call:
             session = session_ctx
             try:
                 await session.send_client_content(
-                    turns=types.Content(role="user", parts=[types.Part(text=(
-                        "(You placed this call and the person just picked up. Introduce yourself and the business, then start the pitch.)"
-                        if self.mode == "pitch" else
-                        "(You placed this call to the transporter and they just picked up. Greet them and ask for the vehicle.)"
-                        if self.mode == "book" else
-                        "(You placed this follow-up call and they just picked up. Greet them and do the follow-up.)"
-                        if self.mode == "task" else
-                        "(You placed this call to the supplier and they just picked up. Greet them, say who you are and why you are calling.)"
-                        if self.mode in ("supplier_quote", "supplier_order") else "(The phone call has just connected. Greet the caller and ask how you can help.)"))]),
+                    turns=types.Content(role="user", parts=[types.Part(text=greeting)]),
                     turn_complete=True,
                 )
                 await asyncio.gather(self._from_twilio(session), self._from_gemini(session))
@@ -296,7 +335,7 @@ class Call:
         except WebSocketDisconnect:
             pass
         except Exception as exc:
-            if "1000" in str(exc) or "ConnectionClosed" in type(exc).__name__:
+            if "1000" in str(exc) or "ConnectionClosed" in type(exc).__name__ or "WebSocket is not connected" in str(exc):
                 logger.info("Voice call %s ended", self.call_sid)  # normal hang-up
             else:
                 logger.exception("Voice call %s failed", self.call_sid)
@@ -368,8 +407,11 @@ class Call:
     def _open_record(self) -> None:
         session = SessionLocal()
         try:
-            call = PhoneCall(provider="twilio", provider_call_id=self.call_sid, direction="in", from_number=self.caller,
-                             to_number=self.to, customer_id=self.tools.customer_id if self.tools else None)
+            outbound = self.mode != "answer"
+            # On a call we placed, "from" is the person we rang; the record keeps our number as from.
+            call = PhoneCall(provider="twilio", provider_call_id=self.call_sid, direction="out" if outbound else "in",
+                             from_number=os.environ.get("TWILIO_NUMBER") if outbound else self.caller,
+                             to_number=self.caller if outbound else self.to, customer_id=self.tools.customer_id if self.tools else None)
             session.add(call)
             session.commit()
             self.record_id = call.id
@@ -392,15 +434,12 @@ class Call:
             call.actions = self.tools.actions if self.tools else []
             call.customer_id = self.tools.customer_id if self.tools else call.customer_id
             call.enquiry_id = self.tools.enquiry_id if self.tools else None
-            call.summary = _summary(self.transcript, self.tools)
+            call.summary = _summary(self.transcript, self.tools, _party(session, self.tools))
             session.commit()
-            if self.tools and (self.tools.quote_id or self.tools.po_id):
+            if self.tools and self.tools.quote_id:
                 from ..services import supplier_calls
 
-                if self.tools.quote_id:
-                    supplier_calls.quote_call_ended(session, self.tools.quote_id, call.summary or "")
-                else:
-                    supplier_calls.order_call_ended(session, self.tools.po_id, call.summary or "")
+                supplier_calls.quote_call_ended(session, self.tools.quote_id, call.summary or "")
             if self.tools and self.tools.task_id:
                 from ..services import triggers
 
@@ -419,8 +458,20 @@ class Call:
             session.close()
 
 
-def _summary(transcript: List[Dict[str, str]], tools: Optional[CallTools]) -> str:
-    who = tools.customer_name if tools and tools.customer_name else "Unknown caller"
-    did = ", ".join(sorted({a["tool"].replace("_", " ") for a in (tools.actions if tools else [])})) or "conversation only"
-    first = next((t["text"] for t in transcript if t["who"] == "caller"), "")
-    return "{}: {}. Asked: {}".format(who, did, first[:200])
+def _party(session, tools: Optional[CallTools]) -> Optional[str]:
+    """Who was on the other end, when it is not a customer: the supplier on an enquiry call."""
+    if tools and tools.quote_id:
+        from ..models import SupplierQuote
+
+        quote = session.get(SupplierQuote, tools.quote_id)
+        if quote is not None:
+            return "{} ({})".format(quote.supplier.name, quote.request.number)
+    return None
+
+
+def _summary(transcript: List[Dict[str, str]], tools: Optional[CallTools], party: Optional[str] = None) -> str:
+    who = party or (tools.customer_name if tools and tools.customer_name else "Unknown caller")
+    acts = [a["tool"] for a in (tools.actions if tools else []) if a.get("tool") != "end_call"]
+    did = ", ".join(sorted({a.replace("_", " ") for a in acts})) or "nothing recorded"
+    said = " / ".join(t["text"] for t in transcript if t["who"] == "caller")[-300:]
+    return "{}: {}. They said: {}".format(who, did, said)

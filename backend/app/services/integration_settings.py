@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -49,6 +50,9 @@ AI_MODELS: List[Dict[str, str]] = [
 ]
 PROVIDER_LABELS = {"gemini": "Google Gemini"}
 CHANGE_POLICIES = ("confirm_all", "confirm_significant")
+VOICE_PROVIDERS = ("gemini", "sarvam")
+#: Languages the Sarvam voice speaks; the caller's language is still detected.
+SARVAM_LANGUAGES = ("hi-IN", "gu-IN", "en-IN", "mr-IN", "bn-IN", "ta-IN", "te-IN", "kn-IN", "ml-IN", "pa-IN", "od-IN")
 MODEL_PATTERN = re.compile(r"^(models/)?gemini[a-z0-9.\-]*$")
 
 
@@ -67,6 +71,45 @@ def ai_credentials(session: Optional[Session] = None) -> Optional[Dict[str, str]
         return {"mode": "vertex_adc", "project": settings.vertex_project,
                 "location": settings.vertex_location, "source": "server"}
     return None
+
+
+def sarvam_key(session: Optional[Session] = None) -> Optional[str]:
+    """The Sarvam API key: saved in Settings, else SARVAM_API_KEY in the environment or backend/.env.voice."""
+    if session is not None:
+        row = session.get(IntegrationSetting, AI)
+        key = credentials(row).get("sarvam_api_key") if row is not None else None
+        if key:
+            return key
+    if os.environ.get("SARVAM_API_KEY"):
+        return os.environ["SARVAM_API_KEY"]
+    from pathlib import Path
+
+    env = Path(__file__).resolve().parents[2] / ".env.voice"  # the voice server's own settings file
+    if env.exists():
+        for line in env.read_text().splitlines():
+            if line.startswith("SARVAM_API_KEY="):
+                return line.split("=", 1)[1].strip() or None
+    return None
+
+
+def voice_llm_key(session: Session) -> Optional[str]:
+    """The key for an outside chat model on calls (never sent to the browser)."""
+    return credentials(get(session, AI)).get("voice_llm_api_key") or None
+
+
+def voice_settings(session: Session) -> Dict[str, Any]:
+    """Which engine runs phone calls, and its settings (no secrets)."""
+    row = get(session, AI)
+    config = row.config
+    base = (config.get("voice_llm_base_url") or "").rstrip("/")
+    return {"provider": config.get("voice_provider") or "gemini", "chat_model": config.get("sarvam_chat_model") or "deepseekv4.1-flash-1017-interactive",
+            "llm_base_url": base, "chat": config.get("voice_chat") or "gemini", "gemini_model": config.get("voice_gemini_model") or "gemini-3.5-flash-lite", "llm_ready": not base or bool(credentials(row).get("voice_llm_api_key")),
+            "tts_model": config.get("sarvam_tts_model") or "bulbul:v4-flash", "voice": config.get("sarvam_voice") or "",
+            "language": config.get("sarvam_language") or "hi-IN", "sarvam_ready": bool(sarvam_key(session))}
+
+
+def automation_paused(session: Session) -> bool:
+    return bool(get(session, CONTROLS).config.get("automation_paused"))
 
 
 def provider_configured(session: Optional[Session] = None) -> bool:
@@ -96,6 +139,9 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "max_discount_percent": 0,
             "min_margin_percent": 0,
             "block_below_cost": False,
+            # Master switch: while on, no automation runs on its own -- no
+            # purchase, sales or marketing steps, no agents, no AI messages.
+            "automation_paused": False,
         },
         "secrets": [],
     },
@@ -119,8 +165,23 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "agent_name": "Asha",
             # TAI/PAI reply in this tone; English, Hindi or Gujarati follow the customer.
             "agent_tone": "warm and brief",
+            # Who runs phone calls: "gemini" (Gemini Live, on Google Cloud) or
+            # "sarvam" (Sarvam speech-to-text, Sarvam chat model, Bulbul voice).
+            "voice_provider": "gemini",
+            # The model that decides what to say. On Sarvam's own API unless
+            # voice_llm_base_url points at another OpenAI-compatible API.
+            # "gemini" (text Gemini decides, Sarvam listens and speaks), or
+            # "sarvam" (a model on Sarvam's API, or voice_llm_base_url's).
+            "voice_chat": "gemini",
+            "voice_gemini_model": "gemini-3.5-flash-lite",
+            "sarvam_chat_model": "deepseekv4.1-flash-1017-interactive",
+            "voice_llm_base_url": "",
+            "sarvam_tts_model": "bulbul:v4-flash",
+            # Empty: a Hinglish voice that suits the agent (male or female name).
+            "sarvam_voice": "",
+            "sarvam_language": "hi-IN",
         },
-        "secrets": ["api_key"],
+        "secrets": ["api_key", "sarvam_api_key", "voice_llm_api_key"],
     },
     WHATSAPP: {
         "config": {
@@ -416,6 +477,17 @@ def _validate_ai(config: Dict[str, Any]) -> None:
     if not 0 <= temperature <= 1:
         raise ValidationError("Temperature must be between 0 and 1.")
     config["temperature"] = temperature
+    if config.get("voice_provider", "gemini") not in VOICE_PROVIDERS:
+        raise ValidationError("Voice calls run on Gemini or Sarvam.")
+    if config.get("sarvam_language", "hi-IN") not in SARVAM_LANGUAGES:
+        raise ValidationError("Unknown call language.")
+    for key, limit in (("sarvam_chat_model", 80), ("sarvam_tts_model", 40), ("sarvam_voice", 60), ("voice_llm_base_url", 200)):
+        config[key] = str(config.get(key) or "").strip()[:limit]
+    if config.get("voice_chat", "gemini") not in ("gemini", "sarvam"):
+        raise ValidationError("The call's chat model is Gemini or a Sarvam/compatible model.")
+    config["voice_gemini_model"] = str(config.get("voice_gemini_model") or "gemini-3.5-flash-lite").strip()[:80]
+    if config["voice_llm_base_url"] and not config["voice_llm_base_url"].startswith("https://"):
+        raise ValidationError("The chat model address must start with https://.")
     for key, limit in (("company_profile", 30000), ("company_hours", 2000), ("company_delivery", 4000), ("company_payment", 4000),
                        ("company_policies", 8000), ("agent_name", 40), ("agent_tone", 120)):
         config[key] = str(config.get(key) or "")[:limit]

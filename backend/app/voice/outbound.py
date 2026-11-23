@@ -29,6 +29,25 @@ def _env() -> Dict[str, str]:
     return values
 
 
+def _allowed() -> Optional[set]:
+    """VOICE_ALLOWED_NUMBERS (environment or backend/.env.voice): when set, the only
+    numbers any agent may ring -- a safety catch for testing on demo data."""
+    raw = os.environ.get("VOICE_ALLOWED_NUMBERS", "")
+    if not raw:
+        env = Path(__file__).resolve().parent.parent.parent / ".env.voice"
+        if env.exists():
+            for line in env.read_text().splitlines():
+                if line.startswith("VOICE_ALLOWED_NUMBERS="):
+                    raw = line.split("=", 1)[1]
+    numbers = {_normalise(n) for n in raw.split(",") if n.strip()}
+    return numbers or None
+
+
+def _normalise(to: str) -> str:
+    number = "".join(ch for ch in to if ch.isdigit() or ch == "+")
+    return number if number.startswith("+") else "+91" + number[-10:]
+
+
 def configured() -> bool:
     return all(_env().values())
 
@@ -38,9 +57,10 @@ def place_call(to: str, mode: str, params: Optional[Dict[str, str]] = None) -> s
     env = _env()
     if not all(env.values()):
         raise RuntimeError("Phone calls are not set up (Twilio number and voice server).")
-    number = "".join(ch for ch in to if ch.isdigit() or ch == "+")
-    if not number.startswith("+"):
-        number = "+91" + number[-10:]
+    number = _normalise(to)
+    allowed = _allowed()
+    if allowed is not None and number not in allowed:
+        raise RuntimeError("Calling {} is blocked: only VOICE_ALLOWED_NUMBERS may be called.".format(number[:-4] + "XXXX"))
     query = urlencode({"mode": mode, **(params or {})})
     with http_factory() as client:
         response = client.post(

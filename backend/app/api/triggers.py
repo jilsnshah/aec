@@ -1,5 +1,5 @@
-"""The trigger engine: run a trigger now, the activity log, supplier price
-requests (RFQs) and customer feedback."""
+"""The trigger engine: run a trigger now, the activity log and customer
+feedback. Purchase enquiries have their own API (purchase_enquiries.py)."""
 from __future__ import annotations
 
 import uuid
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..errors import NotFoundError, ValidationError
-from ..models import AutomationEvent, Customer, CustomerFeedback, SupplierQuote, SupplierQuoteLine, SupplierQuoteRequest
+from ..models import AutomationEvent, Customer, CustomerFeedback
 from ..services import triggers
 
 router = APIRouter(prefix="/api/automation", tags=["automation"])
@@ -64,86 +64,6 @@ def activity(step: Optional[str] = Query(default=None), party_id: Optional[uuid.
     return {"items": [{"id": e.id, "step": e.step, "kind": e.kind, "status": e.status, "summary": e.summary, "party_type": e.party_type,
                        "party_id": e.party_id, "subject_type": e.subject_type, "subject_id": e.subject_id, "detail": e.detail,
                        "created_at": e.created_at} for e in db.execute(stmt).scalars()]}
-
-
-def _rfq_view(rfq: SupplierQuoteRequest) -> dict:
-    return {
-        "id": rfq.id, "number": rfq.number, "status": rfq.status, "reason": rfq.reason, "notes": rfq.notes, "decision": rfq.decision,
-        "reply_by": rfq.reply_by, "purchase_order_id": rfq.purchase_order_id, "created_at": rfq.created_at, "created_by": rfq.created_by,
-        "lines": [{"id": l.id, "product_id": l.product_id, "product": l.product.name, "unit": l.product.unit_of_measure, "quantity": float(l.quantity),
-                   "why": l.why, "last_paid": float(l.product.last_purchase_price) if l.product.last_purchase_price else None} for l in rfq.lines],
-        "quotes": [{"id": q.id, "supplier_id": q.supplier_id, "supplier": q.supplier.name, "status": q.status, "channel": q.channel, "source": q.source,
-                    "asked_at": q.asked_at, "replied_at": q.replied_at, "reply": q.reply, "delivery_days": q.delivery_days,
-                    "score": float(q.score) if q.score is not None else None,
-                    "prices": {str(ql.product_id): float(ql.price) for ql in q.lines}} for q in rfq.quotes],
-    }
-
-
-@router.get("/rfqs")
-def list_rfqs(status: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
-    """Requests for prices sent to suppliers, newest first."""
-    stmt = select(SupplierQuoteRequest).order_by(SupplierQuoteRequest.created_at.desc()).limit(100)
-    if status:
-        stmt = stmt.where(SupplierQuoteRequest.status == status)
-    return {"items": [_rfq_view(r) for r in db.execute(stmt).scalars()]}
-
-
-@router.get("/rfqs/{rfq_id}")
-def get_rfq(rfq_id: uuid.UUID, db: Session = Depends(get_db)):
-    rfq = db.get(SupplierQuoteRequest, rfq_id)
-    if rfq is None:
-        raise NotFoundError("Request not found.")
-    return _rfq_view(rfq)
-
-
-class QuoteIn(BaseModel):
-    supplier_id: uuid.UUID
-    prices: dict = Field(description="{product_id: price per base unit}")
-    delivery_days: Optional[int] = None
-    note: Optional[str] = None
-
-
-@router.post("/rfqs/{rfq_id}/quotes")
-def record_quote(rfq_id: uuid.UUID, payload: QuoteIn, db: Session = Depends(get_db)):
-    """Record a supplier's offer by hand (they phoned, or the reply was unclear)."""
-    from datetime import datetime, timezone
-    from decimal import Decimal
-
-    rfq = db.get(SupplierQuoteRequest, rfq_id)
-    if rfq is None:
-        raise NotFoundError("Request not found.")
-    if rfq.status != "open":
-        raise ValidationError("{} is already decided.".format(rfq.number))
-    quote = next((q for q in rfq.quotes if q.supplier_id == payload.supplier_id), None)
-    if quote is None:
-        quote = SupplierQuote(supplier_id=payload.supplier_id, status="replied", source="entered by hand")
-        rfq.quotes.append(quote)
-    quote.lines.clear()
-    for product_id, price in (payload.prices or {}).items():
-        if price not in (None, ""):
-            quote.lines.append(SupplierQuoteLine(product_id=uuid.UUID(str(product_id)), price=Decimal(str(price))))
-    quote.status, quote.replied_at, quote.delivery_days = "replied", datetime.now(timezone.utc), payload.delivery_days
-    if payload.note:
-        quote.reply = ((quote.reply + "\n") if quote.reply else "") + payload.note
-    db.commit()
-    return _rfq_view(rfq)
-
-
-@router.post("/rfqs/{rfq_id}/decide")
-def decide_rfq(rfq_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Compare the offers now and raise the purchase orders."""
-    triggers.decide(db, rfq_id)
-    return get_rfq(rfq_id, db)
-
-
-@router.post("/rfqs/{rfq_id}/cancel")
-def cancel_rfq(rfq_id: uuid.UUID, db: Session = Depends(get_db)):
-    rfq = db.get(SupplierQuoteRequest, rfq_id)
-    if rfq is None:
-        raise NotFoundError("Request not found.")
-    rfq.status = "cancelled"
-    db.commit()
-    return _rfq_view(rfq)
 
 
 @router.get("/feedback")

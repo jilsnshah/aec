@@ -390,6 +390,7 @@ function AiPane({ data }: { data: IntegrationsOut }) {
             )}
           </Field>
         </section>
+        <VoiceSection data={data} />
         {test.data ? <Notice tone="ok">{`${test.data.model} answered: “${test.data.reply}”`}</Notice> : test.error ? <Notice tone="bad">{errorText(test.error)}</Notice> : null}
       </div>
       <footer className="flex shrink-0 items-center gap-2 border-t border-white/7 py-3.5 pr-24 pl-6 max-md:pr-20">
@@ -403,6 +404,116 @@ function AiPane({ data }: { data: IntegrationsOut }) {
         </Button>
       </footer>
     </>
+  )
+}
+
+const SARVAM_LANGUAGES = [
+  ['hi-IN', 'Hindi / Hinglish'], ['gu-IN', 'Gujarati'], ['en-IN', 'English (India)'], ['mr-IN', 'Marathi'], ['bn-IN', 'Bengali'],
+  ['ta-IN', 'Tamil'], ['te-IN', 'Telugu'], ['kn-IN', 'Kannada'], ['ml-IN', 'Malayalam'], ['pa-IN', 'Punjabi'], ['od-IN', 'Odia'],
+] as const
+
+/** Phone calls: which engine runs the agents' calls, and the Sarvam settings. */
+function VoiceSection({ data }: { data: IntegrationsOut }) {
+  const ai = data.ai
+  const start = () => ({
+    provider: String(ai.config.voice_provider ?? 'gemini'),
+    brain: String(ai.config.voice_chat ?? 'gemini'),
+    gemini: String(ai.config.voice_gemini_model ?? 'gemini-3.5-flash-lite'),
+    chat: String(ai.config.sarvam_chat_model ?? 'deepseekv4.1-flash-1017-interactive'),
+    tts: String(ai.config.sarvam_tts_model ?? 'bulbul:v4-flash'),
+    voice: String(ai.config.sarvam_voice ?? ''),
+    language: String(ai.config.sarvam_language ?? 'hi-IN'),
+  })
+  const [form, setForm] = useState(start)
+  const [key, setKey] = useState('')
+  useEffect(() => setForm(start()), [ai.config]) // eslint-disable-line react-hooks/exhaustive-deps
+  const saved = start()
+  const dirty = key.trim() !== '' || (Object.keys(form) as (keyof typeof form)[]).some((k) => form[k] !== saved[k])
+  const keySaved = Boolean(ai.credentials.sarvam_api_key?.set)
+  const save = useAction(
+    () =>
+      api.integrations.update('ai', {
+        config: { voice_provider: form.provider, voice_chat: form.brain, voice_gemini_model: form.gemini, sarvam_chat_model: form.chat, sarvam_tts_model: form.tts, sarvam_voice: form.voice, sarvam_language: form.language },
+        credentials: key.trim() ? { sarvam_api_key: key.trim() } : {},
+      }),
+    { success: 'Phone call settings saved' },
+  )
+  return (
+    <section className="max-w-[760px] space-y-3">
+      <h3 className="text-[14px] font-semibold">Phone calls</h3>
+      <p className="text-[12.5px] text-fg-3">Which engine the agents use when they call suppliers and customers, or answer the phone.</p>
+      <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+        {(
+          [
+            ['gemini', 'Gemini Live', 'Google Cloud. One model listens and speaks.'],
+            ['sarvam', 'Sarvam voice', 'Sarvam listens and Bulbul speaks (Indian voices); a chat model of your choice decides what to say.'],
+          ] as const
+        ).map(([value, title, body]) => (
+          <button key={value} onClick={() => setForm({ ...form, provider: value })} className={cn('card p-3 text-left transition', form.provider === value && 'ring-2 ring-blue')}>
+            <div className="text-[13px] font-semibold">{title}</div>
+            <div className="mt-0.5 text-[12px] text-fg-3">{body}</div>
+          </button>
+        ))}
+      </div>
+      {form.provider === 'sarvam' ? (
+        <>
+          <div className="flex items-center gap-2 text-[12.5px]">
+            <span className={cn('size-2 rounded-full', data.sarvam_ready ? 'bg-blue' : 'bg-fg-4')} />
+            {keySaved ? 'Sarvam key saved here.' : data.sarvam_ready ? "Using the Sarvam key in the server's voice settings. A key saved here takes over." : 'No Sarvam key yet: calls keep using Gemini until one is added.'}
+          </div>
+          <Field label="Sarvam API key" hint="From dashboard.sarvam.ai. Encrypted on the server and never shown again.">
+            {(props) => (
+              <input {...props} className="field font-mono" type="password" autoComplete="off" spellCheck={false} value={key} onChange={(event) => setKey(event.target.value)}
+                placeholder={keySaved ? `Saved key ${ai.credentials.sarvam_api_key?.hint ?? ''} — paste a new one to replace it` : 'Paste your Sarvam API key'} />
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+            <Field label="Speaking language" hint="The caller's language is detected; this is the voice used when unsure.">
+              {(props) => (
+                <select {...props} className="field" value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}>
+                  {SARVAM_LANGUAGES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <Field label="Voice" hint="Empty: a voice that suits the agent. Or a Bulbul speaker id, e.g. rahul_hi_conversational.">
+              {(props) => <input {...props} className="field font-mono" value={form.voice} placeholder="automatic" onChange={(event) => setForm({ ...form, voice: event.target.value.trim() })} />}
+            </Field>
+            <Field label="Who decides what to say" hint="Gemini text is best at recording offers (tool calls); a few paise a call.">
+              {(props) => (
+                <select {...props} className="field" value={form.brain} onChange={(event) => setForm({ ...form, brain: event.target.value })}>
+                  <option value="gemini">Gemini (recommended)</option>
+                  <option value="sarvam">A model on Sarvam's API</option>
+                </select>
+              )}
+            </Field>
+            <Field label={form.brain === 'gemini' ? 'Gemini model' : 'Sarvam chat model'}>
+              {(props) =>
+                form.brain === 'gemini' ? (
+                  <input {...props} className="field font-mono" value={form.gemini} onChange={(event) => setForm({ ...form, gemini: event.target.value.trim() })} />
+                ) : (
+                  <input {...props} className="field font-mono" value={form.chat} onChange={(event) => setForm({ ...form, chat: event.target.value.trim() })} />
+                )
+              }
+            </Field>
+            <Field label="Voice model">
+              {(props) => (
+                <select {...props} className="field" value={form.tts} onChange={(event) => setForm({ ...form, tts: event.target.value })}>
+                  <option value="bulbul:v4-flash">Bulbul v4 Flash (faster, cheaper)</option>
+                  <option value="bulbul:v3">Bulbul v3</option>
+                </select>
+              )}
+            </Field>
+          </div>
+        </>
+      ) : null}
+      <div className="flex justify-end">
+        <Button kind="primary" small busy={save.isPending} disabled={!dirty} onClick={() => save.mutate(undefined, { onSuccess: () => setKey('') })}>
+          Save phone settings
+        </Button>
+      </div>
+    </section>
   )
 }
 

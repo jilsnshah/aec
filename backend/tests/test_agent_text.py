@@ -52,7 +52,7 @@ def ai(monkeypatch):
 
 def _asked(client, db, make_product, make_supplier, make_customer, order_for, **cfg):
     mill, cement = _rfq(client, db, make_product, make_supplier, make_customer, order_for)
-    set_step(client, "purchase", "purchase.ask_supplier", {**WINDOW, "wait_hours": 6, "who": "preferred", "how": "text", **cfg}, actors=["tai"], mode="auto")
+    set_step(client, "purchase", "purchase.ask_supplier", {**WINDOW, "wait_hours": 6, "how": "text", **cfg}, actors=["tai"], mode="auto")
     client.post("/api/automation/run/purchase")
     return mill, cement
 
@@ -82,17 +82,17 @@ def test_ai_reads_a_hinglish_quote_and_asks_for_what_is_missing(client, db, ai, 
     assert quote.gst_included is False and quote.lines[0].price == Decimal("345")
 
 
-def test_ai_reply_orders_straight_away_within_limits(client, db, ai, sent, make_product, make_supplier, make_customer, order_for):
+def test_ai_reply_becomes_an_offer_and_the_pick_step_orders(client, db, ai, sent, make_product, make_supplier, make_customer, order_for):
     from app.services import triggers
 
-    mill, cement = _asked(client, db, make_product, make_supplier, make_customer, order_for, order_on_call=True)
-    set_step(client, "purchase", "purchase.approve_po", mode="auto")
+    mill, cement = _asked(client, db, make_product, make_supplier, make_customer, order_for)
+    set_step(client, "purchase", "purchase.compare_quotes", mode="auto", limits=[])
     ai.reply = {"kind": "quote", "lines": [{"item": 1, "price": 335}], "delivery_days": 2, "missing": [], "ask_back": ""}
     triggers.on_supplier_message(db, mill, "335, 2 days")
     db.expire_all()
     rfq = db.execute(select(SupplierQuoteRequest)).scalars().one()
     po = db.get(PurchaseOrder, rfq.purchase_order_id)
-    assert rfq.status == "ordered" and po.confirm_status == "confirmed" and "whatsapp" in po.notes
+    assert rfq.status == "ordered" and po.enquiry_id == rfq.id and rfq.number in po.notes and po.items[0].unit_cost == Decimal("335")
 
 
 def test_ai_reads_a_decline(client, db, ai, sent, make_product, make_supplier, make_customer, order_for):

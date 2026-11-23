@@ -17,10 +17,12 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import begin_write
 from ..errors import NotFoundError, ValidationError
 from ..models import (
@@ -43,6 +45,14 @@ from .common import next_document_number
 COUNTER = "rate_contract"
 
 
+def _zone() -> ZoneInfo:
+    return ZoneInfo(get_settings().business_timezone)
+
+
+def _today() -> date:
+    return datetime.now(_zone()).date()
+
+
 def _day(value: Any, end: bool = False) -> datetime:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -50,7 +60,8 @@ def _day(value: Any, end: bool = False) -> datetime:
         value = date.fromisoformat(value[:10])
     if not isinstance(value, date):
         raise ValidationError("Dates are YYYY-MM-DD.")
-    return datetime.combine(value, time(23, 59, 59) if end else time(0, 0), tzinfo=timezone.utc)
+    # A contract day runs midnight to midnight where the business trades, not in UTC.
+    return datetime.combine(value, time(23, 59, 59) if end else time(0, 0), tzinfo=_zone())
 
 
 def status(contract: RateContract, now: Optional[datetime] = None) -> str:
@@ -150,8 +161,8 @@ def save(session: Session, data: Dict[str, Any], contract_id: Optional[uuid.UUID
             session.flush()
             contract = RateContract(number=number, supplier_id=uuid.UUID(str(supplier_id)) if supplier_id else None,
                                     customer_id=uuid.UUID(str(customer_id)) if customer_id else None, price_list_id=plist.id,
-                                    title=(data.get("title") or "").strip() or "Rate contract", valid_from=_day(data.get("valid_from") or date.today()),
-                                    valid_until=_day(data.get("valid_until") or (date.today() + timedelta(days=365)), end=True))
+                                    title=(data.get("title") or "").strip() or "Rate contract", valid_from=_day(data.get("valid_from") or _today()),
+                                    valid_until=_day(data.get("valid_until") or (_today() + timedelta(days=365)), end=True))
             session.add(contract)
         if contract.is_cancelled:
             raise ValidationError("{} is cancelled.".format(contract.number))

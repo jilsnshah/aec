@@ -41,6 +41,7 @@ from .api import (
     transporters,
     buying_extra,
     triggers,
+    purchase_enquiries,
 )
 from .config import get_settings
 from .api.auth import require_user
@@ -156,6 +157,7 @@ for router in (
     transporters.router,
     buying_extra.router,
     triggers.router,
+    purchase_enquiries.router,
     controls.router,
     pricelists.router,
     marketing.router,
