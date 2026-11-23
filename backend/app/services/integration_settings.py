@@ -141,7 +141,7 @@ DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "block_below_cost": False,
             # Master switch: while on, no automation runs on its own -- no
             # purchase, sales or marketing steps, no agents, no AI messages.
-            "automation_paused": False,
+            "automation_paused": True,
         },
         "secrets": [],
     },

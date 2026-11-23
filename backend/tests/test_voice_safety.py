@@ -42,3 +42,13 @@ def test_listening_words_and_script_language():
     assert _backchannel("Han han.") and _backchannel("હમ્મ") and not _backchannel("3,000 અને GST extra")
     assert _script_language("નમસ્તે Ravi", "hi-IN") == "gu-IN" and _script_language("नमस्ते", "gu-IN") == "hi-IN"
     assert _script_language("Hello", "en-IN") == "en-IN"
+
+
+def test_automation_is_paused_on_a_new_install(db, monkeypatch, session_factory):
+    from app.services import background, inbound, integration_settings
+
+    monkeypatch.setattr(inbound, "session_factory", session_factory)
+    assert integration_settings.automation_paused(db) is True
+    ran = []
+    job = background._unless_paused(lambda: ran.append(1) or 1)
+    assert job() == 0 and ran == []
